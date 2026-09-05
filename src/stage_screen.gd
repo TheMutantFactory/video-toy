@@ -132,6 +132,19 @@ var draw_mode := false
 var _stroke := PackedVector2Array()
 var _stroke_line: Line2D
 var _stroke_start := Vector2.ZERO
+var evolve := false
+var _evolve_base := {}
+var _evolve_timer := 0.0
+var _evolve_beats := 0
+var _evolve_last := ""
+var attract := false
+var _attract_base := {}
+var _attract_timer := 0.0
+var _idle := 0.0
+const IDLE_ATTRACT := 60.0
+const EVOLVE_SECONDS := 6.0
+const EVOLVE_BEATS := 8
+const ATTRACT_SECONDS := 20.0
 var _layer_mix: ColorRect
 var _worldmix: SubViewport
 var _drag_offset := Vector2.ZERO
@@ -595,6 +608,222 @@ func set_scene_knobs(speed: float, scale: float, bias: float) -> void:
 	_update_hud()
 
 
+# ---------------- mosaic ----------------
+## Shift+S: the selected slot's picture rebuilt from the toolbox icons.
+## A raster picks the icon whose palette colour is nearest each cell; an icon
+## or word uses its own shape, cells tinted the slot colour. Cells become
+## ordinary actors, so verbs can explode the picture (Bounce) and reform it
+## (Orbit around home).
+func spawn_mosaic() -> int:
+	var slot := Toolbox.current()
+	if slot.is_empty():
+		return 0
+	var tex := IconMedia.texture_for(str(slot.get("svg_path", "")))
+	if tex == null:
+		return 0
+	var img := tex.get_image()
+	var cells: Array = Mosaic.cells(img)
+	if cells.is_empty():
+		return 0
+	# candidates: the icon/text slots and their palette colours
+	var cand_slots: Array = []
+	var cand_colors: Array = []
+	for i in Toolbox.slots.size():
+		if not Toolbox.is_raster_slot(Toolbox.slots[i]):
+			cand_slots.append(Toolbox.slots[i])
+			cand_colors.append(Palettes.color(palette_index, int(Toolbox.slots[i].get("color_index", i))))
+	if cand_slots.is_empty():
+		_steal_note = "mosaic needs at least one icon or word in the toolbox"
+		_update_hud()
+		return 0
+	var is_raster := Toolbox.is_raster_slot(slot)
+	var g := Mosaic.grid_size(img)
+	var box := Vector2(1600, 900)
+	var cell := minf(box.x / g.x, box.y / g.y)
+	var origin := (Vector2(WORLD) - Vector2(g) * cell) * 0.5
+	var layer := layer_actors()
+	for c in cells:
+		var src: Dictionary = slot if not is_raster else cand_slots[Mosaic.nearest(c["color"], cand_colors)]
+		var a := Node2D.new()
+		a.set_script(ActorScript)
+		a.setup(src, origin + Vector2(c["u"] * g.x, c["v"] * g.y) * cell, palette_index, Rect2(Vector2.ZERO, Vector2(WORLD)))
+		var lum: float = c["lum"] if is_raster else 1.0
+		var size_px := cell * lerpf(0.45, 1.05, lum)
+		a.base_scale = size_px / maxf(a._sprite.texture.get_size().x, 1.0)
+		a._sprite.scale = Vector2.ONE * a.base_scale
+		a.orbit_radius = cell * 0.6
+		layer.add_child(a)
+	_steal_note = "mosaic: %d cells of “%s”" % [cells.size(), slot.get("term", "")]
+	_update_hud()
+	return cells.size()
+
+
+# ---------------- evolve ----------------
+## One random change to the stage. Returns a description for the HUD.
+func mutate() -> String:
+	var kinds: Array = ["verb", "verb", "palette", "fx", "feedback", "glow", "scene", "key", "slit", "layer", "camera"]
+	match kinds[randi() % kinds.size()]:
+		"verb":
+			if Toolbox.slots.is_empty():
+				return mutate()
+			var i := randi() % Toolbox.slots.size()
+			var v: String = Verbs.ALL[randi() % Verbs.ALL.size()]["id"]
+			Toolbox.toggle_verb(i, v)
+			return "%s %s on slot %d" % ["+" if Toolbox.has_verb(i, v) else "-", v, i + 1]
+		"palette":
+			palette_index = posmod(palette_index + (1 if randf() < 0.5 else -1), Palettes.count())
+			_apply_palette()
+			return "palette " + str(Palettes.get_palette(palette_index)["name"])
+		"fx":
+			var which := randi() % 3
+			if which == 0:
+				_fx.cycle_pixelate()
+			elif which == 1:
+				_fx.cycle_kaleido()
+			else:
+				_fx.cycle_crt()
+			_refresh_fx()
+			return "fx " + _fx.describe()
+		"feedback":
+			if not feedback or randf() < 0.3:
+				_set_feedback(not feedback)
+				return "feedback " + ("on" if feedback else "off")
+			fb_rot = clampf(fb_rot + randf_range(-0.03, 0.03), -0.15, 0.15)
+			fb_zoom = clampf(fb_zoom + randf_range(-0.02, 0.02), 0.95, 1.12)
+			return "feedback twist %.2f zoom %.2f" % [fb_rot, fb_zoom]
+		"glow":
+			_glow.cycle()
+			return "glow " + _glow.describe()
+		"scene":
+			if randf() < 0.3:
+				set_scene("")
+				return "scene off"
+			step_scene(1)
+			return "scene " + str(Scenes.get_scene(Scenes.current).get("name", "?"))
+		"key":
+			_fx.cycle_key()
+			_refresh_fx()
+			return "key " + _fx.KEY_MODES[_fx.key_mode]
+		"slit":
+			_fx.cycle_slit()
+			_refresh_fx()
+			return "slit " + _fx.SLIT_MODES[_fx.slit_mode]
+		"layer":
+			var li := 1 + randi() % (LAYER_COUNT - 1)
+			_layers[li]["blend"] = randi() % BLENDS.size()
+			_apply_layers()
+			return "layer %d %s" % [li + 1, BLENDS[_layers[li]["blend"]]]
+		_:
+			cam_orbit = clampf(cam_orbit + randf_range(-0.3, 0.3), -1.0, 1.0)
+			cam_roll = clampf(cam_roll + randf_range(-0.2, 0.2), -1.0, 1.0)
+			return "camera orbit %.2f roll %.2f" % [cam_orbit, cam_roll]
+
+
+func set_evolve(on: bool) -> void:
+	evolve = on
+	_evolve_timer = 0.0
+	_evolve_beats = 0
+	_evolve_last = ""
+	if on:
+		_evolve_base = snapshot()
+		_steal_note = "evolve: mutating every %d beats / %.0f s — Enter keeps, Shift+Enter discards" % [EVOLVE_BEATS, EVOLVE_SECONDS]
+	else:
+		_steal_note = ""
+	_update_hud()
+
+
+func evolve_step() -> void:
+	_evolve_base = snapshot()                  # the previous mutation stands
+	_evolve_last = mutate()
+	_steal_note = "evolve: " + _evolve_last + "   (Enter keep · Shift+Enter discard)"
+	_update_hud()
+
+
+func evolve_keep() -> void:
+	_evolve_base = snapshot()
+	_steal_note = "kept: " + _evolve_last
+	_update_hud()
+
+
+func evolve_discard() -> void:
+	if not _evolve_base.is_empty():
+		restore(_evolve_base, 0.3)
+	_steal_note = "discarded: " + _evolve_last
+	_evolve_last = ""
+	_update_hud()
+
+
+# ---------------- attract ----------------
+## Idle show: every ATTRACT_SECONDS a random saved preset (or three mutations
+## when there are none), a slow camera orbit and the monitor on. Any input
+## ends it and puts the stage back the way it was.
+func set_attract(on: bool) -> void:
+	if on == attract:
+		return
+	attract = on
+	_attract_timer = 0.0
+	if on:
+		_attract_base = snapshot()
+		cam_orbit = 0.25 if cam_orbit == 0.0 else cam_orbit
+		if not _monitor.visible:
+			set_monitor(true)
+		attract_step()
+	else:
+		if not _attract_base.is_empty():
+			restore(_attract_base, 0.5)
+		_steal_note = ""
+	_update_hud()
+
+
+func attract_step() -> void:
+	var saved: Array = []
+	for i in Presets.COUNT:
+		if Presets.has(i + 1):
+			saved.append(i + 1)
+	if saved.is_empty():
+		var notes: Array = []
+		for i in 3:
+			notes.append(mutate())
+		_steal_note = "attract: " + ", ".join(notes)
+	else:
+		var n: int = saved[randi() % saved.size()]
+		restore(Presets.get_preset(n), 1.0)
+		_steal_note = "attract: preset %d" % n
+	_update_hud()
+
+
+func _tick_modes(delta: float) -> void:
+	_idle += delta
+	if not attract and _idle >= IDLE_ATTRACT:
+		set_attract(true)
+	if attract:
+		_attract_timer += delta
+		if _attract_timer >= ATTRACT_SECONDS:
+			_attract_timer = 0.0
+			attract_step()
+	if evolve:
+		if AudioReact.active():
+			if AudioReact.beat_env >= 1.0 and _evolve_timer <= 0.0:
+				_evolve_beats += 1
+				_evolve_timer = 0.15
+				if _evolve_beats >= EVOLVE_BEATS:
+					_evolve_beats = 0
+					evolve_step()
+			_evolve_timer = maxf(0.0, _evolve_timer - delta)
+		else:
+			_evolve_timer += delta
+			if _evolve_timer >= EVOLVE_SECONDS:
+				_evolve_timer = 0.0
+				evolve_step()
+
+
+func _input(ev: InputEvent) -> void:
+	if ev is InputEventKey or ev is InputEventMouseButton or ev is InputEventMIDI or ev is InputEventJoypadButton:
+		_idle = 0.0
+		if attract:
+			set_attract(false)
+
+
 # ---------------- presets ----------------
 ## Everything the stage remembers, as plain data.
 func snapshot() -> Dictionary:
@@ -815,6 +1044,14 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "mosaic", "label": "Mosaic of selected slot", "do": func(): spawn_mosaic()})
+	out.append({"id": "evolve", "label": "Evolve on/off", "do": func(): set_evolve(not evolve)})
+	out.append({"id": "evolve_keep", "label": "Evolve: keep", "do": evolve_keep})
+	out.append({"id": "evolve_discard", "label": "Evolve: discard", "do": evolve_discard})
+	out.append({"id": "mutate", "label": "Mutate once", "do": func():
+		_steal_note = "mutation: " + mutate()
+		_update_hud()})
+	out.append({"id": "attract", "label": "Attract mode on/off", "do": func(): set_attract(not attract)})
 	out.append({"id": "next_layer", "label": "Next layer", "do": func(): set_active_layer(active_layer + 1)})
 	out.append({"id": "next_blend", "label": "Next blend mode (active layer)", "do": cycle_blend})
 	out.append({"id": "draw_mode", "label": "Draw mode on/off", "do": func():
@@ -978,7 +1215,8 @@ func _build_hud() -> void:
 		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
 		+ ";            MIDI + audio panel\nA            audio: off/mic/test/file (drop mp3/ogg/wav)\n"
 		+ "drop image   raster slot (Shift+drop: chroma backdrop)\nZ            webcam: off/layer/backdrop\n"
-		+ "S            steal palette from raster / webcam\nD            glow off/soft/heavy\n"
+		+ "S            steal palette from raster / webcam · Shift+S mosaic\nD            glow off/soft/heavy\n"
+		+ "Shift+E      evolve (Enter keep · Shift+Enter discard)\nShift+A      attract mode (auto after 60 s idle)\n"
 		+ "F1-F12       recall preset · Shift+F saves\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -1087,7 +1325,7 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), "   ·   DRAW" if draw_mode else "", _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
+		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
 	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
@@ -1148,6 +1386,7 @@ func _set_feedback(on: bool) -> void:
 
 
 func _process(_delta: float) -> void:
+	_tick_modes(_delta)
 	var mouse := _world_pos(get_local_mouse_position())
 	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _dragging
 	for a in all_actors():
@@ -1355,10 +1594,26 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				cycle_blend()
 			else:
 				set_active_layer(active_layer + 1)
-		KEY_S: steal_palette()
+		KEY_S:
+			if ev.shift_pressed:
+				spawn_mosaic()
+			else:
+				steal_palette()
+		KEY_E:
+			if ev.shift_pressed:
+				set_evolve(not evolve)
+		KEY_ENTER, KEY_KP_ENTER:
+			if evolve:
+				if ev.shift_pressed:
+					evolve_discard()
+				else:
+					evolve_keep()
 		KEY_A:
-			AudioReact.cycle_source()
-			_update_hud()
+			if ev.shift_pressed:
+				set_attract(not attract)
+			else:
+				AudioReact.cycle_source()
+				_update_hud()
 		KEY_M: set_monitor(not _monitor.visible)
 		KEY_N:
 			_monitor.cycle_size()

@@ -338,6 +338,20 @@ func _init() -> void:
 	_check("stroke length and rider count", is_equal_approx(Ride.length_of(raw), 150.0) and Ride.rider_count(150.0) == 2
 		and Ride.rider_count(1200.0) == 10 and Ride.rider_count(9999.0) == 24)
 
+	# mosaic: grid sizing, transparent cells skipped, nearest colour
+	var mimg := Image.create(200, 100, false, Image.FORMAT_RGBA8)
+	mimg.fill(Color(0, 0, 0, 0))
+	mimg.fill_rect(Rect2i(0, 0, 100, 100), Color(1, 0, 0, 1))
+	var mg := Mosaic.grid_size(mimg)
+	_check("mosaic grid keeps aspect and cell cap", mg.x == Mosaic.MAX_COLS and mg.y == Mosaic.MAX_COLS / 2 and mg.x * mg.y <= Mosaic.MAX_CELLS)
+	var mc: Array = Mosaic.cells(mimg)
+	var left_only := true
+	for c in mc:
+		if c["u"] > 0.52 or c["color"].r < 0.9:
+			left_only = false
+	_check("mosaic cells cover only the opaque half", mc.size() > 0 and absi(mc.size() - mg.x * mg.y / 2) <= mg.y and left_only)
+	_check("mosaic nearest colour", Mosaic.nearest(Color(0.9, 0.1, 0.1), [Color.BLUE, Color.RED, Color.GREEN]) == 1 and Mosaic.nearest(Color.WHITE, []) == -1)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

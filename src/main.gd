@@ -176,6 +176,38 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL keyers / slit-scan")
+	# mosaic, evolve, attract on the real stage
+	var ok_modes := true
+	st.clear_actors()
+	Toolbox.select(0)
+	var n_cells: int = st.spawn_mosaic()                 # the star icon out of stars
+	await get_tree().process_frame
+	ok_modes = ok_modes and n_cells > 50 and st.all_actors().size() == n_cells
+	st.clear_actors()
+	var before: Dictionary = st.snapshot()
+	st.set_evolve(true)
+	var changed := false
+	for i in 6:
+		st.evolve_step()
+		if st.snapshot().hash() != before.hash():
+			changed = true
+	ok_modes = ok_modes and changed and st.evolve
+	st.evolve_discard()
+	st.set_evolve(false)
+	ok_modes = ok_modes and not st.evolve
+	st._idle = st.IDLE_ATTRACT + 1.0
+	st._tick_modes(0.016)
+	ok_modes = ok_modes and st.attract and st._monitor.visible
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.keycode = KEY_H
+	st._input(key)
+	ok_modes = ok_modes and not st.attract and st._idle == 0.0
+	if ok_modes:
+		print("PASS mosaic spawns cells, evolve mutates/keeps/discards, attract starts idle and ends on input")
+	else:
+		fails += 1
+		printerr("FAIL mosaic / evolve / attract")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -245,7 +277,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -515,6 +547,23 @@ func _capture_all(dir: String) -> void:
 					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
 				current.set_fx(0, false, false, 0, false, 0, 0, 1)
 				await get_tree().create_timer(2.5).timeout
+			"mosaic":
+				# The stand-in photo rebuilt from the demo icons; Orbit makes it breathe.
+				current.set_fx(0, false, false)
+				current.clear_actors()
+				current.set_active_layer(0)
+				current._glow.set_level(0)
+				var photo2 := _demo_photo()
+				var pidx: int = current.add_raster(photo2)
+				for i in Toolbox.slots.size():
+					for v in ["bounce", "spin", "pulse"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+					if not Toolbox.has_verb(i, "orbit"):
+						Toolbox.toggle_verb(i, "orbit")
+				Toolbox.select(pidx)
+				current.spawn_mosaic()
+				await get_tree().create_timer(1.0).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

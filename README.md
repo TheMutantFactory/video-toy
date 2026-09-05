@@ -55,6 +55,9 @@ Shift+Space  formation of 200 copies  Shift+X  next formation (helix/lattice/she
 Shift+arrows camera orbit / dolly     Shift+PgUp/PgDn  camera roll   Shift+Home  reset camera
 \            next layer (1 base, 2, 3)   Shift+\  blend mode (mix/add/sub/mul)   Shift+[ ]  opacity
 Shift+D      draw mode: drag a path and the selected icon rides it; right-click a path removes it
+Shift+S      mosaic: the selected slot's picture rebuilt from the toolbox icons (as actors)
+Shift+E      evolve: a mutation every 8 beats / 6 s; Enter keeps it, Shift+Enter discards it
+Shift+A      attract mode (automatic after 60 s idle; any input ends it)
                                       ;      MIDI + audio panel
                                       A      audio source: off / mic / test / file
                                       Z      webcam: off / layer behind everything / chroma backdrop
@@ -108,6 +111,22 @@ palette plasma). Shift+G steps the threshold; mode and threshold are learnable a
 live in a ping-pong atlas, and the picture is reassembled with time running down the rows,
 across the columns, or outward from the centre. It sits inside the chain, so kaleidoscope,
 quantise and the CRT still apply on top.
+
+## Mosaic, evolve, attract
+
+**Mosaic** (Shift+S) rebuilds the selected slot's picture from the toolbox: a photo picks the
+icon whose palette colour is nearest each cell and scales it by brightness; an icon or word is
+built from its own shape. The cells are ordinary actors, so Bounce explodes the picture and
+Orbit makes it breathe around home.
+
+**Evolve** (Shift+E) is the Electric Sheep loop: every 8 beats (or 6 s without audio) the stage
+mutates — a verb, the palette, an effect step, feedback, glow, scene, keyer, slit-scan, a layer
+blend or the camera. Enter keeps the mutation, Shift+Enter reverts it; an unvoted mutation
+stands. All of it is learnable, so two pads can be the vote.
+
+**Attract** (Shift+A, or 60 s idle) recalls a random saved preset every 20 s — three mutations
+when none are saved — with a slow camera orbit and the monitor on. Any key, click, MIDI or pad
+ends it and restores the stage as it was. It is the screensaver and the table demo.
 
 ## Presets
 
@@ -195,6 +214,7 @@ src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vert
 src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)
 src/boids.gd                flocking maths (2D and 3D) for the Flock verb
 src/ride_path.gd            a drawn stroke as a Curve2D with looping riders
+src/mosaic.gd               image -> grid of cells with colour / luminance (for Shift+S)
 src/extrude.gd              icon alpha -> extruded "cookie" mesh (textured faces + plain sides)
 src/formation.gd            200 copies in a helix / lattice / shell / ring as one MultiMesh
 src/monitor.gd              the TV inside the world that shows the final composite
