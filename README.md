@@ -151,6 +151,15 @@ viewports that alternate each frame, the world's icons seed the V chemical, and 
 painted through the palette *under* the actors — so icons grow coral, spots or worms around
 themselves. Feed and kill are learnable; everything is preset-saved.
 
+## Two-player
+
+A second person plays from the **numeric keypad** or a **gamepad**, with their own slot,
+layer and on-screen cursor. Keypad 8/2/4/6 or the left stick moves the cursor; 5 / Enter / A
+spawns their slot at it into their layer (layer 2, additive, by default); 0 / B removes the
+nearest; + − / X cycle their slot; . / Y cycles their layer; * / LB toggles Spin on their slot;
+/ / RB spawns a 3D solid. Any of those wakes player 2; Shift+2 hides them. Their slot gets a
+cyan ring on the hotbar. The toolbox and verbs are shared, so both players shape the same set.
+
 ## Presets
 
 **Shift+F1..F12** saves everything the stage remembers (palette, feedback, effects, glow,
@@ -245,6 +254,7 @@ src/boids.gd                flocking maths (2D and 3D) for the Flock verb
 src/attractors.gd           Lorenz, Rössler, Clifford, de Jong (pure functions)
 src/field.gd + particles.gdshader   curl-noise flow field (CPU for the verb, GPU for 12k dots)
 src/rd.gdshader             Gray-Scott step (ping-ponged by the stage, composited in _worldmix)
+src/p2_cursor.gd            player 2's cursor
 src/timeline.gd             record / loop of controller gestures
 src/ride_path.gd            a drawn stroke as a Curve2D with looping riders
 src/mosaic.gd               image -> grid of cells with colour / luminance (for Shift+S)

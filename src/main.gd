@@ -280,6 +280,36 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL particles / rd")
+	# player 2: wakes on keypad, spawns own slot into own layer, hotbar ring, sleeps
+	var ok_p2 := true
+	st.clear_actors()
+	st.p2_slot = 2
+	st.p2_layer = 1
+	var kp := InputEventKey.new()
+	kp.pressed = true
+	kp.keycode = KEY_KP_5
+	st._unhandled_key_input(kp)
+	await get_tree().process_frame
+	ok_p2 = ok_p2 and st.p2_active and st._layers[1]["actors"].get_child_count() == 1 \
+		and st._layers[1]["actors"].get_child(0).slot_id == Toolbox.slots[2]["id"] and st._hotbar.second_selected == 2
+	st.p2_move(Vector2(-5000, 0))
+	ok_p2 = ok_p2 and st.p2_cursor.x == 0.0
+	kp.keycode = KEY_KP_ADD
+	st._unhandled_key_input(kp)
+	ok_p2 = ok_p2 and st.p2_slot == 3
+	var pb := InputEventJoypadButton.new()
+	pb.pressed = true
+	pb.button_index = JOY_BUTTON_Y
+	st._input(pb)
+	ok_p2 = ok_p2 and st.p2_layer == 2
+	st.p2_sleep()
+	ok_p2 = ok_p2 and not st.p2_active and st._hotbar.second_selected == -1
+	st.clear_actors()
+	if ok_p2:
+		print("PASS player 2 wakes, spawns into its layer, cycles slot and layer, sleeps")
+	else:
+		fails += 1
+		printerr("FAIL player 2")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -349,7 +379,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -692,6 +722,31 @@ func _capture_all(dir: String) -> void:
 				current.set_rd_preset(1)
 				await get_tree().create_timer(6.0).timeout
 				current.set_rd_preset(0)
+			"two_player":
+				# Player 1's hearts on the base, player 2's bolts on the ADD layer
+				# from their cursor, both slots ringed on the hotbar.
+				current.clear_actors()
+				current.set_active_layer(0)
+				for i in Toolbox.slots.size():
+					for v in ["orbit", "pulse", "rainbow"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+					if not Toolbox.has_verb(i, "bounce"):
+						Toolbox.toggle_verb(i, "bounce")
+				Toolbox.select(1)
+				for i in 6:
+					current.spawn_at(Vector2(randf_range(300, 900), randf_range(200, 900)))
+				current.p2_slot = 2
+				current.p2_layer = 1
+				current._layers[1]["blend"] = 1
+				current._apply_layers()
+				current.p2_move(Vector2(-100, 0))
+				for i in 6:
+					current.p2_cursor = Vector2(randf_range(1000, 1700), randf_range(200, 900))
+					current.p2_spawn()
+				current.p2_cursor = Vector2(1150, 700)
+				current._refresh_p2()
+				await get_tree().create_timer(1.0).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

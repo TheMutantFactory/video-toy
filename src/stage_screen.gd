@@ -41,6 +41,8 @@ const GlowScript = preload("res://src/glow.gd")
 const SceneLayerScript = preload("res://src/scene_layer.gd")
 const FormationScript = preload("res://src/formation.gd")
 const RidePathScript = preload("res://src/ride_path.gd")
+const P2CursorScript = preload("res://src/p2_cursor.gd")
+const P2_SPEED := 800.0
 const RD_PRESETS := [
 	{"name": "off", "feed": 0.0, "kill": 0.0},
 	{"name": "coral", "feed": 0.0545, "kill": 0.062},
@@ -183,6 +185,11 @@ var _rd_flip := 0
 var rd_preset := 0
 var rd_feed := 0.0545
 var rd_kill := 0.062
+var p2_active := false
+var p2_slot := 0
+var p2_layer := 1
+var p2_cursor := Vector2(1440, 540)
+var _p2_node: Node2D
 const IDLE_ATTRACT := 60.0
 const EVOLVE_SECONDS := 6.0
 const EVOLVE_BEATS := 8
@@ -242,6 +249,12 @@ func _ready() -> void:
 	_build_layers()
 	_build_particles()
 	_build_rd()
+	_p2_node = Node2D.new()
+	_p2_node.set_script(P2CursorScript)
+	_p2_node.z_index = 3
+	_p2_node.visible = false
+	_p2_node.position = p2_cursor
+	_world.add_child(_p2_node)
 
 	for i in 2:
 		var vp := SubViewport.new()
@@ -999,6 +1012,120 @@ func _input(ev: InputEvent) -> void:
 		_idle = 0.0
 		if attract:
 			set_attract(false)
+	if ev is InputEventJoypadButton and ev.pressed:
+		_p2_pad_button(ev.button_index)
+
+
+# ---------------- player 2 ----------------
+func p2_wake() -> void:
+	if not p2_active:
+		p2_active = true
+		p2_slot = clampi(p2_slot, 0, maxi(Toolbox.slots.size() - 1, 0))
+		_steal_note = "player 2 is in — keypad or gamepad; Shift+2 hides them"
+	_p2_node.visible = true
+	_refresh_p2()
+
+
+func p2_sleep() -> void:
+	p2_active = false
+	_p2_node.visible = false
+	_hotbar.second_selected = -1
+	_hotbar.refresh()
+	_update_hud()
+
+
+func _refresh_p2() -> void:
+	_p2_node.position = p2_cursor
+	_p2_node.color = Palettes.color(palette_index, int(Toolbox.slots[p2_slot].get("color_index", p2_slot))) if p2_slot < Toolbox.slots.size() else Color.CYAN
+	_p2_node.label = "P2 · L%d" % (p2_layer + 1)
+	_p2_node.queue_redraw()
+	_hotbar.second_selected = p2_slot if p2_active else -1
+	_hotbar.refresh()
+	_update_hud()
+
+
+func p2_move(delta_px: Vector2) -> void:
+	p2_wake()
+	p2_cursor = (p2_cursor + delta_px).clamp(Vector2.ZERO, Vector2(WORLD))
+	_refresh_p2()
+
+
+func p2_spawn() -> void:
+	p2_wake()
+	spawn_slot_at(p2_slot, p2_layer, p2_cursor)
+
+
+func p2_remove() -> void:
+	p2_wake()
+	_remove_nearest(p2_cursor)
+
+
+func p2_next_slot(step := 1) -> void:
+	p2_wake()
+	if not Toolbox.slots.is_empty():
+		p2_slot = posmod(p2_slot + step, Toolbox.slots.size())
+	_refresh_p2()
+
+
+func p2_next_layer() -> void:
+	p2_wake()
+	p2_layer = posmod(p2_layer + 1, LAYER_COUNT)
+	_refresh_p2()
+
+
+func p2_toggle_spin() -> void:
+	p2_wake()
+	if p2_slot < Toolbox.slots.size():
+		Toolbox.toggle_verb(p2_slot, "spin")
+
+
+func p2_spawn_solid() -> void:
+	p2_wake()
+	var keep := Toolbox.selected
+	Toolbox.select(p2_slot)
+	spawn_solid(p2_cursor)
+	Toolbox.select(keep)
+
+
+func _tick_p2(delta: float) -> void:
+	var v := Vector2.ZERO
+	if Input.is_key_pressed(KEY_KP_8): v.y -= 1.0
+	if Input.is_key_pressed(KEY_KP_2): v.y += 1.0
+	if Input.is_key_pressed(KEY_KP_4): v.x -= 1.0
+	if Input.is_key_pressed(KEY_KP_6): v.x += 1.0
+	for dev in Input.get_connected_joypads():
+		var ax := Vector2(Input.get_joy_axis(dev, JOY_AXIS_LEFT_X), Input.get_joy_axis(dev, JOY_AXIS_LEFT_Y))
+		if ax.length() > 0.15:
+			v += ax
+	if v != Vector2.ZERO:
+		p2_move(v.limit_length(1.0) * P2_SPEED * delta)
+
+
+func _p2_key(k: int) -> bool:
+	match k:
+		KEY_KP_5, KEY_KP_ENTER: p2_spawn()
+		KEY_KP_0: p2_remove()
+		KEY_KP_ADD: p2_next_slot(1)
+		KEY_KP_SUBTRACT: p2_next_slot(-1)
+		KEY_KP_PERIOD: p2_next_layer()
+		KEY_KP_MULTIPLY: p2_toggle_spin()
+		KEY_KP_DIVIDE: p2_spawn_solid()
+		KEY_KP_1, KEY_KP_3, KEY_KP_7, KEY_KP_9:
+			p2_wake()
+			p2_slot = clampi([KEY_KP_1, KEY_KP_3, KEY_KP_7, KEY_KP_9].find(k) * 2, 0, maxi(Toolbox.slots.size() - 1, 0))
+			_refresh_p2()
+		_: return false
+	return true
+
+
+func _p2_pad_button(b: int) -> void:
+	match b:
+		JOY_BUTTON_A: p2_spawn()
+		JOY_BUTTON_B: p2_remove()
+		JOY_BUTTON_X: p2_next_slot(1)
+		JOY_BUTTON_Y: p2_next_layer()
+		JOY_BUTTON_LEFT_SHOULDER: p2_toggle_spin()
+		JOY_BUTTON_RIGHT_SHOULDER: p2_spawn_solid()
 
 
 # ---------------- presets ----------------
@@ -1475,6 +1602,7 @@ func _build_hud() -> void:
 		+ "Shift+E      evolve (Enter keep · Shift+Enter discard)\nShift+A      attract mode (auto after 60 s idle)\n"
 		+ "Shift+R      record controller gestures · Shift+P loop them\nShift+W/T/Y/U  Lorenz / Rössler / Clifford / de Jong verbs\n"
 		+ "Shift+N      particle field (right-click scatters) · Shift+I Field verb\nShift+O      reaction-diffusion presets\n"
+		+ "keypad/pad   player 2: 8/2/4/6 or stick moves · 5/A spawns · 0/B removes\n             +/-/X slot · ./Y layer · */LB spin · //RB solid · Shift+2 hides\n"
 		+ "F1-F12       recall preset · Shift+F saves\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -1594,6 +1722,8 @@ func _update_hud() -> void:
 	if _steal_note != "":
 		line2 += "   ·   " + _steal_note
 	line2 += "   ·   scene: " + (("%s  spd %.1f  scl %.1f" % [Scenes.get_scene(Scenes.current).get("name", "?"), Scenes.speed, Scenes.scale]) if Scenes.current != "" else "off (Tab)")
+	if p2_active:
+		line2 += "   ·   P2: slot %d, layer %d" % [p2_slot + 1, p2_layer + 1]
 	if particles_on:
 		line2 += "   ·   particles flow %.1f %s %.1f" % [particles_flow, "repel" if particles_attract < 0.0 else "attract", absf(particles_attract)]
 	if rd_preset > 0:
@@ -1617,6 +1747,8 @@ func _apply_palette() -> void:
 	_bg.color = Palettes.bg(palette_index)
 	_fx.set_palette(palette_index)
 	Scenes.apply_palette(_layer_mix.material, palette_index)
+	if p2_active:
+		_refresh_p2()
 	_fx.set_source(_worldmix.get_texture(), Palettes.bg(palette_index))
 	_monitor.accent = Palettes.color(palette_index, 0)
 	_monitor.queue_redraw()
@@ -1652,6 +1784,7 @@ func _process(_delta: float) -> void:
 	_tick_modes(_delta)
 	_tick_timeline(_delta)
 	_tick_rd()
+	_tick_p2(_delta)
 	if particles_on:
 		_push_particles()
 	var mouse := _world_pos(get_local_mouse_position())
@@ -1699,13 +1832,18 @@ func _world_pos(local: Vector2) -> Vector2:
 
 
 func spawn_at(world_pos: Vector2) -> void:
-	var slot := Toolbox.current()
-	if slot.is_empty():
+	spawn_slot_at(Toolbox.selected, active_layer, world_pos)
+
+
+## Spawn a given slot into a given layer (player 2 uses its own of each).
+func spawn_slot_at(slot_index: int, layer_index: int, world_pos: Vector2) -> void:
+	if slot_index < 0 or slot_index >= Toolbox.slots.size():
 		return
+	var slot: Dictionary = Toolbox.slots[slot_index]
 	var a := Node2D.new()
 	a.set_script(ActorScript)
 	a.setup(slot, world_pos, palette_index, Rect2(Vector2.ZERO, Vector2(WORLD)))
-	layer_actors().add_child(a)
+	_layers[posmod(layer_index, LAYER_COUNT)]["actors"].add_child(a)
 	_update_hud()
 
 
@@ -1771,12 +1909,17 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 	if not (ev is InputEventKey and ev.pressed):
 		return
 	var k: int = ev.keycode
+	if _p2_key(k):
+		return
 	if k >= KEY_F1 and k <= KEY_F12:
 		var n := k - KEY_F1 + 1
 		if ev.shift_pressed:
 			save_preset(n)
 		else:
 			recall_preset(n)
+		return
+	if k == KEY_2 and ev.shift_pressed:
+		p2_sleep()
 		return
 	if k >= KEY_1 and k <= KEY_9:
 		Toolbox.select(k - KEY_1)

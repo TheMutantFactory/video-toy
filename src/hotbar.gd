@@ -5,6 +5,7 @@ extends HBoxContainer
 const SLOT := 88
 
 var palette_index := 0
+var second_selected := -1               # player 2's slot, drawn with its own ring
 var _tiles: Array = []
 
 
@@ -36,7 +37,11 @@ func refresh() -> void:
 		var p: PanelContainer = _tiles[i]
 		var tex: TextureRect = p.get_child(0)
 		var filled := i < Toolbox.slots.size()
-		p.add_theme_stylebox_override("panel", UI.slot_style(i == Toolbox.selected and filled, filled))
+		var style := UI.slot_style(i == Toolbox.selected and filled, filled)
+		if filled and i == second_selected:
+			style.border_color = Color("#4fd1ff") if i != Toolbox.selected else Color("#c7ffff")
+			style.set_border_width_all(3)
+		p.add_theme_stylebox_override("panel", style)
 		if filled:
 			var slot: Dictionary = Toolbox.slots[i]
 			tex.texture = IconMedia.texture_for(str(slot.get("svg_path", "")))
