@@ -22,6 +22,7 @@ NounApi="*res://src/noun_api.gd"
 IconMedia="*res://src/icon_media.gd"
 Toolbox="*res://src/toolbox.gd"
 Ledger="*res://src/ledger.gd"
+MidiMap="*res://src/midi_map.gd"
 
 [display]
 

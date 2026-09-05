@@ -8,7 +8,7 @@ extends Control
 ## · - = fade · O kaleidoscope · G chroma key (drop an image for the backdrop)
 ## · K pixelate · L palette quantise · J dither · V CRT · M monitor · N monitor size
 ## · drag the monitor to move it · B spawn a 3D solid of the selected icon
-## · Shift+B next shape · C clear · H help · Esc menu
+## · Shift+B next shape · ; MIDI learn · C clear · H help · Esc menu
 ##
 ## Render graph:  world3d (solids) ─> sprite in world
 ##                world (actors + monitor + world3d) ─┬─> screen ──┐
@@ -22,6 +22,7 @@ const ActorScript = preload("res://src/actor.gd")
 const FxScript = preload("res://src/fx.gd")
 const MonitorScript = preload("res://src/monitor.gd")
 const SolidScript = preload("res://src/solid.gd")
+const MidiPanelScript = preload("res://src/midi_panel.gd")
 const WORLD := Vector2i(1920, 1080)
 
 var palette_index := 0
@@ -45,6 +46,8 @@ var _world3d: SubViewport
 var _camera: Camera3D
 var _solids: Node3D
 var _shape_index := 0
+var _midi_panel: PanelContainer
+var _midi_last := ""
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
@@ -139,6 +142,7 @@ func _ready() -> void:
 	_apply_palette()
 	_refresh_fx()
 	get_window().files_dropped.connect(_on_files_dropped)
+	_build_midi()
 
 
 func _exit_tree() -> void:
@@ -202,6 +206,116 @@ func spawn_solid(world_pos := Vector2(-1, -1)) -> void:
 func cycle_shape() -> void:
 	_shape_index = (_shape_index + 1) % SolidScript.SHAPES.size()
 	_update_hud()
+
+
+# ---------------- MIDI ----------------
+## Continuous params: id, label, setter(0..1). Actions: id, label, callable.
+func midi_params() -> Array:
+	return [
+		{"id": "fb_zoom", "label": "Feedback zoom", "set": func(v): fb_zoom = lerpf(0.90, 1.20, v)},
+		{"id": "fb_twist", "label": "Feedback twist", "set": func(v): fb_rot = lerpf(-0.15, 0.15, v)},
+		{"id": "fb_fade", "label": "Feedback fade", "set": func(v): fb_fade = lerpf(0.5, 0.995, v)},
+		{"id": "pixelate", "label": "Pixelate size", "set": func(v):
+			_fx.pixel_step = _step(v, _fx.PIXEL_STEPS.size())
+			_fx._push()
+			_refresh_fx()},
+		{"id": "kaleido", "label": "Kaleidoscope", "set": func(v):
+			_fx.kaleido_step = _step(v, _fx.KALEIDO_STEPS.size())
+			_fx._push()
+			_refresh_fx()},
+		{"id": "crt", "label": "CRT", "set": func(v):
+			_fx.crt_level = _step(v, 3)
+			_fx._push()
+			_refresh_fx()},
+		{"id": "monitor", "label": "Monitor size", "set": func(v):
+			_monitor.size_step = _step(v, _monitor.SIZES.size())
+			_monitor._apply_scale()},
+		{"id": "palette", "label": "Palette", "set": func(v):
+			var i := _step(v, Palettes.count())
+			if i != palette_index:
+				palette_index = i
+				_apply_palette()},
+		{"id": "slot", "label": "Toolbox slot", "set": func(v):
+			if not Toolbox.slots.is_empty():
+				Toolbox.select(_step(v, Toolbox.slots.size()))},
+	]
+
+
+func midi_actions() -> Array:
+	var out: Array = [
+		{"id": "spawn", "label": "Spawn icon", "do": func(): spawn_at(Vector2(randf_range(100, WORLD.x - 100), randf_range(100, WORLD.y - 100)))},
+		{"id": "spawn_solid", "label": "Spawn 3D solid", "do": func(): spawn_solid()},
+		{"id": "clear", "label": "Clear stage", "do": func():
+			for a in _actors.get_children() + _solids.get_children():
+				a.queue_free()},
+		{"id": "feedback", "label": "Feedback on/off", "do": func(): _set_feedback(not feedback)},
+		{"id": "next_palette", "label": "Next palette", "do": func():
+			palette_index = (palette_index + 1) % Palettes.count()
+			_apply_palette()},
+		{"id": "chroma", "label": "Chroma key on/off", "do": func():
+			_fx.toggle_chroma()
+			_refresh_fx()},
+		{"id": "quantise", "label": "Palette quantise on/off", "do": func():
+			_fx.toggle_quantize()
+			_refresh_fx()},
+		{"id": "dither", "label": "Dither on/off", "do": func():
+			_fx.toggle_dither()
+			_refresh_fx()},
+		{"id": "monitor", "label": "Monitor on/off", "do": func(): set_monitor(not _monitor.visible)},
+		{"id": "next_shape", "label": "Next 3D shape", "do": cycle_shape},
+		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
+	]
+	for i in Toolbox.MAX_SLOTS:
+		out.append({"id": "slot_%d" % (i + 1), "label": "Select slot %d" % (i + 1), "do": func(): Toolbox.select(i)})
+	for v in Verbs.ALL:
+		out.append({"id": "verb_" + v["id"], "label": "Toggle verb: " + v["name"], "do": func():
+			if not Toolbox.current().is_empty():
+				Toolbox.toggle_verb(Toolbox.selected, v["id"])})
+	return out
+
+
+static func _step(v: float, n: int) -> int:
+	return clampi(int(floor(v * n)), 0, n - 1)
+
+
+func _build_midi() -> void:
+	_midi_panel = MidiPanelScript.new()
+	_midi_panel.params = midi_params()
+	_midi_panel.actions = midi_actions()
+	_midi_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_midi_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_midi_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_midi_panel.visible = false
+	add_child(_midi_panel)
+	MidiMap.param.connect(_on_midi_param)
+	MidiMap.action.connect(_on_midi_action)
+	MidiMap.activity.connect(func(text):
+		_midi_last = text
+		_update_hud())
+
+
+func _on_midi_param(id: String, value: float) -> void:
+	for p in midi_params():
+		if p["id"] == id:
+			p["set"].call(value)
+			_update_hud()
+			return
+
+
+func _on_midi_action(id: String) -> void:
+	for a in midi_actions():
+		if a["id"] == id:
+			a["do"].call()
+			_update_hud()
+			return
+
+
+func toggle_midi_panel() -> void:
+	_midi_panel.visible = not _midi_panel.visible
+	if _midi_panel.visible:
+		_midi_panel.refresh()
+	else:
+		MidiMap.disarm()
 
 
 # ---------------- HUD ----------------
@@ -278,6 +392,7 @@ func _build_hud() -> void:
 		+ "L            palette quantise\nJ            dither\nV            CRT off/soft/heavy\n"
 		+ "M            monitor in the scene\nN            monitor size (drag to move)\n"
 		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
+		+ ";            MIDI learn panel\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -353,7 +468,8 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe(), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		_actors.get_child_count()] + "   ·   solids: %d (next: %s)" % [_solids.get_child_count(), next_shape()]
+		_actors.get_child_count()] + "   ·   solids: %d (next: %s)" % [_solids.get_child_count(), next_shape()] \
+		+ (("   ·   midi: " + _midi_last) if _midi_last != "" else "")
 
 
 # ---------------- palette / feedback ----------------
@@ -500,6 +616,7 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				cycle_shape()
 			else:
 				spawn_solid(_world_pos(get_local_mouse_position()) if get_global_rect().has_point(get_global_mouse_position()) else Vector2(-1, -1))
+		KEY_SEMICOLON: toggle_midi_panel()
 		KEY_M: set_monitor(not _monitor.visible)
 		KEY_N:
 			_monitor.cycle_size()

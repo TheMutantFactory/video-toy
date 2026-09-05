@@ -84,12 +84,21 @@ func _selftest() -> void:
 	get_tree().quit(1 if fails > 0 else 0)
 
 
+static func _cc(channel: int, number: int, value: int) -> InputEventMIDI:
+	var ev := InputEventMIDI.new()
+	ev.message = MIDI_MESSAGE_CONTROL_CHANGE
+	ev.channel = channel
+	ev.controller_number = number
+	ev.controller_value = value
+	return ev
+
+
 ## Screenshot every screen (and the menu + attribution overlay) into `dir`.
 func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi"]
 	for name in shots:
 		match name:
 			"menu":
@@ -142,6 +151,22 @@ func _capture_all(dir: String) -> void:
 					current.spawn_solid()
 					current.cycle_shape()
 				await get_tree().create_timer(1.5).timeout
+			"midi":
+				# Prove the learn path without hardware: arm a param, feed a CC,
+				# then turn the "knob" and watch feedback zoom follow it. Bindings
+				# go to a throwaway file so the user's real map is untouched.
+				MidiMap.path = "user://_capture_midi.json"
+				MidiMap.bindings = {}
+				current._set_feedback(true)
+				current.toggle_midi_panel()
+				MidiMap.arm("fb_zoom")
+				MidiMap.feed(_cc(1, 21, 10))
+				MidiMap.arm("act:next_palette")
+				MidiMap.feed(_cc(1, 22, 127))
+				MidiMap.feed(_cc(1, 21, 96))                     # fb_zoom -> ~1.13
+				MidiMap.feed(_cc(1, 22, 0))
+				MidiMap.feed(_cc(1, 22, 127))                    # rising edge -> next palette
+				await get_tree().create_timer(0.6).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout
@@ -158,4 +183,8 @@ func _capture_all(dir: String) -> void:
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(dir.path_join(name + ".png"))
 		print("captured ", name)
+	if MidiMap.path != MidiMap.PATH:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(MidiMap.path))
+		MidiMap.path = MidiMap.PATH
+		MidiMap.load_from_disk()
 	get_tree().quit()

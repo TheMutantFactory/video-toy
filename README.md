@@ -43,10 +43,24 @@ X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
                                       N      monitor size; drag it to move
                                       B      3D solid of the selected icon at the mouse
                                       Shift+B next shape (cube/sphere/torus/cylinder/prism)
+                                      ;      MIDI-learn panel
                                       C      clear stage
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
 ```
+
+## MIDI-learn (Knobcon)
+
+Press **;** in Play. Every MIDI input is opened on launch (Rescan after plugging in). Click a
+row, then move a knob or hit a pad: that message is bound to it. Right-click a row to unbind.
+
+- **Params** (knobs, faders, velocity-sensitive pads, pitch bend, 0..1): feedback zoom /
+  twist / fade, pixelate size, kaleidoscope, CRT, monitor size, palette, toolbox slot.
+- **Actions** (pads, buttons, or a CC crossing 64): spawn icon, spawn 3D solid, clear,
+  feedback, next palette, chroma, quantise, dither, monitor, next shape, recolor, select
+  slot 1-9, toggle each verb on the selected slot.
+
+Bindings live in `user://midi.json`. The HUD shows the last message received.
 
 ## Credentials
 
@@ -77,6 +91,8 @@ src/noun_api.gd  (autoload) OAuth 1.0a client (pinned to RFC 5849 vector)
 src/icon_media.gd(autoload) thumbnails + white SVG rasteriser
 src/palettes.gd             named colour sets
 src/verbs.gd                verb table
+src/midi_map.gd  (autoload) MIDI-learn: opens inputs, binds messages to params/actions, user://midi.json
+src/midi_panel.gd           the learn panel on the stage
 demo/                       built-in shapes
 docs/RESEARCH.md            video toys, feedback, shader art, 3D, raster — the roadmap
 ```

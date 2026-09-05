@@ -119,8 +119,65 @@ func _init() -> void:
 	_check("monitor size cycles", mon.scale_factor() == 0.6)
 	mon.free()
 
+	# MIDI-learn: arm, bind, params, action edges, persistence (synthetic events)
+	var midi = load("res://src/midi_map.gd").new()
+	midi.path = "user://_smoke_midi.json"
+	var got := {"param": [], "action": [], "learned": []}
+	midi.param.connect(func(id, v): got["param"].append([id, v]))
+	midi.action.connect(func(id): got["action"].append(id))
+	midi.learned.connect(func(id, b): got["learned"].append([id, b]))
+	midi.arm("fb_zoom")
+	midi.feed(_cc(1, 21, 64))
+	_check("learn binds the first message to the armed id", midi.binding_for("fb_zoom") == "cc:1:21" and got["learned"].size() == 1)
+	_check("learn does not also emit the param", got["param"].is_empty())
+	midi.feed(_cc(1, 21, 127))
+	_check("bound CC emits param 0..1", got["param"].size() == 1 and is_equal_approx(got["param"][0][1], 1.0))
+	midi.arm("act:spawn")
+	midi.feed(_cc(1, 22, 0))
+	midi.feed(_cc(1, 22, 100))
+	midi.feed(_cc(1, 22, 110))
+	midi.feed(_cc(1, 22, 0))
+	midi.feed(_cc(1, 22, 127))
+	_check("CC action fires on rising edge only", got["action"] == ["spawn", "spawn"])
+	var note := InputEventMIDI.new()
+	note.message = MIDI_MESSAGE_NOTE_ON
+	note.channel = 10
+	note.pitch = 36
+	note.velocity = 100
+	midi.arm("act:clear")
+	midi.feed(note)
+	midi.feed(note)
+	var off := InputEventMIDI.new()
+	off.message = MIDI_MESSAGE_NOTE_OFF
+	off.channel = 10
+	off.pitch = 36
+	midi.feed(off)
+	_check("note binds and fires, note-off does not", midi.binding_for("act:clear") == "note:10:36" and got["action"].size() == 3)
+	midi.arm("fb_zoom")
+	midi.feed(_cc(2, 5, 1))
+	_check("re-learning steals the old binding", midi.binding_for("fb_zoom") == "cc:2:5" and not midi.bindings.has("cc:1:21"))
+	_check("describe is human", midi.describe("cc:2:5") == "CC 5 ch2" and midi.describe("note:10:36") == "note 36 ch10")
+	var midi2 = load("res://src/midi_map.gd").new()
+	midi2.path = midi.path
+	midi2.load_from_disk()
+	_check("bindings persist", midi2.binding_for("act:clear") == "note:10:36" and midi2.bindings.size() == 3)
+	midi.unbind("act:clear")
+	_check("unbind removes", midi.binding_for("act:clear") == "")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(midi.path))
+	midi.free()
+	midi2.free()
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
+
+
+func _cc(channel: int, number: int, value: int) -> InputEventMIDI:
+	var ev := InputEventMIDI.new()
+	ev.message = MIDI_MESSAGE_CONTROL_CHANGE
+	ev.channel = channel
+	ev.controller_number = number
+	ev.controller_value = value
+	return ev
 
 
 func _unique(arr: Array) -> bool:
