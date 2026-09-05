@@ -15,6 +15,11 @@ var wander_target := Vector2.ZERO
 var mouse_world := Vector2.ZERO
 var riding := false                        # on a drawn path: motion verbs are ignored
 var _orbit_off := Vector2.ZERO             # last frame's orbit displacement (undone before moving)
+var _att := Vector3.ZERO                   # continuous attractor state
+var _map := Vector2.ZERO                   # iterated-map state
+var _map_from := Vector2.ZERO
+var _map_t := 1.0
+var _att_centre := Vector2.ZERO
 var attract := false                       # stage: left button held on empty space
 var scatter_from := Vector2.INF            # stage: right-click on empty space (one frame)
 
@@ -38,6 +43,10 @@ func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
 	orbit_radius = randf_range(90.0, 260.0)
 	velocity = Vector2.from_angle(randf() * TAU) * randf_range(180.0, 420.0)
 	wander_target = _random_point()
+	_att = Vector3(randf_range(-5, 5), randf_range(-5, 5), randf_range(15, 30))
+	_map = Vector2(randf_range(-0.5, 0.5), randf_range(-0.5, 0.5))
+	_map_from = _map
+	_att_centre = area.get_center()
 	raster = str(slot.get("kind", "icon")) == "raster"
 	_base_color = Color.WHITE if raster else Palettes.color(pal, int(slot.get("color_index", 0)))
 
@@ -149,6 +158,29 @@ func _process(delta: float) -> void:
 		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
 		home = position
 		moved = true
+	if mobile and (verbs.has("lorenz") or verbs.has("rossler")):
+		var lor := verbs.has("lorenz")
+		_att = Attractors.lorenz_step(_att, delta * 0.9) if lor else Attractors.rossler_step(_att, delta * 1.6)
+		var target := Attractors.project_lorenz(_att, _att_centre) if lor else Attractors.project_rossler(_att, _att_centre)
+		velocity = (target - position) / maxf(delta, 0.001)
+		position = target
+		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
+		home = position
+		moved = true
+	elif mobile and (verbs.has("clifford") or verbs.has("dejong")):
+		# jump to the next map point every ~0.3 s, gliding in between
+		_map_t += delta * 3.4
+		if _map_t >= 1.0:
+			_map_t = 0.0
+			_map_from = _map
+			_map = Attractors.clifford(_map) if verbs.has("clifford") else Attractors.dejong(_map)
+		var a := Attractors.project_map(_map_from, _att_centre)
+		var b := Attractors.project_map(_map, _att_centre)
+		var target := a.lerp(b, smoothstep(0.0, 1.0, _map_t))
+		velocity = (target - position) / maxf(delta, 0.001)
+		position = target
+		home = position
+		moved = true
 	if mobile and verbs.has("swarm"):
 		var to_mouse := mouse_world - position
 		velocity = velocity.lerp(to_mouse.normalized() * 380.0, 2.0 * delta)
@@ -162,7 +194,7 @@ func _process(delta: float) -> void:
 
 	if verbs.has("spin"):
 		_sprite.rotation += delta * 2.2
-	elif not verbs.has("flock"):
+	elif not (verbs.has("flock") or verbs.has("lorenz") or verbs.has("rossler")):
 		_sprite.rotation = lerpf(_sprite.rotation, 0.0, 6.0 * delta)
 	var s := base_scale
 	if verbs.has("pulse"):

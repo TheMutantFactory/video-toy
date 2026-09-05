@@ -12,6 +12,10 @@ const ALL := [
 	{"id": "rainbow", "name": "Rainbow", "key": "U", "hint": "cycle the hue"},
 	{"id": "swarm", "name": "Swarm", "key": "I", "hint": "chase the mouse"},
 	{"id": "flock", "name": "Flock", "key": "⇧Q", "hint": "boids with the others from this slot; hold click to attract, right-click empty space to scatter", "shift": true},
+	{"id": "lorenz", "name": "Lorenz", "key": "⇧W", "hint": "ride the Lorenz butterfly", "shift": true},
+	{"id": "rossler", "name": "Rössler", "key": "⇧T", "hint": "ride the Rössler spiral", "shift": true},
+	{"id": "clifford", "name": "Clifford", "key": "⇧Y", "hint": "fly between points of the Clifford map", "shift": true},
+	{"id": "dejong", "name": "de Jong", "key": "⇧U", "hint": "fly between points of the de Jong map", "shift": true},
 ]
 
 

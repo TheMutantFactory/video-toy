@@ -141,6 +141,8 @@ var attract := false
 var _attract_base := {}
 var _attract_timer := 0.0
 var _idle := 0.0
+var timeline := Timeline.new()
+var _clock := 0.0
 const IDLE_ATTRACT := 60.0
 const EVOLVE_SECONDS := 6.0
 const EVOLVE_BEATS := 8
@@ -1045,6 +1047,8 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "timeline_record", "label": "Timeline: record on/off", "do": toggle_record})
+	out.append({"id": "timeline_play", "label": "Timeline: loop on/off", "do": toggle_play})
 	out.append({"id": "mosaic", "label": "Mosaic of selected slot", "do": func(): spawn_mosaic()})
 	out.append({"id": "evolve", "label": "Evolve on/off", "do": func(): set_evolve(not evolve)})
 	out.append({"id": "evolve_keep", "label": "Evolve: keep", "do": evolve_keep})
@@ -1107,6 +1111,8 @@ func _build_midi() -> void:
 
 
 func _on_midi_param(id: String, value: float) -> void:
+	if timeline.recording and MidiMap.last_source != "audio":
+		timeline.record("param", id, value, _clock)
 	for p in midi_params():
 		if p["id"] == id:
 			p["set"].call(value)
@@ -1115,11 +1121,55 @@ func _on_midi_param(id: String, value: float) -> void:
 
 
 func _on_midi_action(id: String) -> void:
+	if timeline.recording and MidiMap.last_source != "audio" and not id.begins_with("timeline"):
+		timeline.record("action", id, 1.0, _clock)
 	for a in midi_actions():
 		if a["id"] == id:
 			a["do"].call()
 			_update_hud()
 			return
+
+
+# ---------------- timeline ----------------
+func toggle_record() -> void:
+	if timeline.recording:
+		timeline.stop_record(_clock)
+		timeline.save()
+		_steal_note = "recorded %.1f s, %d events — Shift+P loops it" % [timeline.length, timeline.events.size()]
+	else:
+		timeline.start_record(_clock)
+		_steal_note = "REC — move controllers; Shift+R stops (60 s max)"
+	_update_hud()
+
+
+func toggle_play() -> void:
+	if timeline.playing:
+		timeline.stop_play()
+		_steal_note = "loop stopped"
+	else:
+		if not timeline.has_loop():
+			timeline.load()
+		if timeline.has_loop():
+			timeline.start_play(_clock)
+			_steal_note = "looping %.1f s of gestures" % timeline.length
+		else:
+			_steal_note = "nothing recorded — Shift+R records controller moves"
+	_update_hud()
+
+
+func _tick_timeline(delta: float) -> void:
+	_clock += delta
+	if timeline.recording and _clock - timeline._rec_start >= Timeline.MAX:
+		toggle_record()
+	for e in timeline.due(_clock):
+		if e["kind"] == "param":
+			for p in midi_params():
+				if p["id"] == e["id"]:
+					p["set"].call(float(e["value"]))
+		else:
+			for a in midi_actions():
+				if a["id"] == e["id"]:
+					a["do"].call()
 
 
 func toggle_midi_panel() -> void:
@@ -1147,12 +1197,18 @@ func _build_hud() -> void:
 	_verb_panel.add_theme_constant_override("separation", 2)
 	card.add_child(_verb_panel)
 	_verb_panel.add_child(UI.label("Verbs for selected slot", 18, UI.ACCENT))
+	var vgrid := GridContainer.new()
+	vgrid.columns = 2
+	vgrid.add_theme_constant_override("h_separation", 6)
+	vgrid.add_theme_constant_override("v_separation", 0)
+	_verb_panel.add_child(vgrid)
 	for v in Verbs.ALL:
 		var cb := CheckButton.new()
-		cb.text = "%s  %s" % [v["key"], v["name"]]
+		cb.text = "%s %s" % [v["key"], v["name"]]
+		cb.add_theme_font_size_override("font_size", 18)
 		cb.tooltip_text = v["hint"]
 		cb.toggled.connect(func(_on): Toolbox.toggle_verb(Toolbox.selected, v["id"]))
-		_verb_panel.add_child(cb)
+		vgrid.add_child(cb)
 		_verb_checks[v["id"]] = cb
 	_verb_panel.add_child(UI.vspace(6))
 	_verb_panel.add_child(UI.label("Effects", 18, UI.ACCENT))
@@ -1219,6 +1275,7 @@ func _build_hud() -> void:
 		+ "drop image   raster slot (Shift+drop: chroma backdrop)\nZ            webcam: off/layer/backdrop\n"
 		+ "S            steal palette from raster / webcam · Shift+S mosaic\nD            glow off/soft/heavy\n"
 		+ "Shift+E      evolve (Enter keep · Shift+Enter discard)\nShift+A      attract mode (auto after 60 s idle)\n"
+		+ "Shift+R      record controller gestures · Shift+P loop them\nShift+W/T/Y/U  Lorenz / Rössler / Clifford / de Jong verbs\n"
 		+ "F1-F12       recall preset · Shift+F saves\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -1327,7 +1384,7 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
+		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
 	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
@@ -1389,6 +1446,7 @@ func _set_feedback(on: bool) -> void:
 
 func _process(_delta: float) -> void:
 	_tick_modes(_delta)
+	_tick_timeline(_delta)
 	var mouse := _world_pos(get_local_mouse_position())
 	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _dragging
 	for a in all_actors():
@@ -1558,9 +1616,6 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				spawn_formation()
 			else:
 				spawn_at(Vector2(randf_range(100, WORLD.x - 100), randf_range(100, WORLD.y - 100)))
-		KEY_P:
-			palette_index = (palette_index + 1) % Palettes.count()
-			_apply_palette()
 		KEY_X:
 			if ev.shift_pressed:
 				cycle_formation()
@@ -1604,6 +1659,15 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_E:
 			if ev.shift_pressed:
 				set_evolve(not evolve)
+		KEY_R:
+			if ev.shift_pressed:
+				toggle_record()
+		KEY_P:
+			if ev.shift_pressed:
+				toggle_play()
+			else:
+				palette_index = (palette_index + 1) % Palettes.count()
+				_apply_palette()
 		KEY_ENTER, KEY_KP_ENTER:
 			if evolve:
 				if ev.shift_pressed:

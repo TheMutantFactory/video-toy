@@ -20,6 +20,10 @@ var mouse_point := Vector3.ZERO
 var attract := false
 var spin_axis := Vector3(0.3, 1.0, 0.2).normalized()
 var _orbit_off := Vector3.ZERO
+var _att := Vector3(1, 1, 20)
+var _map := Vector2.ZERO
+var _map_from := Vector2.ZERO
+var _map_t := 1.0
 
 var _body: MeshInstance3D
 var _skin: MeshInstance3D
@@ -209,6 +213,25 @@ func _process(delta: float) -> void:
 		position = position.clamp(-bounds, bounds)
 		if velocity.length() > 0.01:
 			look_at(position + velocity, Vector3.UP)
+		home = position
+		moved = true
+	if verbs.has("lorenz") or verbs.has("rossler"):
+		if verbs.has("lorenz"):
+			_att = Attractors.lorenz_step(_att, delta * 0.9)
+			position = Vector3(_att.x * 0.13, (_att.z - 25.0) * 0.08, _att.y * 0.09)
+		else:
+			_att = Attractors.rossler_step(_att, delta * 1.6)
+			position = Vector3(_att.x * 0.25, _att.z * 0.12 - 1.0, _att.y * 0.25)
+		home = position
+		moved = true
+	elif verbs.has("clifford") or verbs.has("dejong"):
+		_map_t += delta * 3.4
+		if _map_t >= 1.0:
+			_map_t = 0.0
+			_map_from = _map
+			_map = Attractors.clifford(_map) if verbs.has("clifford") else Attractors.dejong(_map)
+		var m := _map_from.lerp(_map, smoothstep(0.0, 1.0, _map_t))
+		position = Vector3(m.x * 1.6, m.y * 1.0, 0.0)
 		home = position
 		moved = true
 	if verbs.has("swarm"):

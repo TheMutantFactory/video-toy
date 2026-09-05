@@ -32,6 +32,7 @@ const PATH := "user://midi.json"
 const AUDIO_PARAM_BANDS := ["", "bass", "mid", "high", "level"]
 const AUDIO_ACTION_BANDS := ["", "beat"]
 
+var last_source := ""              # "midi" | "pad" | "osc" | "audio" — who emitted last
 var bindings := {}                 # message key -> id
 var audio_bindings := {}           # id -> band
 var armed_id := ""
@@ -106,6 +107,7 @@ func cycle_audio_binding(id: String) -> String:
 
 ## Called every frame by AudioReact with 0..1 bands.
 func feed_audio(bands: Dictionary) -> void:
+	last_source = "audio"
 	for id in audio_bindings:
 		var band: String = audio_bindings[id]
 		if bands.has(band) and not id.begins_with("act:"):
@@ -114,6 +116,7 @@ func feed_audio(bands: Dictionary) -> void:
 
 ## Called by AudioReact on each detected beat.
 func feed_beat() -> void:
+	last_source = "audio"
 	for id in audio_bindings:
 		if audio_bindings[id] == "beat" and id.begins_with("act:"):
 			action.emit(id.trim_prefix("act:"))
@@ -161,11 +164,13 @@ func feed(ev: InputEventMIDI) -> void:
 		return
 	var is_off := ev.message == MIDI_MESSAGE_NOTE_OFF or (ev.message == MIDI_MESSAGE_NOTE_ON and ev.velocity == 0)
 	var is_note := ev.message == MIDI_MESSAGE_NOTE_ON or ev.message == MIDI_MESSAGE_NOTE_OFF
+	last_source = "midi"
 	_handle(key, value, is_off, is_note, "%s = %d" % [describe(key), roundi(value * 127.0)])
 
 
 ## Gamepad: sticks and triggers are params, buttons are actions or 1/0 params.
 func feed_pad(ev: InputEvent) -> void:
+	last_source = "pad"
 	if ev is InputEventJoypadMotion:
 		var raw: float = ev.axis_value
 		var trigger: bool = ev.axis == JOY_AXIS_TRIGGER_LEFT or ev.axis == JOY_AXIS_TRIGGER_RIGHT
@@ -185,6 +190,7 @@ func feed_pad(ev: InputEvent) -> void:
 ## OSC: /vt/param/<id> and /vt/action/<id> go straight through; anything else
 ## is a learnable "osc:<address>" controller.
 func feed_osc(address: String, value: float) -> void:
+	last_source = "osc"
 	if address.begins_with("/vt/param/"):
 		var id := address.trim_prefix("/vt/param/")
 		last_text = "osc %s = %.2f" % [id, value]

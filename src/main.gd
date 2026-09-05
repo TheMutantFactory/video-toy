@@ -228,6 +228,35 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL OSC (listening=%s received=%d fb_zoom=%.3f)" % [Osc.listening, Osc.received, st.fb_zoom])
+	# timeline: record two gestures through the control path, loop them back
+	var ok_tl := true
+	st.timeline = Timeline.new()
+	st._clock = 100.0
+	st.toggle_record()
+	MidiMap.last_source = "midi"
+	st._on_midi_param("fb_zoom", 0.0)                    # t=0   -> zoom 0.90
+	st._clock = 100.5
+	st._on_midi_param("fb_zoom", 1.0)                    # t=0.5 -> zoom 1.20
+	st._clock = 101.0
+	st.toggle_record()                                   # length 1.0
+	ok_tl = ok_tl and st.timeline.events.size() == 2 and is_equal_approx(st.timeline.length, 1.0) and not st.timeline.recording
+	st.fb_zoom = 1.0
+	st.toggle_play()
+	ok_tl = ok_tl and st.timeline.playing
+	st._tick_timeline(0.3)                                # pos 0.3: event at 0 fired -> 0.90
+	ok_tl = ok_tl and is_equal_approx(st.fb_zoom, 0.90)
+	st._tick_timeline(0.4)                                # pos 0.7: event at 0.5 fired -> 1.20
+	ok_tl = ok_tl and is_equal_approx(st.fb_zoom, 1.20)
+	st._tick_timeline(0.5)                                # pos 0.2 (wrapped): event at 0 -> 0.90
+	ok_tl = ok_tl and is_equal_approx(st.fb_zoom, 0.90)
+	st.toggle_play()
+	ok_tl = ok_tl and not st.timeline.playing and FileAccess.file_exists(Timeline.PATH)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Timeline.PATH))
+	if ok_tl:
+		print("PASS timeline records controller gestures and loops them back with wrap")
+	else:
+		fails += 1
+		printerr("FAIL timeline")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -297,7 +326,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -584,6 +613,31 @@ func _capture_all(dir: String) -> void:
 				Toolbox.select(pidx)
 				current.spawn_mosaic()
 				await get_tree().create_timer(1.0).timeout
+			"attractors":
+				# Stars on Lorenz, hearts on Clifford, long feedback fade paints them.
+				current.clear_actors()
+				for i in Toolbox.slots.size():
+					for v in ["orbit", "bounce", "spin", "pulse", "flock"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+				if not Toolbox.has_verb(0, "lorenz"):
+					Toolbox.toggle_verb(0, "lorenz")
+				if not Toolbox.has_verb(1, "clifford"):
+					Toolbox.toggle_verb(1, "clifford")
+				if not Toolbox.has_verb(2, "rossler"):
+					Toolbox.toggle_verb(2, "rossler")
+				for i in 6:
+					Toolbox.select(0)
+					current.spawn_at(Vector2(960, 540))
+					Toolbox.select(1)
+					current.spawn_at(Vector2(960, 540))
+				Toolbox.select(2)
+				current.spawn_at(Vector2(960, 540))
+				current.fb_fade = 0.975
+				current.fb_zoom = 1.0
+				current.fb_rot = 0.0
+				current._set_feedback(true)
+				await get_tree().create_timer(4.0).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

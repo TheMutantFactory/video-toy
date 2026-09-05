@@ -128,6 +128,17 @@ stands. All of it is learnable, so two pads can be the vote.
 when none are saved — with a slow camera orbit and the monitor on. Any key, click, MIDI or pad
 ends it and restores the stage as it was. It is the screensaver and the table demo.
 
+## Timeline and attractors
+
+**Shift+R** records every param and action that arrives through the controllers (MIDI, pads,
+OSC — audio-driven params are skipped) for up to 60 s; **Shift+P** loops it back through the
+same dispatch, so a knob sweep you performed becomes an LFO. Saved to `user://timeline.json`.
+Record and loop are learnable actions.
+
+Four **attractor verbs**: Lorenz and Rössler are integrated each frame and the icon rides the
+curve (3D solids trace them in 3D); Clifford and de Jong are iterated maps the icon glides
+between. With feedback fade high they paint the attractor.
+
 ## Presets
 
 **Shift+F1..F12** saves everything the stage remembers (palette, feedback, effects, glow,
@@ -219,6 +230,8 @@ src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading la
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader
 src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)
 src/boids.gd                flocking maths (2D and 3D) for the Flock verb
+src/attractors.gd           Lorenz, Rössler, Clifford, de Jong (pure functions)
+src/timeline.gd             record / loop of controller gestures
 src/ride_path.gd            a drawn stroke as a Curve2D with looping riders
 src/mosaic.gd               image -> grid of cells with colour / luminance (for Shift+S)
 src/extrude.gd              icon alpha -> extruded "cookie" mesh (textured faces + plain sides)

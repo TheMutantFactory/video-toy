@@ -425,6 +425,57 @@ func _init() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(cm.path))
 	cm.free()
 
+	# strange attractors stay bounded and actually move
+	var lp := Vector3(1, 1, 20)
+	var lmax := 0.0
+	var lmoved := 0.0
+	for i in 3000:
+		var np := Attractors.lorenz_step(lp, 1.0 / 60.0)
+		lmoved += np.distance_to(lp)
+		lp = np
+		lmax = maxf(lmax, lp.length())
+	_check("lorenz stays bounded and travels", lmax < 80.0 and lmoved > 100.0)
+	var rp := Vector3(1, 1, 0)
+	var rmax := 0.0
+	for i in 6000:
+		rp = Attractors.rossler_step(rp, 1.0 / 60.0)
+		rmax = maxf(rmax, rp.length())
+	_check("rossler stays bounded", rmax < 60.0 and rmax > 2.0)
+	var cp := Vector2(0.1, 0.1)
+	var dp := Vector2(0.1, 0.1)
+	var cok := true
+	for i in 2000:
+		cp = Attractors.clifford(cp)
+		dp = Attractors.dejong(dp)
+		if absf(cp.x) > 2.01 or absf(cp.y) > 2.01 or absf(dp.x) > 2.01 or absf(dp.y) > 2.01:
+			cok = false
+	_check("clifford and de jong maps stay in [-2, 2]", cok and cp != Vector2(0.1, 0.1))
+	_check("attractor verbs are on Shift+W/T/Y/U", Verbs.by_key(KEY_W, true) == "lorenz" and Verbs.by_key(KEY_T, true) == "rossler"
+		and Verbs.by_key(KEY_Y, true) == "clifford" and Verbs.by_key(KEY_U, true) == "dejong" and Verbs.by_key(KEY_W, false) == "orbit")
+
+	# timeline: record, stop, loop with wrap, persistence
+	var tl := Timeline.new()
+	tl.start_record(10.0)
+	tl.record("param", "a", 0.2, 10.0)
+	tl.record("action", "spawn", 1.0, 10.5)
+	tl.record("param", "a", 0.8, 11.0)
+	tl.stop_record(12.0)
+	_check("timeline records with relative times and length", tl.events.size() == 3 and is_equal_approx(tl.length, 2.0) and is_equal_approx(tl.events[2]["t"], 1.0))
+	_check("no recording after stop", not tl.record("param", "a", 0.5, 12.5))
+	tl.start_play(20.0)
+	var d1: Array = tl.due(20.6)                          # (0, 0.6]: t=0 and t=0.5
+	var d2: Array = tl.due(21.5)                          # (0.6, 1.5]: t=1.0
+	var d3: Array = tl.due(22.3)                          # wrap: (1.5, 2] + (0, 0.3]: t=0
+	_check("timeline due() returns events in windows and wraps", d1.size() == 2 and d1[1]["id"] == "spawn" and d2.size() == 1 and d2[0]["value"] == 0.8 and d3.size() == 1 and d3[0]["t"] == 0.0)
+	var tpath := "user://_smoke_timeline.json"
+	tl.save(tpath)
+	var tl2 := Timeline.new()
+	_check("timeline persists", tl2.load(tpath) and tl2.events.size() == 3 and is_equal_approx(tl2.length, 2.0))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tpath))
+	var tl3 := Timeline.new()
+	tl3.start_record(0.0)
+	_check("recording past MAX stops itself", not tl3.record("param", "a", 1.0, Timeline.MAX + 1.0) and not tl3.recording)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 
