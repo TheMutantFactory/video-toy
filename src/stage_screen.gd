@@ -1124,6 +1124,7 @@ func _on_midi_action(id: String) -> void:
 
 func toggle_midi_panel() -> void:
 	_midi_panel.visible = not _midi_panel.visible
+	_help.visible = not _midi_panel.visible          # the panel is wide; give it the room
 	if _midi_panel.visible:
 		_midi_panel.refresh()
 	else:
