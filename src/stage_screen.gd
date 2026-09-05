@@ -13,7 +13,8 @@ extends Control
 ## · S steal a palette from the selected raster / webcam · D glow
 ## · F1-F12 recall preset · Shift+F1-F12 save preset · Tab / Shift+Tab next / previous scene
 ## · ` scene off · arrows feedback drift · PgUp/PgDn feedback warp · Home reset warp
-## · C clear · H help · Esc menu
+## · Shift+arrows camera orbit / dolly · Shift+PgUp/PgDn camera roll · Shift+Home reset camera
+## · Shift+Space spawn a formation (Shift+X next formation) · C clear · H help · Esc menu
 ##
 ## Render graph:  world3d (solids) ─> sprite in world
 ##                world (actors + monitor + world3d) ─┬─> screen ──┐
@@ -31,6 +32,7 @@ const MidiPanelScript = preload("res://src/midi_panel.gd")
 const WebcamScript = preload("res://src/webcam.gd")
 const GlowScript = preload("res://src/glow.gd")
 const SceneLayerScript = preload("res://src/scene_layer.gd")
+const FormationScript = preload("res://src/formation.gd")
 const WEBCAM_MODES := ["off", "layer", "backdrop"]
 const WORLD := Vector2i(1920, 1080)
 
@@ -70,6 +72,13 @@ var fb_warp := 0.0
 var fb_warp_speed := 1.0
 var fb_drift := Vector2.ZERO
 var fb_stretch := Vector2.ONE
+var cam_orbit := 0.0                    # rad/s around the origin
+var cam_dolly := 7.5                    # distance
+var cam_roll := 0.0
+var cam_height := 0.0
+var _cam_angle := 0.0
+var _formations: Node3D
+var _formation_index := 0
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
@@ -284,6 +293,8 @@ func _build_3d() -> void:
 	_world3d.add_child(env)
 	_solids = Node3D.new()
 	_world3d.add_child(_solids)
+	_formations = Node3D.new()
+	_world3d.add_child(_formations)
 	var sprite := Sprite2D.new()
 	sprite.texture = _world3d.get_texture()
 	sprite.position = Vector2(WORLD) * 0.5
@@ -302,11 +313,55 @@ func spawn_solid(world_pos := Vector2(-1, -1)) -> void:
 	if world_pos.x < 0:
 		pos = Vector3(randf_range(-3.5, 3.5), randf_range(-1.8, 1.8), randf_range(-1.5, 1.0))
 	else:
-		pos = _camera.project_position(world_pos, _camera.position.z)
+		pos = _camera.project_position(world_pos, cam_dolly)
 	var sol := Node3D.new()
 	sol.set_script(SolidScript)
 	sol.setup(slot, next_shape(), pos, palette_index, IconMedia.texture_for(str(slot.get("svg_path", ""))))
 	_solids.add_child(sol)
+	_update_hud()
+
+
+func formation_kind() -> String:
+	return FormationScript.KINDS[_formation_index]
+
+
+func cycle_formation() -> void:
+	_formation_index = (_formation_index + 1) % FormationScript.KINDS.size()
+	_update_hud()
+
+
+## Shift+Space: 200 copies of the selected icon in the current shape and formation.
+func spawn_formation(n := 200) -> void:
+	var slot := Toolbox.current()
+	if slot.is_empty():
+		return
+	var icon := IconMedia.texture_for(str(slot.get("svg_path", "")))
+	var mesh: Mesh = SolidScript.make_mesh(next_shape(), icon.get_image() if (next_shape() == "cookie" and icon) else null)
+	var skin := StandardMaterial3D.new()
+	skin.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	skin.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	skin.alpha_scissor_threshold = 0.5
+	skin.albedo_texture = icon
+	skin.uv1_scale = SolidScript.uv_scale(next_shape())
+	skin.texture_repeat = true
+	skin.vertex_color_use_as_albedo = true
+	var body := StandardMaterial3D.new()
+	body.roughness = 0.55
+	body.vertex_color_use_as_albedo = true
+	body.albedo_color = Color(0.35, 0.35, 0.35)
+	var f := Node3D.new()
+	f.set_script(FormationScript)
+	f.setup(slot, formation_kind(), mesh, [skin, body], n, palette_index)
+	_formations.add_child(f)
+	_update_hud()
+
+
+func reset_camera() -> void:
+	cam_orbit = 0.0
+	cam_dolly = 7.5
+	cam_roll = 0.0
+	cam_height = 0.0
+	_cam_angle = 0.0
 	_update_hud()
 
 
@@ -353,6 +408,8 @@ func snapshot() -> Dictionary:
 		"slots": verbs,
 		"scene": {"id": Scenes.current, "speed": Scenes.speed, "scale": Scenes.scale, "bias": Scenes.bias},
 		"warp": {"amount": fb_warp, "speed": fb_warp_speed, "dx": fb_drift.x, "dy": fb_drift.y, "sx": fb_stretch.x, "sy": fb_stretch.y},
+		"camera": {"orbit": cam_orbit, "dolly": cam_dolly, "roll": cam_roll, "height": cam_height},
+		"formation": _formation_index,
 	}
 
 
@@ -403,6 +460,13 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 	if not sc.is_empty():
 		set_scene_knobs(float(sc.get("speed", Scenes.speed)), float(sc.get("scale", Scenes.scale)), float(sc.get("bias", Scenes.bias)))
 		set_scene(str(sc.get("id", Scenes.current)), fade)
+	var cam: Dictionary = d.get("camera", {})
+	if not cam.is_empty():
+		cam_orbit = float(cam.get("orbit", cam_orbit))
+		cam_dolly = float(cam.get("dolly", cam_dolly))
+		cam_roll = float(cam.get("roll", cam_roll))
+		cam_height = float(cam.get("height", cam_height))
+	_formation_index = posmod(int(d.get("formation", _formation_index)), FormationScript.KINDS.size())
 	var w: Dictionary = d.get("warp", {})
 	if not w.is_empty():
 		fb_warp = float(w.get("amount", fb_warp))
@@ -476,6 +540,10 @@ func midi_params() -> Array:
 		{"id": "fb_dy", "label": "Feedback drift Y", "set": func(v): fb_drift.y = lerpf(-6.0, 6.0, v)},
 		{"id": "fb_sx", "label": "Feedback stretch X", "set": func(v): fb_stretch.x = lerpf(0.9, 1.1, v)},
 		{"id": "fb_sy", "label": "Feedback stretch Y", "set": func(v): fb_stretch.y = lerpf(0.9, 1.1, v)},
+		{"id": "cam_orbit", "label": "Camera orbit speed", "set": func(v): cam_orbit = lerpf(-1.5, 1.5, v)},
+		{"id": "cam_dolly", "label": "Camera dolly", "set": func(v): cam_dolly = lerpf(3.0, 14.0, v)},
+		{"id": "cam_roll", "label": "Camera roll", "set": func(v): cam_roll = lerpf(-PI, PI, v)},
+		{"id": "cam_height", "label": "Camera height", "set": func(v): cam_height = lerpf(-4.0, 4.0, v)},
 	]
 
 
@@ -484,7 +552,7 @@ func midi_actions() -> Array:
 		{"id": "spawn", "label": "Spawn icon", "do": func(): spawn_at(Vector2(randf_range(100, WORLD.x - 100), randf_range(100, WORLD.y - 100)))},
 		{"id": "spawn_solid", "label": "Spawn 3D solid", "do": func(): spawn_solid()},
 		{"id": "clear", "label": "Clear stage", "do": func():
-			for a in _actors.get_children() + _solids.get_children():
+			for a in _actors.get_children() + _solids.get_children() + _formations.get_children():
 				a.queue_free()},
 		{"id": "feedback", "label": "Feedback on/off", "do": func(): _set_feedback(not feedback)},
 		{"id": "next_palette", "label": "Next palette", "do": func():
@@ -508,6 +576,12 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "spawn_formation", "label": "Spawn formation", "do": func(): spawn_formation()})
+	out.append({"id": "next_formation", "label": "Next formation kind", "do": cycle_formation})
+	out.append({"id": "cam_reset", "label": "Reset camera", "do": reset_camera})
+	out.append({"id": "cam_auto", "label": "Camera slow orbit on/off", "do": func():
+		cam_orbit = 0.0 if cam_orbit != 0.0 else 0.35
+		_update_hud()})
 	out.append({"id": "next_scene", "label": "Next scene", "do": func(): step_scene(1)})
 	out.append({"id": "prev_scene", "label": "Previous scene", "do": func(): step_scene(-1)})
 	out.append({"id": "scene_off", "label": "Scene off", "do": func(): set_scene("")})
@@ -660,6 +734,8 @@ func _build_hud() -> void:
 		+ "S            steal palette from raster / webcam\nD            glow off/soft/heavy\n"
 		+ "F1-F12       recall preset · Shift+F saves\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
+		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
+		+ "Shift+Space  formation of 200 (Shift+X: helix/lattice/shell/ring)\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -761,7 +837,8 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		_actors.get_child_count()] + "   ·   solids: %d (next: %s)" % [_solids.get_child_count(), next_shape()]
+		_actors.get_child_count()] + "   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [_solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
+		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
 	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
 	line2 += "   ·   audio: " + ((("%s  %s" % [AudioReact.source if AudioReact.source != "file" else AudioReact.file_name, _meter()])) if AudioReact.active() else "off (A)")
@@ -798,6 +875,10 @@ func _apply_palette() -> void:
 		var i := Toolbox.index_of(a.slot_id)
 		if i >= 0:
 			a.set_palette(palette_index, int(Toolbox.slots[i].get("color_index", i)))
+	for f in _formations.get_children():
+		var i := Toolbox.index_of(f.slot_id)
+		if i >= 0:
+			f.recolor(palette_index, int(Toolbox.slots[i].get("color_index", i)))
 	_update_hud()
 
 
@@ -819,8 +900,12 @@ func _process(_delta: float) -> void:
 	var mouse := _world_pos(get_local_mouse_position())
 	for a in _actors.get_children():
 		a.mouse_world = mouse
+	_cam_angle += cam_orbit * _delta
+	_camera.position = Vector3(sin(_cam_angle) * cam_dolly, cam_height, cos(_cam_angle) * cam_dolly)
+	_camera.look_at(Vector3.ZERO, Vector3.UP)
+	_camera.rotate_object_local(Vector3.FORWARD, cam_roll)
 	if _solids.get_child_count() > 0:
-		var mp := _camera.project_position(mouse, _camera.position.z)
+		var mp := _camera.project_position(mouse, cam_dolly)
 		for sol in _solids.get_children():
 			sol.mouse_point = mp
 	if feedback:
@@ -929,26 +1014,49 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_QUOTELEFT:
 			set_scene("")
 			return
-		KEY_UP: fb_drift.y -= 1.0
-		KEY_DOWN: fb_drift.y += 1.0
-		KEY_LEFT: fb_drift.x -= 1.0
-		KEY_RIGHT: fb_drift.x += 1.0
-		KEY_PAGEUP: fb_warp = minf(1.0, fb_warp + 0.05)
-		KEY_PAGEDOWN: fb_warp = maxf(0.0, fb_warp - 0.05)
+		KEY_UP:
+			if ev.shift_pressed: cam_dolly = maxf(3.0, cam_dolly - 0.5)
+			else: fb_drift.y -= 1.0
+		KEY_DOWN:
+			if ev.shift_pressed: cam_dolly = minf(14.0, cam_dolly + 0.5)
+			else: fb_drift.y += 1.0
+		KEY_LEFT:
+			if ev.shift_pressed: cam_orbit = clampf(cam_orbit - 0.1, -1.5, 1.5)
+			else: fb_drift.x -= 1.0
+		KEY_RIGHT:
+			if ev.shift_pressed: cam_orbit = clampf(cam_orbit + 0.1, -1.5, 1.5)
+			else: fb_drift.x += 1.0
+		KEY_PAGEUP:
+			if ev.shift_pressed: cam_roll += 0.1
+			else: fb_warp = minf(1.0, fb_warp + 0.05)
+		KEY_PAGEDOWN:
+			if ev.shift_pressed: cam_roll -= 0.1
+			else: fb_warp = maxf(0.0, fb_warp - 0.05)
 		KEY_HOME:
-			fb_warp = 0.0
-			fb_drift = Vector2.ZERO
-			fb_stretch = Vector2.ONE
+			if ev.shift_pressed:
+				reset_camera()
+			else:
+				fb_warp = 0.0
+				fb_drift = Vector2.ZERO
+				fb_stretch = Vector2.ONE
 	var verb := Verbs.by_key(k)
 	if verb != "" and not Toolbox.current().is_empty():
 		Toolbox.toggle_verb(Toolbox.selected, verb)
 		return
 	match k:
-		KEY_SPACE: spawn_at(Vector2(randf_range(100, WORLD.x - 100), randf_range(100, WORLD.y - 100)))
+		KEY_SPACE:
+			if ev.shift_pressed:
+				spawn_formation()
+			else:
+				spawn_at(Vector2(randf_range(100, WORLD.x - 100), randf_range(100, WORLD.y - 100)))
 		KEY_P:
 			palette_index = (palette_index + 1) % Palettes.count()
 			_apply_palette()
-		KEY_X: _recolor()
+		KEY_X:
+			if ev.shift_pressed:
+				cycle_formation()
+			else:
+				_recolor()
 		KEY_DELETE, KEY_BACKSPACE: Toolbox.remove(Toolbox.selected)
 		KEY_F: _set_feedback(not feedback)
 		KEY_BRACKETLEFT: fb_zoom = maxf(0.90, fb_zoom - 0.01)
@@ -994,7 +1102,7 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_MINUS: fb_fade = maxf(0.5, fb_fade - 0.02)
 		KEY_EQUAL: fb_fade = minf(0.995, fb_fade + 0.02)
 		KEY_C:
-			for a in _actors.get_children() + _solids.get_children():
+			for a in _actors.get_children() + _solids.get_children() + _formations.get_children():
 				a.queue_free()
 		KEY_H:
 			_help.visible = not _help.visible

@@ -4,7 +4,7 @@ extends Node3D
 ## tinted with the palette colour, tiled once per face. Verbs are read live
 ## from the toolbox slot, like actor.gd, and mapped into 3D.
 
-const SHAPES := ["cube", "sphere", "torus", "cylinder", "prism"]
+const SHAPES := ["cube", "sphere", "torus", "cylinder", "prism", "cookie"]
 
 var slot_id := ""
 var shape := "cube"
@@ -29,8 +29,15 @@ var _base_color := Color.WHITE
 var raster := false
 
 
-static func make_mesh(kind: String) -> Mesh:
+## `icon_img` is only needed for "cookie" (the extruded icon).
+static func make_mesh(kind: String, icon_img: Image = null) -> Mesh:
 	match kind:
+		"cookie":
+			if icon_img == null:
+				var m := BoxMesh.new()
+				m.size = Vector3(1.4, 1.4, 0.35)
+				return m
+			return Extrude.build(icon_img)
 		"sphere":
 			var m := SphereMesh.new()
 			m.radius = 0.7
@@ -66,6 +73,7 @@ static func uv_scale(kind: String) -> Vector3:
 		"torus": return Vector3(6, 2, 1)
 		"cylinder": return Vector3(3, 1, 1)
 		"prism": return Vector3(3, 2, 1)
+		"cookie": return Vector3(1, 1, 1)
 	return Vector3.ONE
 
 
@@ -86,12 +94,11 @@ func setup(slot: Dictionary, kind: String, pos: Vector3, pal: int, icon: Texture
 	raster = str(slot.get("kind", "icon")) == "raster"
 	_base_color = Palettes.color(pal, int(slot.get("color_index", 0)))
 
-	var mesh := make_mesh(kind)
+	var mesh := make_mesh(kind, icon.get_image() if (kind == "cookie" and icon) else null)
 	_body = MeshInstance3D.new()
 	_body.mesh = mesh
 	_body_mat = StandardMaterial3D.new()
 	_body_mat.roughness = 0.55
-	_body.material_override = _body_mat
 	add_child(_body)
 
 	_skin = MeshInstance3D.new()
@@ -104,7 +111,14 @@ func setup(slot: Dictionary, kind: String, pos: Vector3, pal: int, icon: Texture
 	_skin_mat.albedo_texture = icon
 	_skin_mat.uv1_scale = uv_scale(kind)
 	_skin_mat.texture_repeat = true
-	_skin.material_override = _skin_mat
+	if kind == "cookie":
+		# One mesh, two surfaces: textured faces (skin) + plain sides (body).
+		_body.set_surface_override_material(0, _skin_mat)
+		_body.set_surface_override_material(1, _body_mat)
+		_skin.visible = false
+	else:
+		_body.material_override = _body_mat
+		_skin.material_override = _skin_mat
 	add_child(_skin)
 
 	# Sparkle: little billboarded copies of the icon drifting off the solid.

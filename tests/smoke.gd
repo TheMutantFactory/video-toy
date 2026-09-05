@@ -266,6 +266,26 @@ func _init() -> void:
 	var wm := FeedbackMesh.material()
 	_check("warp material has a vertex stage", wm.shader != null and wm.shader.code.contains("void vertex()"))
 
+	# extrusion: a ring keeps its hole; sides only on boundaries
+	var ring_img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	for y in 64:
+		for x in 64:
+			var dd := Vector2(x - 32, y - 32).length()
+			ring_img.set_pixel(x, y, Color(1, 1, 1, 1.0 if (dd > 12 and dd < 28) else 0.0))
+	var grid: Array = Extrude.opaque_cells(ring_img, 32)
+	_check("extrude grid keeps the hole", not grid[16][16] and grid[16][4] and Extrude.count_cells(grid) > 100)
+	var cookie := Extrude.build(ring_img, 1.4, 0.35, 32)
+	# SurfaceTool.index() merges shared vertices, so count triangles via indices
+	var front_idx: int = cookie.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size()
+	var side_idx: int = cookie.surface_get_arrays(1)[Mesh.ARRAY_INDEX].size()
+	_check("extrude mesh: two surfaces, 4 triangles per cell on the faces, fewer on the sides", cookie.get_surface_count() == 2
+		and front_idx == Extrude.count_cells(grid) * 12 and side_idx > 0 and side_idx < front_idx)
+	var solid_box := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	solid_box.fill(Color(1, 1, 1, 1))
+	var slab := Extrude.build(solid_box, 1.0, 0.2, 4)
+	_check("solid slab has sides only on its 16 boundary edges", slab.surface_get_arrays(1)[Mesh.ARRAY_INDEX].size() == 16 * 6)
+	# (formation.gd reads autoloads, so its transforms are checked in --selftest)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

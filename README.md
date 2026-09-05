@@ -47,7 +47,9 @@ arrows       feedback drift           PgUp/PgDn  feedback warp amount   Home  re
                                       M      monitor inside the scene (recursion)
                                       N      monitor size; drag it to move
                                       B      3D solid of the selected icon at the mouse
-                                      Shift+B next shape (cube/sphere/torus/cylinder/prism)
+                                      Shift+B next shape (cube/sphere/torus/cylinder/prism/cookie)
+Shift+Space  formation of 200 copies  Shift+X  next formation (helix/lattice/shell/ring)
+Shift+arrows camera orbit / dolly     Shift+PgUp/PgDn  camera roll   Shift+Home  reset camera
                                       ;      MIDI + audio panel
                                       A      audio source: off / mic / test / file
                                       Z      webcam: off / layer behind everything / chroma backdrop
@@ -69,6 +71,15 @@ Three knobs — speed, scale, colour bias — are learnable params; next/previou
 The feedback "previous frame" is drawn through a **warp mesh**: a 32×18 grid whose vertices a
 shader displaces Milkdrop-style. Warp amount and speed, drift (pushed in every pass), and
 stretch are learnable; arrows / PgUp / PgDn / Home drive them from the keyboard.
+
+## 3D: extruded icons, formations, camera
+
+The **cookie** shape (Shift+B) extrudes the icon itself: its alpha becomes a slab, the faces
+carry the icon texture so the silhouette stays smooth, the sides take the body colour, and
+holes survive. **Shift+Space** spawns a formation — 200 copies of the selected icon in the
+current shape as one MultiMesh, per-instance colours walking the palette ring — in a helix,
+lattice, Fibonacci shell or ring (Shift+X). The **camera** orbits, dollies, rolls and rises from
+Shift+arrows / Shift+PgUp/PgDn, and all four are learnable params; "slow orbit" is an action.
 
 ## Presets
 
@@ -153,6 +164,8 @@ src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma ke
 src/presets.gd              twelve stage snapshots, user://presets.json
 src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading layer, the shaders (common.gdshaderinc shared)
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader
+src/extrude.gd              icon alpha -> extruded "cookie" mesh (textured faces + plain sides)
+src/formation.gd            200 copies in a helix / lattice / shell / ring as one MultiMesh
 src/monitor.gd              the TV inside the world that shows the final composite
 src/solid.gd                a 3D shape wearing an icon; lives in a 3D viewport composited into the world
 src/actor.gd                one icon on stage; verbs read live from Toolbox

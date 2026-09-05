@@ -100,6 +100,37 @@ func _selftest() -> void:
 	st.restore(snap2, 0.0)
 	ok_scenes = ok_scenes and Scenes.current == "truchet" and is_equal_approx(Scenes.speed, 2.0) and snap2["scene"]["id"] == "truchet"
 	st.set_scene("", 0.0)
+	# extrusion + formation on the real stage: a cookie solid and a lattice
+	var ring_img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	for y in 64:
+		for x in 64:
+			var dd := Vector2(x - 32, y - 32).length()
+			ring_img.set_pixel(x, y, Color(1, 1, 1, 1.0 if (dd > 12 and dd < 28) else 0.0))
+	var cookie := Extrude.build(ring_img, 1.4, 0.35, 32)
+	var ok_3d: bool = cookie.get_surface_count() == 2 and cookie.surface_get_array_len(0) > 0 and cookie.surface_get_array_len(1) > 0
+	Toolbox.select(0)
+	st._formation_index = 1
+	st.spawn_formation(64)
+	await get_tree().process_frame
+	ok_3d = ok_3d and st._formations.get_child_count() == 1 and st._formations.get_child(0)._mm.multimesh.instance_count == 64
+	var Formation = load("res://src/formation.gd")
+	for k in Formation.KINDS:
+		var xf: Array = Formation.transforms(k, 50, 3.0)
+		var seen := {}
+		for tr in xf:
+			seen[str(tr.origin.snapped(Vector3.ONE * 0.001))] = true
+			if tr.origin.length() > 4.0:
+				ok_3d = false
+		if xf.size() != 50 or seen.size() < 45:
+			ok_3d = false
+			printerr("FAIL formation transforms: ", k)
+	for f in st._formations.get_children():
+		f.queue_free()
+	if ok_3d:
+		print("PASS extruded icon mesh and formation spawn")
+	else:
+		fails += 1
+		printerr("FAIL extrusion / formation")
 	if ok_scenes:
 		print("PASS scenes build, switch and round-trip through presets")
 	else:
@@ -116,10 +147,10 @@ func _selftest() -> void:
 		printerr("FAIL preset round-trip")
 	# 3D solids need the autoloads, so they are checked here, not in smoke.gd
 	var Solid = load("res://src/solid.gd")
-	var ok_shapes: bool = Solid != null and Solid.SHAPES.size() == 5
+	var ok_shapes: bool = Solid != null and Solid.SHAPES.size() == 6
 	if ok_shapes:
 		for k in Solid.SHAPES:
-			if Solid.make_mesh(k) == null or Solid.uv_scale(k) == Vector3.ONE:
+			if Solid.make_mesh(k) == null or (k != "cookie" and Solid.uv_scale(k) == Vector3.ONE):
 				ok_shapes = false
 	if ok_shapes:
 		print("PASS every solid shape has a mesh and uv tiling")
@@ -160,7 +191,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d"]
 	for name in shots:
 		match name:
 			"menu":
@@ -307,6 +338,28 @@ func _capture_all(dir: String) -> void:
 				current._set_feedback(true)
 				await get_tree().create_timer(2.5).timeout
 				Scenes.current = ""
+			"solids3d":
+				# Extruded star and heart cookies, a helix of 200 bolts, camera
+				# orbiting with a little roll, soft glow, no feedback.
+				current.set_scene("", 0.0)
+				current._set_feedback(false)
+				current._glow.set_level(1)
+				for a in current._actors.get_children() + current._solids.get_children():
+					a.queue_free()
+				current._shape_index = 5              # cookie
+				for i in [0, 1]:
+					Toolbox.select(i)
+					current.spawn_solid(Vector2(500 + i * 900, 420))
+				Toolbox.select(2)
+				current._formation_index = 0          # helix
+				current.spawn_formation(200)
+				current.cam_orbit = 0.4
+				current.cam_roll = 0.15
+				current.cam_height = 1.0
+				await get_tree().create_timer(1.6).timeout
+				for f in current._formations.get_children():
+					f.queue_free()
+				current.reset_camera()
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout
