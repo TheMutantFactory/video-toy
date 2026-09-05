@@ -1257,6 +1257,7 @@ func cycle_quality_lock() -> void:
 func panic() -> void:
 	if _fade_tween:
 		_fade_tween.kill()
+	_xf = {}
 	_set_feedback(false)
 	fb_zoom = 1.04
 	fb_rot = 0.02
@@ -1473,6 +1474,15 @@ func _tick_crossfade(delta: float) -> void:
 
 func crossfading() -> bool:
 	return not _xf.is_empty()
+
+
+## Jump to the end of a running crossfade (tests, panic).
+func finish_crossfade() -> void:
+	if _xf.is_empty():
+		return
+	var to: Dictionary = _xf["to"]
+	_xf = {}
+	_apply_snapshot(to, true)
 
 
 ## Immediate apply. `persist` writes the toolbox verbs to disk (skipped on the
@@ -2187,6 +2197,8 @@ var _prof := {}
 
 func _process(_delta: float) -> void:
 	var t0 := Time.get_ticks_usec()
+	_tick_crossfade(_delta)
+	_tick_credits(_delta)
 	_tick_modes(_delta)
 	var t1 := Time.get_ticks_usec()
 	_tick_timeline(_delta)

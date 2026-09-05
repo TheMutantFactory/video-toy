@@ -223,6 +223,7 @@ func _selftest() -> void:
 		tx.set_dest_address("127.0.0.1", Osc.port)
 		if st._fade_tween:                                # an earlier restore() may still be crossfading
 			st._fade_tween.kill()
+		st.finish_crossfade()
 		st.fb_zoom = 1.0
 		tx.put_packet(Osc.build("/vt/param/fb_zoom", [0.5]))
 		var solids_before: int = st._solids.get_child_count()
@@ -240,6 +241,7 @@ func _selftest() -> void:
 		printerr("FAIL OSC (listening=%s received=%d fb_zoom=%.3f)" % [Osc.listening, Osc.received, st.fb_zoom])
 	# timeline: record two gestures through the control path, loop them back
 	var ok_tl := true
+	st.finish_crossfade()
 	st.timeline = Timeline.new()
 	st._clock = 100.0
 	st.toggle_record()
@@ -374,6 +376,18 @@ func _selftest() -> void:
 	ok_xf = ok_xf and not st.crossfading() and is_equal_approx(st.fb_zoom, 1.2) and is_equal_approx(st.cam_dolly, 10.0)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(pp))
 	st.restore(a, 0.0)
+	# and the same crossfade driven by the real process loop
+	st.restore(a, 0.0)
+	st.restore(b, 0.5)
+	await get_tree().create_timer(0.2).timeout
+	var mid_zoom: float = st.fb_zoom
+	ok_xf = ok_xf and st.crossfading() and mid_zoom > 1.02 and mid_zoom < 1.18
+	await get_tree().create_timer(0.5).timeout
+	ok_xf = ok_xf and not st.crossfading() and is_equal_approx(st.fb_zoom, 1.2)
+	st.start_credits_roll()
+	await get_tree().create_timer(0.3).timeout
+	ok_xf = ok_xf and st._roll_body.position.y < 1075.0
+	st.stop_credits_roll()
 	if ok_xf:
 		print("PASS preset banks, neighbour stepping, crossfade of everything")
 	else:
