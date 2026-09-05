@@ -35,7 +35,8 @@ var _last_value := {}              # message key -> last raw 0..1 (edge detectio
 
 
 func _ready() -> void:
-	OS.open_midi_inputs()
+	if DisplayServer.get_name() != "headless":      # CoreMIDI has no server to talk to headless
+		OS.open_midi_inputs()
 	load_from_disk()
 
 
