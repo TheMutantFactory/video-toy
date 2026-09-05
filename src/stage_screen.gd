@@ -7,9 +7,11 @@ extends Control
 ## · Space random spawn · P palette · F feedback · [ ] zoom · , . rotate
 ## · - = fade · O kaleidoscope · G chroma key (drop an image for the backdrop)
 ## · K pixelate · L palette quantise · J dither · V CRT · M monitor · N monitor size
-## · drag the monitor to move it · C clear · H help · Esc menu
+## · drag the monitor to move it · B spawn a 3D solid of the selected icon
+## · Shift+B next shape · C clear · H help · Esc menu
 ##
-## Render graph:  world (actors + monitor) ─┬─> screen ──┐
+## Render graph:  world3d (solids) ─> sprite in world
+##                world (actors + monitor + world3d) ─┬─> screen ──┐
 ##                                          └─> acc A/B ─┘ (feedback ping-pong)
 ##                composite = bg + screen + fx  ──> display (stage) and monitor (world)
 
@@ -19,6 +21,7 @@ const HotbarScript = preload("res://src/hotbar.gd")
 const ActorScript = preload("res://src/actor.gd")
 const FxScript = preload("res://src/fx.gd")
 const MonitorScript = preload("res://src/monitor.gd")
+const SolidScript = preload("res://src/solid.gd")
 const WORLD := Vector2i(1920, 1080)
 
 var palette_index := 0
@@ -38,6 +41,10 @@ var _screen: TextureRect
 var _composite: SubViewport
 var _display: TextureRect
 var _monitor: Node2D
+var _world3d: SubViewport
+var _camera: Camera3D
+var _solids: Node3D
+var _shape_index := 0
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
@@ -78,6 +85,7 @@ func _ready() -> void:
 	_world.transparent_bg = true
 	_world.disable_3d = true
 	add_child(_world)
+	_build_3d()
 	_actors = Node2D.new()
 	_world.add_child(_actors)
 
@@ -136,6 +144,64 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
 		get_window().files_dropped.disconnect(_on_files_dropped)
+
+
+# ---------------- 3D layer ----------------
+## A transparent 3D viewport composited into the world as a sprite, so solids
+## get feedback, effects and the monitor exactly like the 2D actors.
+func _build_3d() -> void:
+	_world3d = SubViewport.new()
+	_world3d.size = WORLD
+	_world3d.transparent_bg = true
+	_world3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_world3d.msaa_3d = Viewport.MSAA_2X
+	add_child(_world3d)
+	_camera = Camera3D.new()
+	_camera.position = Vector3(0, 0, 7.5)
+	_camera.fov = 55.0
+	_world3d.add_child(_camera)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-35, 30, 0)
+	sun.light_energy = 1.4
+	_world3d.add_child(sun)
+	var env := WorldEnvironment.new()
+	env.environment = Environment.new()
+	env.environment.background_mode = Environment.BG_CLEAR_COLOR
+	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.environment.ambient_light_color = Color(0.5, 0.5, 0.6)
+	env.environment.ambient_light_energy = 0.9
+	_world3d.add_child(env)
+	_solids = Node3D.new()
+	_world3d.add_child(_solids)
+	var sprite := Sprite2D.new()
+	sprite.texture = _world3d.get_texture()
+	sprite.position = Vector2(WORLD) * 0.5
+	_world.add_child(sprite)
+
+
+func next_shape() -> String:
+	return SolidScript.SHAPES[_shape_index]
+
+
+func spawn_solid(world_pos := Vector2(-1, -1)) -> void:
+	var slot := Toolbox.current()
+	if slot.is_empty():
+		return
+	var pos: Vector3
+	if world_pos.x < 0:
+		pos = Vector3(randf_range(-3.5, 3.5), randf_range(-1.8, 1.8), randf_range(-1.5, 1.0))
+	else:
+		pos = _camera.project_position(world_pos, _camera.position.z)
+	var sol := Node3D.new()
+	sol.set_script(SolidScript)
+	sol.setup(slot, next_shape(), pos, palette_index, IconMedia.texture_for(str(slot.get("svg_path", ""))))
+	_solids.add_child(sol)
+	_update_hud()
+
+
+func cycle_shape() -> void:
+	_shape_index = (_shape_index + 1) % SolidScript.SHAPES.size()
+	_update_hud()
 
 
 # ---------------- HUD ----------------
@@ -211,6 +277,7 @@ func _build_hud() -> void:
 		+ "G            chroma key (drop image = backdrop)\nK            pixelate size\n"
 		+ "L            palette quantise\nJ            dither\nV            CRT off/soft/heavy\n"
 		+ "M            monitor in the scene\nN            monitor size (drag to move)\n"
+		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -286,7 +353,7 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe(), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		_actors.get_child_count()]
+		_actors.get_child_count()] + "   ·   solids: %d (next: %s)" % [_solids.get_child_count(), next_shape()]
 
 
 # ---------------- palette / feedback ----------------
@@ -297,7 +364,7 @@ func _apply_palette() -> void:
 	_monitor.queue_redraw()
 	_hotbar.palette_index = palette_index
 	_hotbar.refresh()
-	for a in _actors.get_children():
+	for a in _actors.get_children() + _solids.get_children():
 		var i := Toolbox.index_of(a.slot_id)
 		if i >= 0:
 			a.set_palette(palette_index, int(Toolbox.slots[i].get("color_index", i)))
@@ -322,6 +389,10 @@ func _process(_delta: float) -> void:
 	var mouse := _world_pos(get_local_mouse_position())
 	for a in _actors.get_children():
 		a.mouse_world = mouse
+	if _solids.get_child_count() > 0:
+		var mp := _camera.project_position(mouse, _camera.position.z)
+		for sol in _solids.get_children():
+			sol.mouse_point = mp
 	if feedback:
 		var cur: int = _flip
 		_flip = 1 - _flip
@@ -374,6 +445,11 @@ func _remove_nearest(world_pos: Vector2) -> void:
 		if d < best_d:
 			best_d = d
 			best = a
+	for sol in _solids.get_children():
+		var d: float = _camera.unproject_position(sol.position).distance_to(world_pos)
+		if d < best_d:
+			best_d = d
+			best = sol
 	if best and best_d < 160.0:
 		best.queue_free()
 
@@ -419,6 +495,11 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_BRACKETRIGHT: fb_zoom = minf(1.20, fb_zoom + 0.01)
 		KEY_COMMA: fb_rot -= 0.01
 		KEY_PERIOD: fb_rot += 0.01
+		KEY_B:
+			if ev.shift_pressed:
+				cycle_shape()
+			else:
+				spawn_solid(_world_pos(get_local_mouse_position()) if get_global_rect().has_point(get_global_mouse_position()) else Vector2(-1, -1))
 		KEY_M: set_monitor(not _monitor.visible)
 		KEY_N:
 			_monitor.cycle_size()
@@ -444,7 +525,7 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_MINUS: fb_fade = maxf(0.5, fb_fade - 0.02)
 		KEY_EQUAL: fb_fade = minf(0.995, fb_fade + 0.02)
 		KEY_C:
-			for a in _actors.get_children():
+			for a in _actors.get_children() + _solids.get_children():
 				a.queue_free()
 		KEY_H:
 			_help.visible = not _help.visible

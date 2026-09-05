@@ -69,6 +69,18 @@ func _selftest() -> void:
 	await get_tree().process_frame
 	print("PASS attribution overlay opens (%d entries)" % Ledger.count())
 	menu.close()
+	# 3D solids need the autoloads, so they are checked here, not in smoke.gd
+	var Solid = load("res://src/solid.gd")
+	var ok_shapes: bool = Solid != null and Solid.SHAPES.size() == 5
+	if ok_shapes:
+		for k in Solid.SHAPES:
+			if Solid.make_mesh(k) == null or Solid.uv_scale(k) == Vector3.ONE:
+				ok_shapes = false
+	if ok_shapes:
+		print("PASS every solid shape has a mesh and uv tiling")
+	else:
+		fails += 1
+		printerr("FAIL solid shapes")
 	get_tree().quit(1 if fails > 0 else 0)
 
 
@@ -77,7 +89,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids"]
 	for name in shots:
 		match name:
 			"menu":
@@ -121,6 +133,15 @@ func _capture_all(dir: String) -> void:
 				current._set_feedback(false)
 				current.set_monitor(true, 2)
 				await get_tree().create_timer(2.0).timeout
+			"solids":
+				current.set_monitor(false)
+				for a in current._actors.get_children():
+					a.queue_free()
+				for i in 10:
+					Toolbox.select(i % Toolbox.slots.size())
+					current.spawn_solid()
+					current.cycle_shape()
+				await get_tree().create_timer(1.5).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

@@ -19,7 +19,9 @@ G="$(find_godot)"
 case "${1:-play}" in
   play)    exec "$G" --path . ;;
   test)    "$G" --headless --path . --import >/dev/null 2>&1 || true
-           "$G" --headless --path . -s tests/smoke.gd && "$G" --headless --path . -- --selftest ;;
+           # perl alarm = portable timeout: a script that errors before quit() would hang forever
+           perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -s tests/smoke.gd \
+             && perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -- --selftest ;;
   capture) mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ;;
   import)  exec "$G" --headless --path . --import ;;
   *) echo "usage: $0 [play|test|capture|import]" >&2; exit 2 ;;
