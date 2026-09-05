@@ -9,6 +9,7 @@ signal changed
 signal selection_changed(index: int)
 
 const PATH := "user://toolbox.json"
+const RASTER_DIR := "user://raster"
 const MAX_SLOTS := 9
 
 var slots: Array = []                      # Array of Dictionary
@@ -70,6 +71,47 @@ func add_from_meta(meta: Dictionary, svg_path: String) -> int:
 	changed.emit()
 	selection_changed.emit(selected)
 	return selected
+
+
+## A raster image (PNG/JPG/...) as a slot. The file is copied into user://raster
+## so the slot survives the original moving. Returns the slot index or -1.
+func add_raster(src_path: String) -> int:
+	if is_full():
+		return -1
+	var id := "raster-%d" % absi(src_path.hash())
+	var existing := index_of(id)
+	if existing >= 0:
+		return existing
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(RASTER_DIR))
+	var dst := "%s/%s.%s" % [RASTER_DIR, id, src_path.get_extension().to_lower()]
+	var bytes := FileAccess.get_file_as_bytes(src_path)
+	if bytes.is_empty():
+		return -1
+	var f := FileAccess.open(dst, FileAccess.WRITE)
+	if f == null:
+		return -1
+	f.store_buffer(bytes)
+	f.close()
+	var slot := {
+		"id": id, "kind": "raster",
+		"term": src_path.get_file().get_basename(),
+		"svg_path": dst, "thumbnail_url": "",
+		"attribution": "%s — local image" % src_path.get_file(),
+		"license": "user-supplied", "permalink": "",
+		"creator_name": "", "creator_permalink": "",
+		"verbs": [], "color_index": slots.size(),
+		"added_at": int(Time.get_unix_time_from_system()),
+	}
+	slots.append(slot)
+	selected = slots.size() - 1
+	save_to_disk()
+	changed.emit()
+	selection_changed.emit(selected)
+	return selected
+
+
+static func is_raster_slot(slot: Dictionary) -> bool:
+	return str(slot.get("kind", "icon")) == "raster"
 
 
 func remove(index: int) -> void:

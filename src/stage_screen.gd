@@ -9,7 +9,8 @@ extends Control
 ## · K pixelate · L palette quantise · J dither · V CRT · M monitor · N monitor size
 ## · drag the monitor to move it · B spawn a 3D solid of the selected icon
 ## · Shift+B next shape · ; MIDI + audio panel · A audio source (drop an audio file)
-## · C clear · H help · Esc menu
+## · drop an image = raster slot (Shift+drop = chroma backdrop) · Z webcam layer
+## · S steal a palette from the selected raster / webcam · C clear · H help · Esc menu
 ##
 ## Render graph:  world3d (solids) ─> sprite in world
 ##                world (actors + monitor + world3d) ─┬─> screen ──┐
@@ -24,6 +25,8 @@ const FxScript = preload("res://src/fx.gd")
 const MonitorScript = preload("res://src/monitor.gd")
 const SolidScript = preload("res://src/solid.gd")
 const MidiPanelScript = preload("res://src/midi_panel.gd")
+const WebcamScript = preload("res://src/webcam.gd")
+const WEBCAM_MODES := ["off", "layer", "backdrop"]
 const WORLD := Vector2i(1920, 1080)
 
 var palette_index := 0
@@ -49,6 +52,11 @@ var _solids: Node3D
 var _shape_index := 0
 var _midi_panel: PanelContainer
 var _midi_last := ""
+var _webcam: Node2D
+var _webcam_vp: SubViewport
+var _webcam_sprite: Sprite2D
+var _webcam_mode := 0
+var _steal_note := ""
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
@@ -89,6 +97,7 @@ func _ready() -> void:
 	_world.transparent_bg = true
 	_world.disable_3d = true
 	add_child(_world)
+	_build_webcam()
 	_build_3d()
 	_actors = Node2D.new()
 	_world.add_child(_actors)
@@ -149,6 +158,79 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
 		get_window().files_dropped.disconnect(_on_files_dropped)
+
+
+# ---------------- webcam ----------------
+## The camera renders into its own viewport so one RGB texture serves both the
+## world layer (behind everything, so it feeds back and gets the effects) and
+## the chroma-key backdrop.
+func _build_webcam() -> void:
+	_webcam_vp = SubViewport.new()
+	_webcam_vp.size = Vector2i(960, 540)
+	_webcam_vp.transparent_bg = false
+	_webcam_vp.disable_3d = true
+	_webcam_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	add_child(_webcam_vp)
+	_webcam = WebcamScript.new()
+	_webcam.box = Vector2(960, 540)
+	_webcam.position = Vector2(480, 270)
+	_webcam.set_process(false)
+	_webcam_vp.add_child(_webcam)
+	_webcam_sprite = Sprite2D.new()
+	_webcam_sprite.texture = _webcam_vp.get_texture()
+	_webcam_sprite.position = Vector2(WORLD) * 0.5
+	_webcam_sprite.scale = Vector2(2, 2)
+	_webcam_sprite.z_index = -2
+	_webcam_sprite.visible = false
+	_world.add_child(_webcam_sprite)
+
+
+func webcam_mode() -> String:
+	return WEBCAM_MODES[_webcam_mode]
+
+
+func set_webcam_mode(i: int) -> void:
+	_webcam_mode = posmod(i, WEBCAM_MODES.size())
+	var on := _webcam_mode > 0
+	_webcam.set_process(on)
+	if on:
+		_webcam.start()
+	else:
+		_webcam.stop()
+	_webcam_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS if on else SubViewport.UPDATE_DISABLED
+	_webcam_sprite.visible = webcam_mode() == "layer"
+	_fx.set_live_backdrop(_webcam_vp.get_texture() if webcam_mode() == "backdrop" else null)
+	if webcam_mode() == "backdrop" and not _fx.chroma:
+		_fx.toggle_chroma()
+	_refresh_fx()
+
+
+func cycle_webcam() -> void:
+	set_webcam_mode(_webcam_mode + 1)
+
+
+## S: a palette from the selected raster slot, or the webcam if it is on.
+func steal_palette() -> void:
+	var img: Image = null
+	var name := ""
+	var slot := Toolbox.current()
+	if _webcam_mode > 0 and _webcam.is_live():
+		img = _webcam_vp.get_texture().get_image()
+		name = "Webcam"
+	elif not slot.is_empty() and Toolbox.is_raster_slot(slot):
+		var tex := IconMedia.texture_for(str(slot.get("svg_path", "")))
+		if tex:
+			img = tex.get_image()
+			name = str(slot.get("term", "image")).capitalize()
+	if img == null:
+		_steal_note = "select a raster slot (or turn the webcam on) to steal a palette"
+		_update_hud()
+		return
+	var p := Palettes.extract(img, name)
+	palette_index = Palettes.add_extra(p)
+	_apply_palette()
+	_steal_note = "stole palette “%s” (%d colours)" % [name, p["ring"].size()]
+	_update_hud()
 
 
 # ---------------- 3D layer ----------------
@@ -265,6 +347,8 @@ func midi_actions() -> Array:
 			_refresh_fx()},
 		{"id": "monitor", "label": "Monitor on/off", "do": func(): set_monitor(not _monitor.visible)},
 		{"id": "next_shape", "label": "Next 3D shape", "do": cycle_shape},
+		{"id": "webcam", "label": "Next webcam mode", "do": cycle_webcam},
+		{"id": "steal_palette", "label": "Steal palette", "do": steal_palette},
 		{"id": "audio_source", "label": "Next audio source", "do": func():
 			AudioReact.cycle_source()
 			_update_hud()},
@@ -398,6 +482,8 @@ func _build_hud() -> void:
 		+ "M            monitor in the scene\nN            monitor size (drag to move)\n"
 		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
 		+ ";            MIDI + audio panel\nA            audio: off/mic/test/file (drop mp3/ogg/wav)\n"
+		+ "drop image   raster slot (Shift+drop: chroma backdrop)\nZ            webcam: off/layer/backdrop\n"
+		+ "S            steal palette from raster / webcam\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -456,14 +542,30 @@ func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false, 
 	_refresh_fx()
 
 
+## Plain drop: the image becomes a toolbox slot with verbs like any icon.
+func add_raster(path: String) -> int:
+	var idx := Toolbox.add_raster(path)
+	if idx >= 0:
+		Ledger.record_local(Toolbox.slots[idx])
+		_steal_note = "added “%s” to slot %d — S steals its palette" % [Toolbox.slots[idx]["term"], idx + 1]
+	else:
+		_steal_note = "could not add image (toolbox full?)"
+	_update_hud()
+	return idx
+
+
 func _on_files_dropped(files: PackedStringArray) -> void:
 	for f in files:
 		var ext := f.get_extension().to_lower()
-		if ext in ["png", "jpg", "jpeg", "webp", "bmp"]:
-			if _fx.set_backdrop_from_file(f):
-				if not _fx.chroma:
-					_fx.toggle_chroma()
-				_refresh_fx()
+		if ext in IconMedia.RASTER_EXT:
+			if Input.is_key_pressed(KEY_SHIFT):
+				# Shift+drop: chroma-key backdrop
+				if _fx.set_backdrop_from_file(f):
+					if not _fx.chroma:
+						_fx.toggle_chroma()
+					_refresh_fx()
+			else:
+				add_raster(f)
 			return
 		if ext in ["mp3", "ogg", "wav"]:
 			AudioReact.load_file(f)
@@ -484,6 +586,9 @@ func _update_hud() -> void:
 	line2 += "   ·   audio: " + ((("%s  %s" % [AudioReact.source if AudioReact.source != "file" else AudioReact.file_name, _meter()])) if AudioReact.active() else "off (A)")
 	if AudioReact.driver_missing():
 		line2 += "   ·   no audio device: mic/file unavailable"
+	line2 += "   ·   webcam: " + (("%s, %s" % [webcam_mode(), _webcam.status]) if _webcam_mode > 0 else "off (Z)")
+	if _steal_note != "":
+		line2 += "   ·   " + _steal_note
 	_hud.text += "\n" + line2
 
 
@@ -641,6 +746,8 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			else:
 				spawn_solid(_world_pos(get_local_mouse_position()) if get_global_rect().has_point(get_global_mouse_position()) else Vector2(-1, -1))
 		KEY_SEMICOLON: toggle_midi_panel()
+		KEY_Z: cycle_webcam()
+		KEY_S: steal_palette()
 		KEY_A:
 			AudioReact.cycle_source()
 			_update_hud()

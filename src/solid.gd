@@ -24,6 +24,7 @@ var _skin: MeshInstance3D
 var _body_mat: StandardMaterial3D
 var _skin_mat: StandardMaterial3D
 var _base_color := Color.WHITE
+var raster := false
 
 
 static func make_mesh(kind: String) -> Mesh:
@@ -80,6 +81,7 @@ func setup(slot: Dictionary, kind: String, pos: Vector3, pal: int, icon: Texture
 	velocity = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-0.5, 0.5)).normalized() * randf_range(1.5, 3.0)
 	wander_target = _random_point()
 	rotation = Vector3(randf() * TAU, randf() * TAU, 0)
+	raster = str(slot.get("kind", "icon")) == "raster"
 	_base_color = Palettes.color(pal, int(slot.get("color_index", 0)))
 
 	var mesh := make_mesh(kind)
@@ -112,7 +114,8 @@ func set_palette(pal: int, color_index: int) -> void:
 
 
 func _apply_color(c: Color) -> void:
-	_skin_mat.albedo_color = c
+	# A raster keeps its own colours; the body under it still takes the palette.
+	_skin_mat.albedo_color = c if not raster or c != _base_color else Color.WHITE
 	_body_mat.albedo_color = c.darkened(0.72)
 
 

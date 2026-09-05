@@ -203,6 +203,42 @@ func _init() -> void:
 	_check("gain scales bands to nothing", au.level < 0.01)
 	au.free()
 
+	# raster: load + downscale, toolbox raster slot, palette extraction
+	var big := Image.create(1024, 512, false, Image.FORMAT_RGBA8)
+	big.fill(Color(0.2, 0.4, 0.9))
+	big.fill_rect(Rect2i(0, 0, 512, 512), Color(0.9, 0.2, 0.1))
+	var raster_path := ProjectSettings.globalize_path("user://_smoke_raster.png")
+	big.save_png(raster_path)
+	var Media = load("res://src/icon_media.gd")
+	var rt = Media.load_raster(raster_path, 256)
+	_check("raster loads and is capped to 256 on the long side", rt != null and rt.get_width() == 256 and rt.get_height() == 128)
+	_check("raster keeps its colours", rt.get_image().get_pixel(10, 64).is_equal_approx(Color(0.9, 0.2, 0.1)) or rt.get_image().get_pixel(10, 64).r > 0.8)
+	_check("is_raster by extension", Media.is_raster("a.PNG") and Media.is_raster("b.jpeg") and not Media.is_raster("c.svg"))
+	var rbox = load("res://src/toolbox.gd").new()
+	rbox.path = "user://_smoke_toolbox2.json"
+	rbox.load_from_disk()
+	rbox.clear()
+	var ri: int = rbox.add_raster(raster_path)
+	_check("raster becomes a toolbox slot copied into user://raster", ri == 0 and rbox.is_raster_slot(rbox.slots[0]) and FileAccess.file_exists(rbox.slots[0]["svg_path"]))
+	_check("same raster twice is one slot", rbox.add_raster(raster_path) == 0 and rbox.slots.size() == 1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(rbox.slots[0]["svg_path"]))
+	rbox.clear()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(rbox.path))
+	rbox.free()
+	var pal: Dictionary = Palettes.extract(big, "Smoke", 4)
+	var ring: Array = pal["ring"]
+	_check("extracted palette has a bg and a ring", pal["name"] == "Smoke" and pal["bg"] != "" and ring.size() >= 1)
+	var has_red := false
+	var has_blue := false
+	for hex in ring + [pal["bg"]]:
+		var c := Color(str(hex))
+		if c.r > 0.6 and c.g < 0.4: has_red = true
+		if c.b > 0.6 and c.r < 0.4: has_blue = true
+	_check("extraction finds both source colours", has_red and has_blue)
+	DirAccess.remove_absolute(raster_path)
+	var Webcam = load("res://src/webcam.gd")
+	_check("webcam script loads standalone", Webcam != null and Webcam.can_instantiate())
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

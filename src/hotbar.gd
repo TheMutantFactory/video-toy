@@ -40,7 +40,7 @@ func refresh() -> void:
 		if filled:
 			var slot: Dictionary = Toolbox.slots[i]
 			tex.texture = IconMedia.texture_for(str(slot.get("svg_path", "")))
-			tex.modulate = Palettes.color(palette_index, int(slot.get("color_index", i)))
+			tex.modulate = Color.WHITE if Toolbox.is_raster_slot(slot) else Palettes.color(palette_index, int(slot.get("color_index", i)))
 			p.tooltip_text = "%s\n%s" % [slot.get("term", ""), slot.get("attribution", "")]
 		else:
 			tex.texture = null

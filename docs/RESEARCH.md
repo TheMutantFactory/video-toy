@@ -1,7 +1,9 @@
 # Research: video toys, effects, and where this goes next
 
-Written 2026-09-05 as the roadmap for Video Toy. The icon core (search → toolbox → verbs
-→ palettes → feedback) is built; everything below is what to layer on, roughly in order.
+Written 2026-09-05 as the roadmap for Video Toy. Everything in sections 2–8 that has a key
+in the README is now built (feedback, pixelate, quantise, kaleidoscope, chroma key, CRT,
+virtual monitor, 3D solids, MIDI-learn, audio, raster, webcam, palette extraction). What is
+left here is the next layer of ideas.
 
 ## 1. Existing video toys worth stealing from
 

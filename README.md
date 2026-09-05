@@ -45,6 +45,9 @@ X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
                                       Shift+B next shape (cube/sphere/torus/cylinder/prism)
                                       ;      MIDI + audio panel
                                       A      audio source: off / mic / test / file
+                                      Z      webcam: off / layer behind everything / chroma backdrop
+                                      S      steal a palette from the selected raster or the webcam
+drop an image on the window   →  a raster toolbox slot (Shift+drop → chroma backdrop)
                                       C      clear stage
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
@@ -84,6 +87,23 @@ with no input device at all that setting makes CoreAudio fail and *all* audio go
 that turns input off when there is none (the HUD says so; test groove and file still work).
 Plug in an interface and run again to get the mic back.
 
+## Raster and webcam
+
+Drop a PNG / JPG / WebP on the window and it becomes a toolbox slot: verbs, spawning and 3D
+solids all work on it, and it keeps its own colours (Rainbow still shifts them). The file is
+copied to `user://raster/` and listed in Attribution as a local image. **Shift+drop** makes
+it the chroma-key backdrop instead.
+
+**Z** cycles the webcam: as a *layer* it sits behind everything in the world, so it goes
+through feedback, effects and the monitor — point the camera at the screen and you have a
+real feedback loop; as a *backdrop* it shows through the chroma key. Godot's CameraServer
+handles RGB and YCbCr feeds; macOS asks for camera permission the first time. The HUD says
+"no camera" if there is none.
+
+**S** steals a palette: k-means over the selected raster (or the live webcam frame), darkest
+cluster as background, the rest as the ring sorted by hue. Stolen palettes join the P cycle
+and persist in `user://palettes.json`.
+
 ## Credentials
 
 Resolved in this order (same as [noun-project-utils](https://github.com/TheMutantFactory/noun-project-utils)):
@@ -116,6 +136,7 @@ src/verbs.gd                verb table
 src/midi_map.gd  (autoload) MIDI-learn: opens inputs, binds messages to params/actions, user://midi.json
 src/midi_panel.gd           the MIDI + audio panel on the stage
 src/audio_react.gd (autoload) mic / file / test groove -> bass, mid, high, level, beat
+src/webcam.gd               CameraServer feed (RGB or YCbCr) as a sprite; rendered to a viewport on the stage
 demo/                       built-in shapes
 docs/RESEARCH.md            video toys, feedback, shader art, 3D, raster — the roadmap
 ```

@@ -14,6 +14,7 @@ var orbit_radius := 160.0
 var wander_target := Vector2.ZERO
 var mouse_world := Vector2.ZERO
 
+var raster := false
 var _sprite: Sprite2D
 var _particles: CPUParticles2D
 var _base_color := Color.WHITE
@@ -31,7 +32,8 @@ func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
 	orbit_radius = randf_range(90.0, 260.0)
 	velocity = Vector2.from_angle(randf() * TAU) * randf_range(180.0, 420.0)
 	wander_target = _random_point()
-	_base_color = Palettes.color(pal, int(slot.get("color_index", 0)))
+	raster = str(slot.get("kind", "icon")) == "raster"
+	_base_color = Color.WHITE if raster else Palettes.color(pal, int(slot.get("color_index", 0)))
 
 	_sprite = Sprite2D.new()
 	_sprite.texture = IconMedia.texture_for(str(slot.get("svg_path", "")))
@@ -57,8 +59,8 @@ func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
 
 func set_palette(pal: int, color_index: int) -> void:
 	palette_index = pal
-	_base_color = Palettes.color(pal, color_index)
-	_particles.color = _base_color
+	_base_color = Color.WHITE if raster else Palettes.color(pal, color_index)
+	_particles.color = Palettes.color(pal, color_index)
 
 
 func _verbs() -> Array:

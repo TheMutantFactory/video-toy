@@ -43,6 +43,22 @@ func record(meta: Dictionary) -> void:
 	changed.emit()
 
 
+## A local image: kept in the ledger so the attribution list is complete.
+func record_local(slot: Dictionary) -> void:
+	record({"id": slot.get("id", ""), "term": slot.get("term", ""), "attribution": slot.get("attribution", ""),
+		"license": slot.get("license", "user-supplied"), "source": "local file",
+		"creator": {"name": "you", "permalink": ""}})
+
+
+func remove(id: String) -> void:
+	for i in entries.size():
+		if entries[i].get("id") == id:
+			entries.remove_at(i)
+			save_to_disk()
+			changed.emit()
+			return
+
+
 func count() -> int:
 	return entries.size()
 

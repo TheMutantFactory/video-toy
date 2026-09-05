@@ -12,7 +12,8 @@ var crt_level := 0                          # 0 off, 1 soft, 2 heavy
 var chroma := false
 var quantize := false
 var dither := false
-var backdrop: ImageTexture
+var backdrop: Texture2D
+var live_backdrop: Texture2D            # e.g. the webcam viewport; wins over the file
 var _mat: ShaderMaterial
 
 
@@ -59,6 +60,11 @@ func set_backdrop_from_file(path: String) -> bool:
 	img.save_png(BACKDROP_PATH)
 	_push()
 	return true
+
+
+func set_live_backdrop(tex: Texture2D) -> void:
+	live_backdrop = tex
+	_push()
 
 
 func clear_backdrop() -> void:
@@ -128,7 +134,7 @@ func describe() -> String:
 	if pixel_step > 0:
 		parts.append("pixel %d" % pixel_size())
 	if chroma:
-		parts.append("chroma→" + ("image" if backdrop else "plasma"))
+		parts.append("chroma→" + ("webcam" if live_backdrop else ("image" if backdrop else "plasma")))
 	if quantize:
 		parts.append("palette" + ("+dither" if dither else ""))
 	return "  ".join(parts)
@@ -138,8 +144,9 @@ func _push() -> void:
 	_mat.set_shader_parameter("crt", float(crt_level))
 	_mat.set_shader_parameter("kaleido_segments", kaleido_segments())
 	_mat.set_shader_parameter("chroma", chroma)
-	_mat.set_shader_parameter("has_backdrop", backdrop != null)
-	_mat.set_shader_parameter("backdrop_tex", backdrop)
+	var b: Texture2D = live_backdrop if live_backdrop != null else backdrop
+	_mat.set_shader_parameter("has_backdrop", b != null)
+	_mat.set_shader_parameter("backdrop_tex", b)
 	_mat.set_shader_parameter("pixel_size", float(pixel_size()))
 	_mat.set_shader_parameter("quantize", quantize)
 	_mat.set_shader_parameter("dither", dither)

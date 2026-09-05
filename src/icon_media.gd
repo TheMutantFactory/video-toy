@@ -8,6 +8,8 @@ extends Node
 
 const THUMB_DIR := "user://icons/thumbs"
 const SVG_SCALE := 4.0                      # 100pt API canvas -> ~400px texture
+const RASTER_MAX := 512                     # raster slots are downscaled to this
+const RASTER_EXT := ["png", "jpg", "jpeg", "webp", "bmp", "tga"]
 
 var _thumbs := {}                           # url -> ImageTexture
 var _svgs := {}                             # path -> ImageTexture
@@ -48,13 +50,32 @@ func get_thumbnail(url: String, cb: Callable) -> void:
 		cb.call(null)
 
 
-func texture_for(svg_path: String) -> ImageTexture:
-	if _svgs.has(svg_path):
-		return _svgs[svg_path]
-	var tex := load_svg_white(svg_path, SVG_SCALE)
+## Icon (SVG -> white) or raster (PNG/JPG/... -> full colour, downscaled).
+func texture_for(path: String) -> ImageTexture:
+	if _svgs.has(path):
+		return _svgs[path]
+	var tex := load_raster(path, RASTER_MAX) if is_raster(path) else load_svg_white(path, SVG_SCALE)
 	if tex:
-		_svgs[svg_path] = tex
+		_svgs[path] = tex
 	return tex
+
+
+static func is_raster(path: String) -> bool:
+	return path.get_extension().to_lower() in RASTER_EXT
+
+
+## Raster file -> ImageTexture, longest side capped at `max_side`.
+static func load_raster(path: String, max_side := 512) -> ImageTexture:
+	var img := Image.new()
+	var abs := ProjectSettings.globalize_path(path) if path.begins_with("user://") or path.begins_with("res://") else path
+	if img.load(abs) != OK:
+		return null
+	img.convert(Image.FORMAT_RGBA8)
+	var longest := maxi(img.get_width(), img.get_height())
+	if longest > max_side:
+		var f := float(max_side) / longest
+		img.resize(maxi(1, int(img.get_width() * f)), maxi(1, int(img.get_height() * f)), Image.INTERPOLATE_LANCZOS)
+	return ImageTexture.create_from_image(img)
 
 
 func _thumb_path(url: String) -> String:
