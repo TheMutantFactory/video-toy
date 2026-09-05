@@ -19,6 +19,7 @@ var wander_target := Vector3.ZERO
 var mouse_point := Vector3.ZERO
 var attract := false
 var spin_axis := Vector3(0.3, 1.0, 0.2).normalized()
+var _orbit_off := Vector3.ZERO
 
 var _body: MeshInstance3D
 var _skin: MeshInstance3D
@@ -175,6 +176,8 @@ func _process(delta: float) -> void:
 	if not is_inside_tree():
 		return
 	t += delta
+	position -= _orbit_off
+	_orbit_off = Vector3.ZERO
 	var moved := false
 	if verbs.has("bounce"):
 		position += velocity * delta
@@ -216,8 +219,8 @@ func _process(delta: float) -> void:
 	if verbs.has("orbit"):
 		angle += delta * 1.1
 		var r := orbit_radius * (0.35 if moved else 1.0)
-		var centre := position if moved else home
-		position = centre + Vector3(cos(angle), sin(angle) * 0.6, sin(angle * 0.7) * 0.4) * r
+		_orbit_off = Vector3(cos(angle), sin(angle) * 0.6, sin(angle * 0.7) * 0.4) * r
+		position += _orbit_off
 
 	# Solids always turn a little so their faces catch the light; Spin is fast.
 	rotate(spin_axis, delta * (2.4 if verbs.has("spin") else 0.35))

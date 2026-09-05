@@ -51,6 +51,8 @@ arrows       feedback drift           PgUp/PgDn  feedback warp amount   Home  re
                                       Shift+B next shape (cube/sphere/torus/cylinder/prism/cookie)
 Shift+Space  formation of 200 copies  Shift+X  next formation (helix/lattice/shell/ring)
 Shift+arrows camera orbit / dolly     Shift+PgUp/PgDn  camera roll   Shift+Home  reset camera
+\            next layer (1 base, 2, 3)   Shift+\  blend mode (mix/add/sub/mul)   Shift+[ ]  opacity
+Shift+D      draw mode: drag a path and the selected icon rides it; right-click a path removes it
                                       ;      MIDI + audio panel
                                       A      audio source: off / mic / test / file
                                       Z      webcam: off / layer behind everything / chroma backdrop
@@ -81,6 +83,17 @@ holes survive. **Shift+Space** spawns a formation — 200 copies of the selected
 current shape as one MultiMesh, per-instance colours walking the palette ring — in a helix,
 lattice, Fibonacci shell or ring (Shift+X). The **camera** orbits, dollies, rolls and rises from
 Shift+arrows / Shift+PgUp/PgDn, and all four are learnable params; "slow orbit" is an action.
+
+## Layers and drawing
+
+Three **layers**: layer 1 is the world; layers 2 and 3 are transparent viewports whose actors
+composite into it through a blend mode (mix, add, subtract, multiply) and an opacity — so
+feedback, effects and the monitor see the blend. `\` picks the layer you spawn into; Shift+`\`
+and Shift+`[` `]` set its blend and opacity; both are learnable and saved in presets.
+
+**Draw mode** (Shift+D): drag a path and the selected icon rides it — resampled, closed if the
+ends meet, one rider per ~110 px looping at 170 px/s. Riders keep spin, pulse, rainbow and
+sparkle; right-click a path to remove it. Paths live in the active layer.
 
 ## Presets
 
@@ -167,6 +180,7 @@ src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading la
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader
 src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)
 src/boids.gd                flocking maths (2D and 3D) for the Flock verb
+src/ride_path.gd            a drawn stroke as a Curve2D with looping riders
 src/extrude.gd              icon alpha -> extruded "cookie" mesh (textured faces + plain sides)
 src/formation.gd            200 copies in a helix / lattice / shell / ring as one MultiMesh
 src/monitor.gd              the TV inside the world that shows the final composite

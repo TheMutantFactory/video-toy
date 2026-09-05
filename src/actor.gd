@@ -13,6 +13,8 @@ var base_scale := 0.5
 var orbit_radius := 160.0
 var wander_target := Vector2.ZERO
 var mouse_world := Vector2.ZERO
+var riding := false                        # on a drawn path: motion verbs are ignored
+var _orbit_off := Vector2.ZERO             # last frame's orbit displacement (undone before moving)
 var attract := false                       # stage: left button held on empty space
 var scatter_from := Vector2.INF            # stage: right-click on empty space (one frame)
 
@@ -102,8 +104,11 @@ func _process(delta: float) -> void:
 		return
 	t += delta
 
+	position -= _orbit_off                     # orbit rides on top of the base motion
+	_orbit_off = Vector2.ZERO
 	var moved := false
-	if verbs.has("bounce"):
+	var mobile := not riding
+	if mobile and verbs.has("bounce"):
 		position += velocity * delta
 		var half := _sprite.texture.get_size() * _sprite.scale * 0.5 if _sprite.texture else Vector2(40, 40)
 		if position.x - half.x < bounds.position.x or position.x + half.x > bounds.end.x:
@@ -114,17 +119,17 @@ func _process(delta: float) -> void:
 			position.y = clampf(position.y, bounds.position.y + half.y, bounds.end.y - half.y)
 		home = position
 		moved = true
-	if verbs.has("wander"):
+	if mobile and verbs.has("wander"):
 		if position.distance_to(wander_target) < 12.0:
 			wander_target = _random_point()
 		var speed := 160.0
 		position = position.move_toward(wander_target, speed * delta)
 		home = position
 		moved = true
-	if verbs.has("flock"):
+	if mobile and verbs.has("flock"):
 		var others: Array = []
 		for a in get_parent().get_children():
-			if a != self and a.slot_id == slot_id and is_instance_valid(a):
+			if a != self and is_instance_valid(a) and "slot_id" in a and a.slot_id == slot_id:
 				others.append([a.position, a.velocity])
 		var acc := Boids.steer2(position, velocity, others, mouse_world if attract else Vector2.INF, 1.5)
 		if scatter_from != Vector2.INF:
@@ -144,18 +149,16 @@ func _process(delta: float) -> void:
 		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
 		home = position
 		moved = true
-	if verbs.has("swarm"):
+	if mobile and verbs.has("swarm"):
 		var to_mouse := mouse_world - position
 		velocity = velocity.lerp(to_mouse.normalized() * 380.0, 2.0 * delta)
 		position += velocity * delta
 		home = position
 		moved = true
-	if verbs.has("orbit"):
+	if mobile and verbs.has("orbit"):
 		angle += delta * 1.4
-		var centre := home if not moved else position
-		position = centre + Vector2.from_angle(angle) * orbit_radius
-		if moved:
-			position = centre + Vector2.from_angle(angle) * (orbit_radius * 0.35)
+		_orbit_off = Vector2.from_angle(angle) * (orbit_radius * (0.35 if moved else 1.0))
+		position += _orbit_off
 
 	if verbs.has("spin"):
 		_sprite.rotation += delta * 2.2

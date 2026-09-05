@@ -37,7 +37,7 @@ case "${1:-play}" in
            # perl alarm = portable timeout: a script that errors before quit() would hang forever
            perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -s tests/smoke.gd \
              && perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -- --selftest ;;
-  capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ;;
+  capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ${2:+--only "$2"} ;;
   import)  exec "$G" --headless --path . --import ;;
   *) echo "usage: $0 [play|test|capture|import]" >&2; exit 2 ;;
 esac

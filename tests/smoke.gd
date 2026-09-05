@@ -323,6 +323,18 @@ func _init() -> void:
 	var c3 := Boids.steer3(Vector3.ZERO, Vector3.ZERO, [[Vector3(0.3, 0, 0), Vector3.ZERO]])
 	_check("3D boids separate", c3.x < 0.0)
 
+	# drawn paths: resampling and rider counts
+	var Ride = load("res://src/ride_path.gd")
+	var raw := PackedVector2Array([Vector2(0, 0), Vector2(100, 0), Vector2(100, 50)])
+	var rs: PackedVector2Array = Ride.resample(raw, 10.0)
+	var even := true
+	for i in range(1, rs.size() - 1):
+		if absf(rs[i - 1].distance_to(rs[i]) - 10.0) > 0.01:
+			even = false
+	_check("stroke resamples to even spacing", rs.size() >= 15 and even and rs[0] == raw[0])
+	_check("stroke length and rider count", is_equal_approx(Ride.length_of(raw), 150.0) and Ride.rider_count(150.0) == 2
+		and Ride.rider_count(1200.0) == 10 and Ride.rider_count(9999.0) == 24)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

@@ -17,12 +17,15 @@ var current_name := ""
 var menu: CanvasLayer
 
 
+var args := PackedStringArray()
+
+
 func _ready() -> void:
 	get_window().title = "Video Toy"
 	menu = MenuOverlay.new()
 	menu.navigate.connect(show_screen)
 	add_child(menu)
-	var args := OS.get_cmdline_user_args()
+	args = OS.get_cmdline_user_args()
 	var cap := args.find("--capture")
 	if args.has("--selftest"):
 		_selftest()
@@ -131,6 +134,32 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL extrusion / formation")
+	# layers + draw on the real stage
+	var ok_layers: bool = st._layers.size() == 3
+	st.set_active_layer(1)
+	Toolbox.select(0)
+	st.spawn_at(Vector2(500, 500))
+	ok_layers = ok_layers and st._layers[1]["actors"].get_child_count() == 1 and st._layers[0]["actors"].get_child_count() == 0
+	st.cycle_blend()
+	ok_layers = ok_layers and st._layers[1]["blend"] == 2 and int(st._layer_mix.material.get_shader_parameter("mode1")) == 2
+	st.set_layer_opacity(0.5)
+	ok_layers = ok_layers and is_equal_approx(float(st._layer_mix.material.get_shader_parameter("opacity1")), 0.5)
+	st.set_active_layer(0)
+	st.begin_stroke(Vector2(100, 100))
+	for i in 40:
+		st.extend_stroke(Vector2(100 + i * 20, 100 + (i % 2) * 30))
+	var riders: int = st.end_stroke()
+	ok_layers = ok_layers and riders >= 5 and st.all_rides().size() == 1 and st.all_actors().size() == 1 + riders
+	st.begin_stroke(Vector2(300, 300))
+	ok_layers = ok_layers and st.end_stroke() == 0 and st.all_actors().size() == 2 + riders    # a click spawns
+	var snap3: Dictionary = st.snapshot()
+	ok_layers = ok_layers and snap3["layers"][1]["blend"] == 2 and is_equal_approx(snap3["layers"][1]["opacity"], 0.5)
+	st.clear_actors()
+	if ok_layers:
+		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
+	else:
+		fails += 1
+		printerr("FAIL layers / draw")
 	if ok_scenes:
 		print("PASS scenes build, switch and round-trip through presets")
 	else:
@@ -191,8 +220,14 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock"]
+	var only := ""
+	var oi := args.find("--only")
+	if oi >= 0 and oi + 1 < args.size():
+		only = args[oi + 1]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw"]
 	for name in shots:
+		if only != "" and name != only and name != "stage":
+			continue
 		match name:
 			"menu":
 				menu.show_menu()
@@ -384,6 +419,57 @@ func _capture_all(dir: String) -> void:
 				for i in 30:
 					current.spawn_at(Vector2(randf_range(400, 1500), randf_range(200, 900)))
 				await get_tree().create_timer(2.5).timeout
+			"layers":
+				# Base hearts, an ADD layer of rings at 90 %, a MUL layer of bolts;
+				# overlaps show the blend maths. Feedback off, glow off.
+				current.clear_actors()
+				current._glow.set_level(0)
+				for i in Toolbox.slots.size():
+					for v in ["flock", "spin"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+					if not Toolbox.has_verb(i, "bounce"):
+						Toolbox.toggle_verb(i, "bounce")
+				current.set_active_layer(0)
+				Toolbox.select(1)
+				for i in 10:
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current.set_active_layer(1)
+				current._layers[1]["blend"] = 1
+				current.set_layer_opacity(0.9)
+				Toolbox.select(3)
+				for i in 10:
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current.set_active_layer(2)
+				current._layers[2]["blend"] = 3
+				current.set_layer_opacity(1.0)
+				Toolbox.select(2)
+				for i in 8:
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current._apply_layers()
+				await get_tree().create_timer(1.5).timeout
+			"draw":
+				# A drawn heart-ish loop and a wave, each ridden by icons.
+				current.clear_actors()
+				current.set_active_layer(0)
+				current.draw_mode = true
+				Toolbox.select(0)
+				var heart := PackedVector2Array()
+				for i in 121:
+					var t := TAU * i / 120.0
+					heart.append(Vector2(960 + 16.0 * pow(sin(t), 3) * 18.0,
+						470 - 18.0 * (13.0 * cos(t) - 5.0 * cos(2 * t) - 2.0 * cos(3 * t) - cos(4 * t))))
+				current.begin_stroke(heart[0])
+				for q in heart:
+					current.extend_stroke(q)
+				current.end_stroke()
+				Toolbox.select(2)
+				current.begin_stroke(Vector2(250, 880))
+				for i in 80:
+					current.extend_stroke(Vector2(250 + i * 18.0, 880 + sin(i * 0.25) * 70.0))
+				current.end_stroke()
+				await get_tree().create_timer(1.5).timeout
+				current.draw_mode = false
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

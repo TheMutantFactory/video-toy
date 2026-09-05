@@ -14,7 +14,14 @@ extends Control
 ## · F1-F12 recall preset · Shift+F1-F12 save preset · Tab / Shift+Tab next / previous scene
 ## · ` scene off · arrows feedback drift · PgUp/PgDn feedback warp · Home reset warp
 ## · Shift+arrows camera orbit / dolly · Shift+PgUp/PgDn camera roll · Shift+Home reset camera
-## · Shift+Space spawn a formation (Shift+X next formation) · C clear · H help · Esc menu
+## · Shift+Space spawn a formation (Shift+X next formation)
+## · \ next layer · Shift+\ blend mode · Shift+[ ] layer opacity · Shift+D draw mode
+## · C clear · H help · Esc menu
+##
+## Layers: layer 1 is the world itself; layers 2 and 3 are transparent
+## viewports whose actors composite into the world through a sprite with a
+## CanvasItemMaterial blend mode and an opacity, so feedback, effects and the
+## monitor see the blended result.
 ##
 ## Render graph:  world3d (solids) ─> sprite in world
 ##                world (actors + monitor + world3d) ─┬─> screen ──┐
@@ -33,6 +40,46 @@ const WebcamScript = preload("res://src/webcam.gd")
 const GlowScript = preload("res://src/glow.gd")
 const SceneLayerScript = preload("res://src/scene_layer.gd")
 const FormationScript = preload("res://src/formation.gd")
+const RidePathScript = preload("res://src/ride_path.gd")
+const LAYER_COUNT := 3
+const BLENDS := ["mix", "add", "sub", "mul"]
+## Layer compositing is one shader pass in its own viewport (_worldmix) that
+## reads the world texture and the two layer textures directly: Godot's
+## MUL/SUB blend factors turn a transparent layer black, screen-reading sprites
+## share one back-buffer copy, and the screen copy loses alpha - which feedback
+## needs. blend_disabled = write the composed rgba as computed.
+const BLEND_SHADER := """
+shader_type canvas_item;
+render_mode blend_disabled;
+uniform sampler2D world_tex : filter_nearest, repeat_disable;
+uniform sampler2D layer1 : filter_linear, repeat_disable;
+uniform sampler2D layer2 : filter_linear, repeat_disable;
+uniform int mode1 = 0;      // 0 mix, 1 add, 2 sub, 3 mul
+uniform int mode2 = 0;
+uniform float opacity1 = 1.0;
+uniform float opacity2 = 1.0;
+
+vec4 blend(vec4 dst, vec4 src, int mode) {
+	vec3 c;
+	if (mode == 1) c = dst.rgb + src.rgb * src.a;
+	else if (mode == 2) c = dst.rgb - src.rgb * src.a;
+	else if (mode == 3) c = mix(dst.rgb, dst.rgb * src.rgb, src.a);
+	else c = mix(dst.rgb, src.rgb, src.a);
+	float a = (mode == 3) ? dst.a : dst.a + src.a * (1.0 - dst.a);
+	return vec4(clamp(c, 0.0, 1.0), a);
+}
+
+void fragment() {
+	vec4 dst = texture(world_tex, UV);
+	vec4 s1 = texture(layer1, UV);
+	s1.a *= opacity1;
+	dst = blend(dst, s1, mode1);
+	vec4 s2 = texture(layer2, UV);
+	s2.a *= opacity2;
+	dst = blend(dst, s2, mode2);
+	COLOR = dst;
+}
+"""
 const WEBCAM_MODES := ["off", "layer", "backdrop"]
 const WORLD := Vector2i(1920, 1080)
 
@@ -79,6 +126,14 @@ var cam_height := 0.0
 var _cam_angle := 0.0
 var _formations: Node3D
 var _formation_index := 0
+var _layers: Array = []                 # {vp, actors, rides, sprite, blend, opacity}
+var active_layer := 0
+var draw_mode := false
+var _stroke := PackedVector2Array()
+var _stroke_line: Line2D
+var _stroke_start := Vector2.ZERO
+var _layer_mix: ColorRect
+var _worldmix: SubViewport
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
@@ -128,6 +183,7 @@ func _ready() -> void:
 	_build_3d()
 	_actors = Node2D.new()
 	_world.add_child(_actors)
+	_build_layers()
 
 	for i in 2:
 		var vp := SubViewport.new()
@@ -144,7 +200,7 @@ func _ready() -> void:
 		_acc_mats.append(prev.material)
 		var live := Sprite2D.new()
 		live.position = Vector2(WORLD) * 0.5
-		live.texture = _world.get_texture()
+		live.texture = _worldmix.get_texture()
 		vp.add_child(live)
 		_acc.append(vp)
 		_acc_prev.append(prev)
@@ -155,7 +211,7 @@ func _ready() -> void:
 	_screen = TextureRect.new()
 	_screen.size = Vector2(WORLD)
 	_screen.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_screen.texture = _world.get_texture()
+	_screen.texture = _worldmix.get_texture()
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_composite.add_child(_screen)
 
@@ -191,6 +247,153 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
 		get_window().files_dropped.disconnect(_on_files_dropped)
+
+
+# ---------------- layers ----------------
+func _build_layers() -> void:
+	var rides0 := Node2D.new()
+	_world.add_child(rides0)
+	_layers = [{"vp": null, "actors": _actors, "rides": rides0, "blend": 0, "opacity": 1.0}]
+	for i in range(1, LAYER_COUNT):
+		var vp := SubViewport.new()
+		vp.size = WORLD
+		vp.transparent_bg = true
+		vp.disable_3d = true
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		add_child(vp)
+		var actors := Node2D.new()
+		vp.add_child(actors)
+		var rides := Node2D.new()
+		vp.add_child(rides)
+		_layers.append({"vp": vp, "actors": actors, "rides": rides, "blend": 1 if i == 1 else 0, "opacity": 1.0})
+	# one full-screen pass composites layers 2 and 3 over the world, into
+	# _worldmix - which is what the screen, the feedback and the monitor see
+	_worldmix = SubViewport.new()
+	_worldmix.size = WORLD
+	_worldmix.transparent_bg = true
+	_worldmix.disable_3d = true
+	_worldmix.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_worldmix)
+	_layer_mix = ColorRect.new()
+	_layer_mix.size = Vector2(WORLD)
+	_layer_mix.color = Color.WHITE
+	_layer_mix.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = BLEND_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mat.set_shader_parameter("world_tex", _world.get_texture())
+	mat.set_shader_parameter("layer1", _layers[1]["vp"].get_texture())
+	mat.set_shader_parameter("layer2", _layers[2]["vp"].get_texture())
+	_layer_mix.material = mat
+	_worldmix.add_child(_layer_mix)
+	_stroke_line = Line2D.new()
+	_stroke_line.width = 4.0
+	_stroke_line.z_index = 2
+	_world.add_child(_stroke_line)
+	_apply_layers()
+
+
+func _apply_layers() -> void:
+	var m: ShaderMaterial = _layer_mix.material
+	for i in [1, 2]:
+		m.set_shader_parameter("mode%d" % i, int(_layers[i]["blend"]))
+		m.set_shader_parameter("opacity%d" % i, float(_layers[i]["opacity"]))
+
+
+func layer_actors() -> Node2D:
+	return _layers[active_layer]["actors"]
+
+
+func all_actors() -> Array:
+	var out: Array = []
+	for l in _layers:
+		out.append_array(l["actors"].get_children())
+		for r in l["rides"].get_children():
+			out.append_array(r.riders())
+	return out
+
+
+func all_rides() -> Array:
+	var out: Array = []
+	for l in _layers:
+		out.append_array(l["rides"].get_children())
+	return out
+
+
+func set_active_layer(i: int) -> void:
+	active_layer = posmod(i, LAYER_COUNT)
+	_update_hud()
+
+
+func cycle_blend() -> void:
+	var l: Dictionary = _layers[active_layer]
+	if l["vp"] == null:
+		_steal_note = "layer 1 is the base; blend modes are for layers 2 and 3"
+	else:
+		l["blend"] = (int(l["blend"]) + 1) % BLENDS.size()
+		_apply_layers()
+	_update_hud()
+
+
+func set_layer_opacity(v: float) -> void:
+	_layers[active_layer]["opacity"] = clampf(v, 0.0, 1.0)
+	_apply_layers()
+	_update_hud()
+
+
+func clear_actors() -> void:
+	for a in all_actors():
+		a.queue_free()
+	for r in all_rides():
+		r.queue_free()
+
+
+func layer_describe() -> String:
+	var l: Dictionary = _layers[active_layer]
+	if l["vp"] == null:
+		return "1/%d base" % LAYER_COUNT
+	return "%d/%d %s %d%%" % [active_layer + 1, LAYER_COUNT, BLENDS[l["blend"]], roundi(float(l["opacity"]) * 100.0)]
+
+
+# ---------------- draw mode ----------------
+func begin_stroke(world_pos: Vector2) -> void:
+	_stroke = PackedVector2Array([world_pos])
+	_stroke_start = world_pos
+	_stroke_line.default_color = Color(Palettes.color(palette_index, 0), 0.8)
+	_stroke_line.points = _stroke
+
+
+func extend_stroke(world_pos: Vector2) -> void:
+	if _stroke.is_empty():
+		return
+	if _stroke[_stroke.size() - 1].distance_to(world_pos) >= 6.0:
+		_stroke.append(world_pos)
+		_stroke_line.points = _stroke
+
+
+## Returns the number of riders made (0 = the stroke was just a click).
+func end_stroke() -> int:
+	var pts := _stroke
+	_stroke = PackedVector2Array()
+	_stroke_line.points = PackedVector2Array()
+	if pts.size() < 2 or RidePathScript.length_of(pts) < 60.0:
+		spawn_at(_stroke_start)
+		return 0
+	var slot := Toolbox.current()
+	if slot.is_empty():
+		return 0
+	var ride := Node2D.new()
+	ride.set_script(RidePathScript)
+	_layers[active_layer]["rides"].add_child(ride)
+	var n: int = ride.setup(pts, slot, Palettes.color(palette_index, 0), func(pos: Vector2) -> Node2D:
+		var a := Node2D.new()
+		a.set_script(ActorScript)
+		a.setup(slot, pos, palette_index, Rect2(Vector2.ZERO, Vector2(WORLD)))
+		return a)
+	_steal_note = "%d riders on a %d px path" % [n, RidePathScript.length_of(pts)]
+	_update_hud()
+	return n
 
 
 # ---------------- webcam ----------------
@@ -410,6 +613,8 @@ func snapshot() -> Dictionary:
 		"warp": {"amount": fb_warp, "speed": fb_warp_speed, "dx": fb_drift.x, "dy": fb_drift.y, "sx": fb_stretch.x, "sy": fb_stretch.y},
 		"camera": {"orbit": cam_orbit, "dolly": cam_dolly, "roll": cam_roll, "height": cam_height},
 		"formation": _formation_index,
+		"layers": _layers.map(func(l): return {"blend": l["blend"], "opacity": l["opacity"]}),
+		"active_layer": active_layer,
 	}
 
 
@@ -467,6 +672,13 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 		cam_roll = float(cam.get("roll", cam_roll))
 		cam_height = float(cam.get("height", cam_height))
 	_formation_index = posmod(int(d.get("formation", _formation_index)), FormationScript.KINDS.size())
+	var lay: Array = d.get("layers", [])
+	for i in mini(lay.size(), _layers.size()):
+		if lay[i] is Dictionary:
+			_layers[i]["blend"] = clampi(int(lay[i].get("blend", 0)), 0, BLENDS.size() - 1)
+			_layers[i]["opacity"] = clampf(float(lay[i].get("opacity", 1.0)), 0.0, 1.0)
+	_apply_layers()
+	active_layer = posmod(int(d.get("active_layer", active_layer)), LAYER_COUNT)
 	var w: Dictionary = d.get("warp", {})
 	if not w.is_empty():
 		fb_warp = float(w.get("amount", fb_warp))
@@ -544,6 +756,8 @@ func midi_params() -> Array:
 		{"id": "cam_dolly", "label": "Camera dolly", "set": func(v): cam_dolly = lerpf(3.0, 14.0, v)},
 		{"id": "cam_roll", "label": "Camera roll", "set": func(v): cam_roll = lerpf(-PI, PI, v)},
 		{"id": "cam_height", "label": "Camera height", "set": func(v): cam_height = lerpf(-4.0, 4.0, v)},
+		{"id": "active_layer", "label": "Active layer", "set": func(v): set_active_layer(_step(v, LAYER_COUNT))},
+		{"id": "layer_opacity", "label": "Layer opacity (active)", "set": func(v): set_layer_opacity(v)},
 	]
 
 
@@ -552,7 +766,8 @@ func midi_actions() -> Array:
 		{"id": "spawn", "label": "Spawn icon", "do": func(): spawn_at(Vector2(randf_range(100, WORLD.x - 100), randf_range(100, WORLD.y - 100)))},
 		{"id": "spawn_solid", "label": "Spawn 3D solid", "do": func(): spawn_solid()},
 		{"id": "clear", "label": "Clear stage", "do": func():
-			for a in _actors.get_children() + _solids.get_children() + _formations.get_children():
+			clear_actors()
+			for a in _solids.get_children() + _formations.get_children():
 				a.queue_free()},
 		{"id": "feedback", "label": "Feedback on/off", "do": func(): _set_feedback(not feedback)},
 		{"id": "next_palette", "label": "Next palette", "do": func():
@@ -576,6 +791,11 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "next_layer", "label": "Next layer", "do": func(): set_active_layer(active_layer + 1)})
+	out.append({"id": "next_blend", "label": "Next blend mode (active layer)", "do": cycle_blend})
+	out.append({"id": "draw_mode", "label": "Draw mode on/off", "do": func():
+		draw_mode = not draw_mode
+		_update_hud()})
 	out.append({"id": "spawn_formation", "label": "Spawn formation", "do": func(): spawn_formation()})
 	out.append({"id": "next_formation", "label": "Next formation kind", "do": cycle_formation})
 	out.append({"id": "cam_reset", "label": "Reset camera", "do": reset_camera})
@@ -736,6 +956,7 @@ func _build_hud() -> void:
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
 		+ "Shift+Space  formation of 200 (Shift+X: helix/lattice/shell/ring)\n"
+		+ "\\            next layer · Shift+\\ blend · Shift+[ ] opacity\nShift+D      draw mode: drag a path, icons ride it\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -837,7 +1058,7 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		_actors.get_child_count()] + "   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [_solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
+		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), "   ·   DRAW" if draw_mode else "", _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
 	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
@@ -871,7 +1092,7 @@ func _apply_palette() -> void:
 	_scene_layer.set_palette(palette_index)
 	_hotbar.palette_index = palette_index
 	_hotbar.refresh()
-	for a in _actors.get_children() + _solids.get_children():
+	for a in all_actors() + _solids.get_children():
 		var i := Toolbox.index_of(a.slot_id)
 		if i >= 0:
 			a.set_palette(palette_index, int(Toolbox.slots[i].get("color_index", i)))
@@ -890,7 +1111,7 @@ func _recolor() -> void:
 func _set_feedback(on: bool) -> void:
 	feedback = on
 	if not on:
-		_screen.texture = _world.get_texture()
+		_screen.texture = _worldmix.get_texture()
 		for vp in _acc:
 			vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_update_hud()
@@ -899,7 +1120,7 @@ func _set_feedback(on: bool) -> void:
 func _process(_delta: float) -> void:
 	var mouse := _world_pos(get_local_mouse_position())
 	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _dragging
-	for a in _actors.get_children():
+	for a in all_actors():
 		a.mouse_world = mouse
 		a.attract = held
 	for sol in _solids.get_children():
@@ -948,7 +1169,7 @@ func spawn_at(world_pos: Vector2) -> void:
 	var a := Node2D.new()
 	a.set_script(ActorScript)
 	a.setup(slot, world_pos, palette_index, Rect2(Vector2.ZERO, Vector2(WORLD)))
-	_actors.add_child(a)
+	layer_actors().add_child(a)
 	_update_hud()
 
 
@@ -962,10 +1183,14 @@ func demo_spawn() -> void:
 
 
 func _remove_nearest(world_pos: Vector2) -> void:
+	for r in all_rides():                          # a stroke under the cursor goes first
+		if r.near(world_pos):
+			r.queue_free()
+			return
 	var best: Node2D = null
 	var best_d := 1e9
-	for a in _actors.get_children():
-		var d: float = a.position.distance_to(world_pos)
+	for a in all_actors():
+		var d: float = a.global_position.distance_to(world_pos) if a.riding else a.position.distance_to(world_pos)
 		if d < best_d:
 			best_d = d
 			best = a
@@ -977,7 +1202,7 @@ func _remove_nearest(world_pos: Vector2) -> void:
 	if best and best_d < 160.0:
 		best.queue_free()
 	else:
-		for a in _actors.get_children():              # nothing near: scatter the flocks
+		for a in all_actors():                        # nothing near: scatter the flocks
 			a.scatter_from = world_pos
 
 
@@ -989,14 +1214,20 @@ func _gui_input(ev: InputEvent) -> void:
 				if _monitor.visible and _monitor.contains(wp):
 					_dragging = true
 					_drag_offset = _monitor.position - wp
+				elif draw_mode:
+					begin_stroke(wp)
 				else:
 					spawn_at(wp)
 			else:
 				_dragging = false
+				if not _stroke.is_empty():
+					end_stroke()
 		elif ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
 			_remove_nearest(wp)
 	elif ev is InputEventMouseMotion and _dragging:
 		_monitor.position = _world_pos(ev.position) + _drag_offset
+	elif ev is InputEventMouseMotion and not _stroke.is_empty():
+		extend_stroke(_world_pos(ev.position))
 
 
 func _unhandled_key_input(ev: InputEvent) -> void:
@@ -1066,8 +1297,12 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				_recolor()
 		KEY_DELETE, KEY_BACKSPACE: Toolbox.remove(Toolbox.selected)
 		KEY_F: _set_feedback(not feedback)
-		KEY_BRACKETLEFT: fb_zoom = maxf(0.90, fb_zoom - 0.01)
-		KEY_BRACKETRIGHT: fb_zoom = minf(1.20, fb_zoom + 0.01)
+		KEY_BRACKETLEFT:
+			if ev.shift_pressed: set_layer_opacity(_layers[active_layer]["opacity"] - 0.1)
+			else: fb_zoom = maxf(0.90, fb_zoom - 0.01)
+		KEY_BRACKETRIGHT:
+			if ev.shift_pressed: set_layer_opacity(_layers[active_layer]["opacity"] + 0.1)
+			else: fb_zoom = minf(1.20, fb_zoom + 0.01)
 		KEY_COMMA: fb_rot -= 0.01
 		KEY_PERIOD: fb_rot += 0.01
 		KEY_B:
@@ -1078,8 +1313,18 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_SEMICOLON: toggle_midi_panel()
 		KEY_Z: cycle_webcam()
 		KEY_D:
-			_glow.cycle()
-			_update_hud()
+			if ev.shift_pressed:
+				draw_mode = not draw_mode
+				_steal_note = "draw mode: drag a path, the selected icon rides it" if draw_mode else ""
+				_update_hud()
+			else:
+				_glow.cycle()
+				_update_hud()
+		KEY_BACKSLASH:
+			if ev.shift_pressed:
+				cycle_blend()
+			else:
+				set_active_layer(active_layer + 1)
 		KEY_S: steal_palette()
 		KEY_A:
 			AudioReact.cycle_source()
@@ -1109,7 +1354,8 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_MINUS: fb_fade = maxf(0.5, fb_fade - 0.02)
 		KEY_EQUAL: fb_fade = minf(0.995, fb_fade + 0.02)
 		KEY_C:
-			for a in _actors.get_children() + _solids.get_children() + _formations.get_children():
+			clear_actors()
+			for a in _solids.get_children() + _formations.get_children():
 				a.queue_free()
 		KEY_H:
 			_help.visible = not _help.visible
