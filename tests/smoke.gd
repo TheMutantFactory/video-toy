@@ -599,6 +599,80 @@ func _init() -> void:
 	ck.free()
 	ck2.free()
 
+	# controller templates: valid XML, right counts, addresses; MIDI maps in range; containers round-trip
+	var tp := [{"id": "fb_zoom", "label": "Feedback zoom"}, {"id": "glow", "label": "Glow"}]
+	var ta := [{"id": "spawn", "label": "Spawn icon"}, {"id": "panic", "label": "PANIC"}, {"id": "next_scene", "label": "Next scene"}]
+	var mk1 := Templates.touchosc_xml(tp, ta)
+	var xp := XMLParser.new()
+	var okx := xp.open_buffer(mk1.to_utf8_buffer()) == OK
+	var faders := 0
+	var pushes := 0
+	var addr_ok := true
+	while okx and xp.read() == OK:
+		if xp.get_node_type() == XMLParser.NODE_ELEMENT and xp.get_node_name() == "control":
+			var t := xp.get_named_attribute_value_safe("type")
+			if t == "faderv":
+				faders += 1
+				addr_ok = addr_ok and xp.get_named_attribute_value_safe("osc_cs").begins_with("/vt/param/")
+			elif t == "push":
+				pushes += 1
+				addr_ok = addr_ok and xp.get_named_attribute_value_safe("osc_cs").begins_with("/vt/action/")
+	_check("touchosc mk1 layout: a fader per param, a push per action, addressed by id", okx and faders == 2 and pushes == 3 and addr_ok and mk1.contains(Marshalls.utf8_to_base64("Feedback zoom")))
+	var mk2 := Templates.tosc_xml(tp, ta)
+	var xp2 := XMLParser.new()
+	var ok2 := xp2.open_buffer(mk2.to_utf8_buffer()) == OK
+	var fader_nodes := 0
+	var button_nodes := 0
+	while ok2 and xp2.read() == OK:
+		if xp2.get_node_type() == XMLParser.NODE_ELEMENT and xp2.get_node_name() == "node":
+			var t := xp2.get_named_attribute_value_safe("type")
+			if t == "FADER": fader_nodes += 1
+			if t == "BUTTON": button_nodes += 1
+	_check("tosc mk2 layout parses with the right nodes and addresses", ok2 and fader_nodes == 2 and button_nodes == 3 and mk2.contains("/vt/param/glow") and mk2.contains("/vt/action/panic") and mk2.contains("<lexml version=\"3\">"))
+	var zt := "user://_smoke.tosc"
+	Templates.write_tosc(zt, mk2)
+	var back := FileAccess.get_file_as_bytes(zt).decompress(mk2.to_utf8_buffer().size() + 64, FileAccess.COMPRESSION_DEFLATE).get_string_from_utf8()
+	_check("tosc container is zlib-compressed XML that round-trips", back == mk2)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(zt))
+	var zp := "user://_smoke.touchosc"
+	Templates.write_touchosc(zp, mk1)
+	var zr := ZIPReader.new()
+	var zok := zr.open(ProjectSettings.globalize_path(zp)) == OK
+	var inner := zr.read_file("index.xml").get_string_from_utf8() if zok else ""
+	zr.close()
+	_check("touchosc container is a zip holding index.xml", zok and inner == mk1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(zp))
+	var lpm := Templates.launchpad_bindings()
+	var lp_ok := lpm.size() == 72
+	for k in lpm:
+		var parts: PackedStringArray = k.split(":")
+		if parts[0] == "note":
+			var n := int(parts[2])
+			if n < 11 or n > 88 or n % 10 == 0 or n % 10 == 9:
+				lp_ok = false
+		elif parts[0] == "cc":
+			if int(parts[2]) < 91 or int(parts[2]) > 98:
+				lp_ok = false
+		else:
+			lp_ok = false
+	_check("launchpad map: 64 pads + 8 top buttons, all in programmer-mode ranges", lp_ok and lpm["note:1:11"] == "act:slot_1" and lpm["note:1:81"] == "act:panic")
+	var apc := Templates.apc_mini_bindings()
+	_check("apc mini map: 64 pads, 8 faders + master", apc.size() == 73 and apc["cc:1:48"] == "fb_zoom" and apc["cc:1:56"] == "preset_fade" and apc["note:1:0"] == "act:slot_1" and apc["note:1:63"] == "act:syphon")
+	var im = load("res://src/midi_map.gd").new()
+	im.path = "user://_smoke_import.json"
+	im.bindings = {"cc:1:1": "fb_zoom"}
+	var n_in: int = im.import_map({"bindings": {"note:1:11": "act:slot_1", "cc:1:1": "glow"}})
+	_check("import_map merges over existing bindings", n_in == 2 and im.bindings.size() == 2 and im.bindings["cc:1:1"] == "glow")
+	im.import_map({"bindings": {"cc:1:5": "crt"}}, true)
+	_check("import_map replace clears the old map", im.bindings.size() == 1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(im.path))
+	var got3 := {"action": []}
+	im.action.connect(func(id): got3["action"].append(id))
+	im.feed_osc("/vt/action/spawn", 1.0)
+	im.feed_osc("/vt/action/spawn", 0.0)
+	_check("osc action ignores a push button's release", got3["action"] == ["spawn"])
+	im.free()
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

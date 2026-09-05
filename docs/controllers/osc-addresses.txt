@@ -1,0 +1,131 @@
+Video Toy OSC (UDP 9000)
+
+Params (float 0..1):
+  /vt/param/fb_zoom   Feedback zoom
+  /vt/param/fb_twist   Feedback twist
+  /vt/param/fb_fade   Feedback fade
+  /vt/param/pixelate   Pixelate size
+  /vt/param/kaleido   Kaleidoscope
+  /vt/param/crt   CRT
+  /vt/param/key_mode   Key mode
+  /vt/param/key_threshold   Key threshold
+  /vt/param/slit   Slit-scan mode
+  /vt/param/monitor   Monitor size
+  /vt/param/palette   Palette
+  /vt/param/slot   Toolbox slot
+  /vt/param/audio_gain   Audio gain
+  /vt/param/glow   Glow
+  /vt/param/scene   Scene
+  /vt/param/scene_speed   Scene speed
+  /vt/param/scene_scale   Scene scale
+  /vt/param/scene_bias   Scene colour bias
+  /vt/param/fb_warp   Feedback warp
+  /vt/param/fb_warp_speed   Feedback warp speed
+  /vt/param/fb_dx   Feedback drift X
+  /vt/param/fb_dy   Feedback drift Y
+  /vt/param/fb_sx   Feedback stretch X
+  /vt/param/fb_sy   Feedback stretch Y
+  /vt/param/cam_orbit   Camera orbit speed
+  /vt/param/cam_dolly   Camera dolly
+  /vt/param/cam_roll   Camera roll
+  /vt/param/cam_height   Camera height
+  /vt/param/particles_flow   Particle flow
+  /vt/param/particles_attract   Particle attract (-1..1)
+  /vt/param/rd_feed   Reaction feed
+  /vt/param/rd_kill   Reaction kill
+  /vt/param/bpm   Internal clock BPM
+  /vt/param/bank   Preset bank
+  /vt/param/preset_fade   Preset crossfade time
+  /vt/param/preset_morph   Preset morph (to next)
+  /vt/param/active_layer   Active layer
+  /vt/param/layer_opacity   Layer opacity (active)
+
+Actions (any message with a non-zero first argument, or no argument):
+  /vt/action/spawn   Spawn icon
+  /vt/action/spawn_solid   Spawn 3D solid
+  /vt/action/clear   Clear stage
+  /vt/action/feedback   Feedback on/off
+  /vt/action/next_palette   Next palette
+  /vt/action/chroma   Next key mode
+  /vt/action/slit   Next slit-scan mode
+  /vt/action/quantise   Palette quantise on/off
+  /vt/action/dither   Dither on/off
+  /vt/action/monitor   Monitor on/off
+  /vt/action/next_shape   Next 3D shape
+  /vt/action/webcam   Next webcam mode
+  /vt/action/steal_palette   Steal palette
+  /vt/action/audio_source   Next audio source
+  /vt/action/recolor   Recolor slot
+  /vt/action/syphon   Syphon output on/off
+  /vt/action/clock_internal   Internal clock on/off
+  /vt/action/clock_lock_scenes   Lock scenes to BPM on/off
+  /vt/action/screenshot   Screenshot with credits
+  /vt/action/ticker   Credits ticker on/off
+  /vt/action/credits_roll   Credits roll start/stop
+  /vt/action/panic   PANIC: known-good look
+  /vt/action/blackout   Blackout on/off
+  /vt/action/quality   Quality lock: cycle
+  /vt/action/particles   Particle field on/off
+  /vt/action/scatter   Scatter particles
+  /vt/action/rd   Next reaction-diffusion preset
+  /vt/action/timeline_record   Timeline: record on/off
+  /vt/action/timeline_play   Timeline: loop on/off
+  /vt/action/mosaic   Mosaic of selected slot
+  /vt/action/evolve   Evolve on/off
+  /vt/action/evolve_keep   Evolve: keep
+  /vt/action/evolve_discard   Evolve: discard
+  /vt/action/mutate   Mutate once
+  /vt/action/attract   Attract mode on/off
+  /vt/action/next_layer   Next layer
+  /vt/action/next_blend   Next blend mode (active layer)
+  /vt/action/draw_mode   Draw mode on/off
+  /vt/action/spawn_formation   Spawn formation
+  /vt/action/next_formation   Next formation kind
+  /vt/action/cam_reset   Reset camera
+  /vt/action/cam_auto   Camera slow orbit on/off
+  /vt/action/next_scene   Next scene
+  /vt/action/prev_scene   Previous scene
+  /vt/action/scene_off   Scene off
+  /vt/action/warp_reset   Reset feedback warp
+  /vt/action/glow   Glow off/soft/heavy
+  /vt/action/next_preset   Next preset (in bank)
+  /vt/action/prev_preset   Previous preset (in bank)
+  /vt/action/next_bank   Next bank
+  /vt/action/prev_bank   Previous bank
+  /vt/action/preset_1   Recall preset 1
+  /vt/action/preset_2   Recall preset 2
+  /vt/action/preset_3   Recall preset 3
+  /vt/action/preset_4   Recall preset 4
+  /vt/action/preset_5   Recall preset 5
+  /vt/action/preset_6   Recall preset 6
+  /vt/action/preset_7   Recall preset 7
+  /vt/action/preset_8   Recall preset 8
+  /vt/action/preset_9   Recall preset 9
+  /vt/action/preset_10   Recall preset 10
+  /vt/action/preset_11   Recall preset 11
+  /vt/action/preset_12   Recall preset 12
+  /vt/action/slot_1   Select slot 1
+  /vt/action/slot_2   Select slot 2
+  /vt/action/slot_3   Select slot 3
+  /vt/action/slot_4   Select slot 4
+  /vt/action/slot_5   Select slot 5
+  /vt/action/slot_6   Select slot 6
+  /vt/action/slot_7   Select slot 7
+  /vt/action/slot_8   Select slot 8
+  /vt/action/slot_9   Select slot 9
+  /vt/action/verb_wander   Toggle verb: Wander
+  /vt/action/verb_orbit   Toggle verb: Orbit
+  /vt/action/verb_spin   Toggle verb: Spin
+  /vt/action/verb_bounce   Toggle verb: Bounce
+  /vt/action/verb_pulse   Toggle verb: Pulse
+  /vt/action/verb_sparkle   Toggle verb: Sparkle
+  /vt/action/verb_rainbow   Toggle verb: Rainbow
+  /vt/action/verb_swarm   Toggle verb: Swarm
+  /vt/action/verb_flock   Toggle verb: Flock
+  /vt/action/verb_lorenz   Toggle verb: Lorenz
+  /vt/action/verb_rossler   Toggle verb: Rössler
+  /vt/action/verb_clifford   Toggle verb: Clifford
+  /vt/action/verb_dejong   Toggle verb: de Jong
+  /vt/action/verb_field   Toggle verb: Field
+  /vt/action/verb_morph   Toggle verb: Morph
+  /vt/action/verb_outline   Toggle verb: Outline

@@ -28,6 +28,20 @@ func _ready() -> void:
 	head.add_child(UI.button("Unbind all", func():
 		MidiMap.clear_all()
 		refresh(), 130))
+	head.add_child(UI.hspace(8))
+	head.add_child(UI.button("Launchpad map", func():
+		var n := MidiMap.import_map(Templates.launchpad_bindings())
+		_status.text = "Launchpad template: %d bindings merged (programmer mode, ch 1)" % n
+		refresh(), 150))
+	head.add_child(UI.hspace(4))
+	head.add_child(UI.button("APC mini map", func():
+		var n := MidiMap.import_map(Templates.apc_mini_bindings())
+		_status.text = "APC mini template: %d bindings merged (ch 1)" % n
+		refresh(), 140))
+	head.add_child(UI.hspace(4))
+	head.add_child(UI.button("Export TouchOSC", func():
+		var files: Array = Templates.write_all(params, actions, "user://controllers")
+		_status.text = "wrote %s to %s" % [", ".join(files), ProjectSettings.globalize_path("user://controllers")], 170))
 	col.add_child(head)
 	_inputs = UI.label("", 16, UI.DIM)
 	col.add_child(_inputs)

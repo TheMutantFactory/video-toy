@@ -3,6 +3,7 @@
 # ./run.sh test       headless smoke tests (no network, no quota)
 # ./run.sh capture    screenshot every screen into out/
 # ./run.sh import     (re)import assets headlessly
+# ./run.sh templates  write TouchOSC / Launchpad / APC mini templates into docs/controllers
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -39,5 +40,6 @@ case "${1:-play}" in
              && perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -- --selftest ;;
   capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ${2:+--only "$2"} ;;
   import)  exec "$G" --headless --path . --import ;;
+  templates) exec "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;
   *) echo "usage: $0 [play|test|capture|import]" >&2; exit 2 ;;
 esac

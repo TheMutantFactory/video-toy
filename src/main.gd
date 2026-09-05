@@ -27,7 +27,10 @@ func _ready() -> void:
 	add_child(menu)
 	args = OS.get_cmdline_user_args()
 	var cap := args.find("--capture")
-	if args.has("--selftest"):
+	var ti := args.find("--templates")
+	if ti >= 0 and ti + 1 < args.size():
+		_templates(args[ti + 1])
+	elif args.has("--selftest"):
 		_selftest()
 	elif cap >= 0 and cap + 1 < args.size():
 		_capture_all(args[cap + 1])
@@ -63,6 +66,15 @@ func show_screen(name: String) -> void:
 	current.navigate.connect(show_screen)
 	add_child(current)
 	current_name = name
+
+
+## Write the controller templates from the live tables into `dir`, then quit.
+func _templates(dir: String) -> void:
+	show_screen("stage")
+	await get_tree().process_frame
+	var files: Array = Templates.write_all(current.midi_params(), current.midi_actions(), dir)
+	print("TEMPLATES ", dir, ": ", ", ".join(files), "  (%d params, %d actions)" % [current.midi_params().size(), current.midi_actions().size()])
+	get_tree().quit()
 
 
 ## Headless-safe: instantiate every screen and the menu, then quit. Fails loudly

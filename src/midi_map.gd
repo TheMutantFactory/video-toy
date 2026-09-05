@@ -84,6 +84,31 @@ func clear_all() -> void:
 	save_to_disk()
 
 
+## Load a binding map (a template or another rig's midi.json), merged over
+## the current bindings unless `replace`. Returns how many bindings came in.
+func import_map(data: Dictionary, replace := false) -> int:
+	var incoming = data.get("bindings", data)
+	if not (incoming is Dictionary):
+		return 0
+	if replace:
+		bindings.clear()
+	var n := 0
+	for k in incoming:
+		bindings[str(k)] = str(incoming[k])
+		n += 1
+	if data.get("audio") is Dictionary and replace:
+		audio_bindings.clear()
+	save_to_disk()
+	return n
+
+
+func import_file(path: String, replace := false) -> int:
+	if not FileAccess.file_exists(path):
+		return 0
+	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
+	return import_map(data, replace) if data is Dictionary else 0
+
+
 func audio_binding_for(id: String) -> String:
 	return str(audio_bindings.get(id, ""))
 
@@ -201,7 +226,8 @@ func feed_osc(address: String, value: float) -> void:
 		var id := address.trim_prefix("/vt/action/")
 		last_text = "osc " + id
 		activity.emit(last_text)
-		action.emit(id)
+		if value > 0.0:                                     # a push button's release (0) is not a trigger
+			action.emit(id)
 		return
 	_handle("osc:" + address, clampf(value, 0.0, 1.0), false, false, "%s = %.2f" % [describe("osc:" + address), value])
 
