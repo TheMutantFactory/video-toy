@@ -5,12 +5,13 @@ extends Control
 ##
 ## Keys: 1-9 slot · Q W E R T Y U I verbs · click spawn · right-click remove
 ## · Space random spawn · P palette · F feedback · [ ] zoom · , . rotate
-## · - = fade · C clear · H help · Esc menu
+## · - = fade · K pixelate · L palette quantise · J dither · C clear · H help · Esc menu
 
 signal navigate(name: String)
 
 const HotbarScript = preload("res://src/hotbar.gd")
 const ActorScript = preload("res://src/actor.gd")
+const FxScript = preload("res://src/fx.gd")
 const WORLD := Vector2i(1920, 1080)
 
 var palette_index := 0
@@ -31,7 +32,11 @@ var _hud: Label
 var _help: PanelContainer
 var _verb_panel: VBoxContainer
 var _verb_checks := {}
+var _fx_pixel_btn: Button
+var _fx_quant: CheckButton
+var _fx_dither: CheckButton
 var _hotbar
+var _fx
 
 
 func _ready() -> void:
@@ -82,23 +87,32 @@ func _ready() -> void:
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_screen)
 
+	_fx = FxScript.new()
+	add_child(_fx)
+
 	_build_hud()
 	Toolbox.selection_changed.connect(func(_i): _refresh_verbs())
 	Toolbox.changed.connect(_refresh_verbs)
 	_refresh_verbs()
 	_apply_palette()
+	_refresh_fx()
 
 
 # ---------------- HUD ----------------
 func _build_hud() -> void:
+	var hud_card := PanelContainer.new()
+	hud_card.position = Vector2(12, 8)
+	add_child(hud_card)
 	_hud = UI.label("", 18, UI.DIM)
-	_hud.position = Vector2(20, 14)
-	add_child(_hud)
+	hud_card.add_child(_hud)
 
+	# Verb panel sits on a translucent card so it reads on light palettes too.
+	var card := PanelContainer.new()
+	card.position = Vector2(12, 56)
+	add_child(card)
 	_verb_panel = VBoxContainer.new()
-	_verb_panel.position = Vector2(20, 60)
 	_verb_panel.add_theme_constant_override("separation", 2)
-	add_child(_verb_panel)
+	card.add_child(_verb_panel)
 	_verb_panel.add_child(UI.label("Verbs for selected slot", 18, UI.ACCENT))
 	for v in Verbs.ALL:
 		var cb := CheckButton.new()
@@ -107,6 +121,24 @@ func _build_hud() -> void:
 		cb.toggled.connect(func(_on): Toolbox.toggle_verb(Toolbox.selected, v["id"]))
 		_verb_panel.add_child(cb)
 		_verb_checks[v["id"]] = cb
+	_verb_panel.add_child(UI.vspace(6))
+	_verb_panel.add_child(UI.label("Effects", 18, UI.ACCENT))
+	_fx_pixel_btn = UI.button("", func():
+		_fx.cycle_pixelate()
+		_refresh_fx())
+	_verb_panel.add_child(_fx_pixel_btn)
+	_fx_quant = CheckButton.new()
+	_fx_quant.text = "L  Palette quantise"
+	_fx_quant.toggled.connect(func(_on):
+		_fx.toggle_quantize()
+		_refresh_fx())
+	_verb_panel.add_child(_fx_quant)
+	_fx_dither = CheckButton.new()
+	_fx_dither.text = "J  Dither"
+	_fx_dither.toggled.connect(func(_on):
+		_fx.toggle_dither()
+		_refresh_fx())
+	_verb_panel.add_child(_fx_dither)
 	_verb_panel.add_child(UI.vspace(6))
 	_verb_panel.add_child(UI.button("Recolor slot (X)", func(): _recolor()))
 	_verb_panel.add_child(UI.button("Remove slot (Del)", func(): Toolbox.remove(Toolbox.selected)))
@@ -120,7 +152,8 @@ func _build_hud() -> void:
 		"click        spawn selected icon\nright-click  remove nearest\nSpace        spawn somewhere\n"
 		+ "1-9          select slot\nQ..I         toggle verbs\nX            recolor slot\n"
 		+ "P            next palette\nF            feedback on/off\n[ ]          feedback zoom\n"
-		+ ", .          feedback twist\n- =          feedback fade\nC            clear stage\n"
+		+ ", .          feedback twist\n- =          feedback fade\nK            pixelate size\n"
+		+ "L            palette quantise\nJ            dither\nC            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
 	add_child(_help)
@@ -153,18 +186,33 @@ func _refresh_verbs() -> void:
 	_update_hud()
 
 
+func _refresh_fx() -> void:
+	_fx_pixel_btn.text = "K  Pixelate: %s" % ("off" if _fx.pixel_step == 0 else "%d px" % _fx.pixel_size())
+	_fx_quant.set_pressed_no_signal(_fx.quantize)
+	_fx_dither.set_pressed_no_signal(_fx.dither)
+	_fx_dither.disabled = not _fx.quantize
+	_update_hud()
+
+
+## Used by --capture.
+func set_fx(pixel: int, quant: bool, dith: bool) -> void:
+	_fx.set_state(pixel, quant, dith)
+	_refresh_fx()
+
+
 func _update_hud() -> void:
 	var cur := Toolbox.current()
 	var name := str(cur.get("term", "—")) if not cur.is_empty() else "empty toolbox — press Find Icons"
-	_hud.text = "slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   actors: %d" % [
+	_hud.text = "slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   actors: %d" % [
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
-		_actors.get_child_count()]
+		_fx.describe(), _actors.get_child_count()]
 
 
 # ---------------- palette / feedback ----------------
 func _apply_palette() -> void:
 	_bg.color = Palettes.bg(palette_index)
+	_fx.set_palette(palette_index)
 	_hotbar.palette_index = palette_index
 	_hotbar.refresh()
 	for a in _actors.get_children():
@@ -280,6 +328,15 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_BRACKETRIGHT: fb_zoom = minf(1.20, fb_zoom + 0.01)
 		KEY_COMMA: fb_rot -= 0.01
 		KEY_PERIOD: fb_rot += 0.01
+		KEY_K:
+			_fx.cycle_pixelate()
+			_refresh_fx()
+		KEY_L:
+			_fx.toggle_quantize()
+			_refresh_fx()
+		KEY_J:
+			_fx.toggle_dither()
+			_refresh_fx()
 		KEY_MINUS: fb_fade = maxf(0.5, fb_fade - 0.02)
 		KEY_EQUAL: fb_fade = minf(0.995, fb_fade + 0.02)
 		KEY_C:
@@ -287,6 +344,6 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				a.queue_free()
 		KEY_H:
 			_help.visible = not _help.visible
-			_verb_panel.visible = _help.visible
-			_hud.visible = _help.visible
+			_verb_panel.get_parent().visible = _help.visible
+			_hud.get_parent().visible = _help.visible
 	_update_hud()

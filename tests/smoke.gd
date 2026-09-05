@@ -97,6 +97,12 @@ func _init() -> void:
 	led.free()
 	led2.free()
 
+	# post-process shader parses (compile errors print and fail the load)
+	var sh = load("res://src/fx.gdshader")
+	_check("fx shader loads", sh is Shader and sh.get_code().contains("hint_screen_texture"))
+	var fx = load("res://src/fx.gd")
+	_check("fx pixel steps start at off", fx.PIXEL_STEPS[0] == 0 and fx.PIXEL_STEPS.size() >= 4)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

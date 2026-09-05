@@ -2,7 +2,8 @@
 
 A Godot 4.7 toy for streams, VODs and Knobcon: search [The Noun Project](https://thenounproject.com)
 for icons, drop them into a Minecraft-style hotbar, give them **verbs** (wander, orbit, spin,
-bounce, pulse, sparkle, rainbow, swarm), pick a **palette**, and turn on **video feedback**.
+bounce, pulse, sparkle, rainbow, swarm), pick a **palette**, turn on **video feedback**, and post-process with **pixelate** and
+**palette quantise**.
 
 ```bash
 ./run.sh            # play
@@ -30,7 +31,10 @@ right-click  remove nearest           F      feedback on/off
 Space        spawn somewhere          [ ]    feedback zoom
 1-9          select slot              , .    feedback twist
 Q W E R T Y U I   toggle verbs        - =    feedback fade
-X            recolor slot             C      clear stage
+X            recolor slot             K      pixelate size (off/4/8/12/20/32)
+                                      L      palette quantise
+                                      J      dither (with quantise)
+                                      C      clear stage
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
 ```
@@ -53,6 +57,7 @@ src/menu_overlay.gd         ☰ / Esc menu + paginated Attribution
 src/start_screen.gd         modes
 src/search_screen.gd        Noun Project search → inspect → add
 src/stage_screen.gd         play: SubViewport world + ping-pong feedback
+src/fx.gd + fx.gdshader     post-process: pixelate, palette quantise, dither
 src/actor.gd                one icon on stage; verbs read live from Toolbox
 src/hotbar.gd               the 9-slot bar
 src/toolbox.gd   (autoload) slots + verbs, user://toolbox.json
