@@ -159,7 +159,9 @@ func _process(delta: float) -> void:
 	rotate(spin_axis, delta * (2.4 if verbs.has("spin") else 0.35))
 	var s := base_scale
 	if verbs.has("pulse"):
-		s *= 1.0 + 0.25 * sin(t * 4.0)
+		s *= (1.0 + 0.7 * AudioReact.bass) if AudioReact.active() else (1.0 + 0.25 * sin(t * 4.0))
+	if AudioReact.active():
+		s *= 1.0 + 0.18 * AudioReact.beat_env
 	scale = Vector3.ONE * s
 	if verbs.has("rainbow"):
 		var c := _base_color

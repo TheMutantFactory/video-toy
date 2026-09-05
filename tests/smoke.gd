@@ -163,9 +163,45 @@ func _init() -> void:
 	_check("bindings persist", midi2.binding_for("act:clear") == "note:10:36" and midi2.bindings.size() == 3)
 	midi.unbind("act:clear")
 	_check("unbind removes", midi.binding_for("act:clear") == "")
+	# audio bands as virtual controllers
+	got["param"].clear()
+	got["action"].clear()
+	_check("audio binding cycles through param bands", midi.cycle_audio_binding("fb_zoom") == "bass" and midi.cycle_audio_binding("fb_zoom") == "mid")
+	_check("audio binding for actions is beat only", midi.cycle_audio_binding("act:spawn") == "beat" and midi.cycle_audio_binding("act:spawn") == "")
+	midi.set_audio_binding("act:spawn", "beat")
+	midi.feed_audio({"bass": 0.9, "mid": 0.4, "high": 0.1, "level": 0.9})
+	midi.feed_beat()
+	_check("audio feeds bound param and beat action", got["param"] == [["fb_zoom", 0.4]] and got["action"] == ["spawn"])
+	var midi3 = load("res://src/midi_map.gd").new()
+	midi3.path = midi.path
+	midi3.load_from_disk()
+	_check("audio bindings persist", midi3.audio_binding_for("fb_zoom") == "mid")
+	midi3.free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(midi.path))
 	midi.free()
 	midi2.free()
+
+	# audio analysis: smoothing, level, beat detection on synthetic bands
+	var Audio = load("res://src/audio_react.gd")
+	_check("db scale maps silence and full scale", Audio._db01(Vector2.ZERO) == 0.0 and is_equal_approx(Audio._db01(Vector2(1, 1)), 1.0))
+	_check("follower attacks faster than it releases",
+		Audio._follow(0.0, 1.0, 0.05) > 1.0 - Audio._follow(1.0, 0.0, 0.05))
+	var au = Audio.new()                       # not in tree: _ready/_process never run
+	var beats := [0]                           # lambdas capture locals by value; an array is shared
+	au.beat.connect(func(): beats[0] += 1)
+	for i in 60:                               # 1 s of silence then a kick
+		au.update_bands({"bass": 0.0, "mid": 0.0, "high": 0.0}, 1.0 / 60.0)
+	var hit: bool = au.update_bands({"bass": 0.9, "mid": 0.2, "high": 0.1}, 1.0 / 60.0)
+	_check("bass onset is a beat", hit and beats[0] == 1 and au.beat_env == 1.0)
+	for i in 5:
+		au.update_bands({"bass": 0.9, "mid": 0.2, "high": 0.1}, 1.0 / 60.0)
+	_check("sustained bass is not more beats (cooldown + average)", beats[0] == 1)
+	_check("level is the loudest band", au.level == au.bass and au.level > 0.5)
+	au.gain = 0.0
+	for i in 120:
+		au.update_bands({"bass": 0.9, "mid": 0.9, "high": 0.9}, 1.0 / 60.0)
+	_check("gain scales bands to nothing", au.level < 0.01)
+	au.free()
 
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)

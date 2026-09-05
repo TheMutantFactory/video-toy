@@ -98,7 +98,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio"]
 	for name in shots:
 		match name:
 			"menu":
@@ -167,6 +167,18 @@ func _capture_all(dir: String) -> void:
 				MidiMap.feed(_cc(1, 22, 0))
 				MidiMap.feed(_cc(1, 22, 127))                    # rising edge -> next palette
 				await get_tree().create_timer(0.6).timeout
+			"audio":
+				# Test groove drives feedback zoom from bass and spawns on beats.
+				current.toggle_midi_panel()
+				MidiMap.set_audio_binding("fb_zoom", "bass")
+				MidiMap.set_audio_binding("act:spawn", "beat")
+				for i in Toolbox.slots.size():
+					var v: String = ["pulse", "bounce", "pulse", "orbit", "pulse"][i % 5]
+					if not Toolbox.has_verb(i, v):
+						Toolbox.toggle_verb(i, v)
+				current.set_fx(0, false, false)
+				AudioReact.set_source("test")
+				await get_tree().create_timer(2.6).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout
@@ -183,6 +195,7 @@ func _capture_all(dir: String) -> void:
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(dir.path_join(name + ".png"))
 		print("captured ", name)
+	AudioReact.set_source("off")
 	if MidiMap.path != MidiMap.PATH:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(MidiMap.path))
 		MidiMap.path = MidiMap.PATH

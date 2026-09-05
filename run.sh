@@ -16,13 +16,28 @@ find_godot() {
 }
 G="$(find_godot)"
 
+# Godot 4.7 needs audio/driver/enable_input=true for the microphone, but on a
+# machine with NO input device that setting makes CoreAudio fail and Godot falls
+# back to a silent dummy driver (no file playback either). On macOS, detect that
+# and write a gitignored override.cfg turning input off; remove it otherwise.
+audio_override() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    if system_profiler SPAudioDataType 2>/dev/null | grep -q "Input Channels"; then
+      rm -f override.cfg
+    else
+      printf '[audio]\ndriver/enable_input=false\n' > override.cfg
+      echo "note: no audio input device found; microphone disabled (override.cfg)" >&2
+    fi
+  fi
+}
+
 case "${1:-play}" in
-  play)    exec "$G" --path . ;;
+  play)    audio_override; exec "$G" --path . ;;
   test)    "$G" --headless --path . --import >/dev/null 2>&1 || true
            # perl alarm = portable timeout: a script that errors before quit() would hang forever
            perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -s tests/smoke.gd \
              && perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -- --selftest ;;
-  capture) mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ;;
+  capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ;;
   import)  exec "$G" --headless --path . --import ;;
   *) echo "usage: $0 [play|test|capture|import]" >&2; exit 2 ;;
 esac

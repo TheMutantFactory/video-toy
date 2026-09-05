@@ -8,7 +8,8 @@ extends Control
 ## · - = fade · O kaleidoscope · G chroma key (drop an image for the backdrop)
 ## · K pixelate · L palette quantise · J dither · V CRT · M monitor · N monitor size
 ## · drag the monitor to move it · B spawn a 3D solid of the selected icon
-## · Shift+B next shape · ; MIDI learn · C clear · H help · Esc menu
+## · Shift+B next shape · ; MIDI + audio panel · A audio source (drop an audio file)
+## · C clear · H help · Esc menu
 ##
 ## Render graph:  world3d (solids) ─> sprite in world
 ##                world (actors + monitor + world3d) ─┬─> screen ──┐
@@ -238,6 +239,7 @@ func midi_params() -> Array:
 		{"id": "slot", "label": "Toolbox slot", "set": func(v):
 			if not Toolbox.slots.is_empty():
 				Toolbox.select(_step(v, Toolbox.slots.size()))},
+		{"id": "audio_gain", "label": "Audio gain", "set": func(v): AudioReact.gain = lerpf(0.25, 4.0, v)},
 	]
 
 
@@ -263,6 +265,9 @@ func midi_actions() -> Array:
 			_refresh_fx()},
 		{"id": "monitor", "label": "Monitor on/off", "do": func(): set_monitor(not _monitor.visible)},
 		{"id": "next_shape", "label": "Next 3D shape", "do": cycle_shape},
+		{"id": "audio_source", "label": "Next audio source", "do": func():
+			AudioReact.cycle_source()
+			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
 	for i in Toolbox.MAX_SLOTS:
@@ -392,7 +397,7 @@ func _build_hud() -> void:
 		+ "L            palette quantise\nJ            dither\nV            CRT off/soft/heavy\n"
 		+ "M            monitor in the scene\nN            monitor size (drag to move)\n"
 		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
-		+ ";            MIDI learn panel\n"
+		+ ";            MIDI + audio panel\nA            audio: off/mic/test/file (drop mp3/ogg/wav)\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -453,11 +458,16 @@ func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false, 
 
 func _on_files_dropped(files: PackedStringArray) -> void:
 	for f in files:
-		if f.get_extension().to_lower() in ["png", "jpg", "jpeg", "webp", "bmp"]:
+		var ext := f.get_extension().to_lower()
+		if ext in ["png", "jpg", "jpeg", "webp", "bmp"]:
 			if _fx.set_backdrop_from_file(f):
 				if not _fx.chroma:
 					_fx.toggle_chroma()
 				_refresh_fx()
+			return
+		if ext in ["mp3", "ogg", "wav"]:
+			AudioReact.load_file(f)
+			_update_hud()
 			return
 
 
@@ -468,8 +478,22 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe(), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		_actors.get_child_count()] + "   ·   solids: %d (next: %s)" % [_solids.get_child_count(), next_shape()] \
-		+ (("   ·   midi: " + _midi_last) if _midi_last != "" else "")
+		_actors.get_child_count()] + "   ·   solids: %d (next: %s)" % [_solids.get_child_count(), next_shape()]
+	# second line: controllers
+	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
+	line2 += "   ·   audio: " + ((("%s  %s" % [AudioReact.source if AudioReact.source != "file" else AudioReact.file_name, _meter()])) if AudioReact.active() else "off (A)")
+	if AudioReact.driver_missing():
+		line2 += "   ·   no audio device: mic/file unavailable"
+	_hud.text += "\n" + line2
+
+
+static func _bar(v: float) -> String:
+	var n := clampi(roundi(v * 5.0), 0, 5)
+	return "▮".repeat(n) + "▯".repeat(5 - n)
+
+
+func _meter() -> String:
+	return "bass %s mid %s high %s" % [_bar(AudioReact.bass), _bar(AudioReact.mid), _bar(AudioReact.high)]
 
 
 # ---------------- palette / feedback ----------------
@@ -519,7 +543,7 @@ func _process(_delta: float) -> void:
 		_acc[1 - cur].render_target_update_mode = SubViewport.UPDATE_DISABLED
 		_acc[cur].render_target_update_mode = SubViewport.UPDATE_ONCE
 		_screen.texture = _acc[cur].get_texture()
-	if Engine.get_process_frames() % 15 == 0:
+	if Engine.get_process_frames() % (4 if AudioReact.active() else 15) == 0:
 		_update_hud()
 
 
@@ -617,6 +641,9 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			else:
 				spawn_solid(_world_pos(get_local_mouse_position()) if get_global_rect().has_point(get_global_mouse_position()) else Vector2(-1, -1))
 		KEY_SEMICOLON: toggle_midi_panel()
+		KEY_A:
+			AudioReact.cycle_source()
+			_update_hud()
 		KEY_M: set_monitor(not _monitor.visible)
 		KEY_N:
 			_monitor.cycle_size()

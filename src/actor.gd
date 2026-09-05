@@ -110,7 +110,10 @@ func _process(delta: float) -> void:
 	_sprite.rotation = _sprite.rotation + delta * 2.2 if verbs.has("spin") else lerpf(_sprite.rotation, 0.0, 6.0 * delta)
 	var s := base_scale
 	if verbs.has("pulse"):
-		s *= 1.0 + 0.25 * sin(t * 4.0)
+		# With audio on, Pulse follows the bass instead of a sine.
+		s *= (1.0 + 0.7 * AudioReact.bass) if AudioReact.active() else (1.0 + 0.25 * sin(t * 4.0))
+	if AudioReact.active():
+		s *= 1.0 + 0.18 * AudioReact.beat_env              # everyone jumps on the beat
 	_sprite.scale = Vector2.ONE * s
 
 	if verbs.has("rainbow"):

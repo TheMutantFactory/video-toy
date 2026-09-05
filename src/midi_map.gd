@@ -9,8 +9,12 @@ extends Node
 ##   note on   -> param: velocity/127     action: trigger (velocity > 0)
 ##   pitch bend-> param: pitch/16383      action: rising edge through centre
 ##
+## Audio bands are virtual controllers: audio_bindings maps an id to "bass",
+## "mid", "high", "level" (params) or "beat" (actions); feed_audio() and
+## feed_beat() emit exactly like a knob or a pad would.
+##
 ## No dependency on other autoloads, so the smoke test can drive it with
-## synthetic InputEventMIDI objects.
+## synthetic InputEventMIDI objects and band dictionaries.
 
 signal param(id: String, value: float)
 signal action(id: String)
@@ -19,7 +23,11 @@ signal activity(text: String)
 
 const PATH := "user://midi.json"
 
+const AUDIO_PARAM_BANDS := ["", "bass", "mid", "high", "level"]
+const AUDIO_ACTION_BANDS := ["", "beat"]
+
 var bindings := {}                 # message key -> id
+var audio_bindings := {}           # id -> band
 var armed_id := ""
 var last_text := ""
 var path := PATH
@@ -64,7 +72,44 @@ func unbind(id: String) -> void:
 
 func clear_all() -> void:
 	bindings.clear()
+	audio_bindings.clear()
 	save_to_disk()
+
+
+func audio_binding_for(id: String) -> String:
+	return str(audio_bindings.get(id, ""))
+
+
+func set_audio_binding(id: String, band: String) -> void:
+	if band == "":
+		audio_bindings.erase(id)
+	else:
+		audio_bindings[id] = band
+	save_to_disk()
+
+
+## Cycle a row through the bands that make sense for it.
+func cycle_audio_binding(id: String) -> String:
+	var table: Array = AUDIO_ACTION_BANDS if id.begins_with("act:") else AUDIO_PARAM_BANDS
+	var i := table.find(audio_binding_for(id))
+	var band: String = table[(i + 1) % table.size()]
+	set_audio_binding(id, band)
+	return band
+
+
+## Called every frame by AudioReact with 0..1 bands.
+func feed_audio(bands: Dictionary) -> void:
+	for id in audio_bindings:
+		var band: String = audio_bindings[id]
+		if bands.has(band) and not id.begins_with("act:"):
+			param.emit(id, float(bands[band]))
+
+
+## Called by AudioReact on each detected beat.
+func feed_beat() -> void:
+	for id in audio_bindings:
+		if audio_bindings[id] == "beat" and id.begins_with("act:"):
+			action.emit(id.trim_prefix("act:"))
 
 
 static func describe(key: String) -> String:
@@ -136,15 +181,19 @@ func feed(ev: InputEventMIDI) -> void:
 func save_to_disk() -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"bindings": bindings}, "\t"))
+		f.store_string(JSON.stringify({"bindings": bindings, "audio": audio_bindings}, "\t"))
 		f.close()
 
 
 func load_from_disk() -> void:
 	bindings = {}
+	audio_bindings = {}
 	if not FileAccess.file_exists(path):
 		return
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if data is Dictionary and data.get("bindings") is Dictionary:
 		for k in data["bindings"]:
 			bindings[str(k)] = str(data["bindings"][k])
+	if data is Dictionary and data.get("audio") is Dictionary:
+		for k in data["audio"]:
+			audio_bindings[str(k)] = str(data["audio"][k])

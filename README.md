@@ -43,7 +43,8 @@ X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
                                       N      monitor size; drag it to move
                                       B      3D solid of the selected icon at the mouse
                                       Shift+B next shape (cube/sphere/torus/cylinder/prism)
-                                      ;      MIDI-learn panel
+                                      ;      MIDI + audio panel
+                                      A      audio source: off / mic / test / file
                                       C      clear stage
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
@@ -61,6 +62,27 @@ row, then move a knob or hit a pad: that message is bound to it. Right-click a r
   slot 1-9, toggle each verb on the selected slot.
 
 Bindings live in `user://midi.json`. The HUD shows the last message received.
+
+## Audio reactivity
+
+Press **A** to cycle the source: **mic**, a built-in **test** groove (120 BPM, no input
+needed), or a **file** (drop an mp3/ogg/wav on the window; it plays and loops). Four bands
+(bass, mid, high, level) and a beat detector come out of it:
+
+- With audio on, the **Pulse** verb follows the bass and everything jumps a little on the beat.
+- In the **;** panel, the **♪** button on any row binds it to a band: params follow
+  bass/mid/high/level, actions fire on the beat. Feedback zoom on bass and Spawn on beat is
+  the obvious first patch.
+- **Audio gain** is itself a param, so a knob can set the sensitivity.
+
+The mic is analysed on a silent bus and never played back. macOS asks for microphone
+permission the first time you switch to mic.
+
+**No input device?** Godot 4.7 needs `audio/driver/enable_input` for the mic, and on a machine
+with no input device at all that setting makes CoreAudio fail and *all* audio goes silent.
+`./run.sh play` checks for an input device on macOS and writes a gitignored `override.cfg`
+that turns input off when there is none (the HUD says so; test groove and file still work).
+Plug in an interface and run again to get the mic back.
 
 ## Credentials
 
@@ -92,7 +114,8 @@ src/icon_media.gd(autoload) thumbnails + white SVG rasteriser
 src/palettes.gd             named colour sets
 src/verbs.gd                verb table
 src/midi_map.gd  (autoload) MIDI-learn: opens inputs, binds messages to params/actions, user://midi.json
-src/midi_panel.gd           the learn panel on the stage
+src/midi_panel.gd           the MIDI + audio panel on the stage
+src/audio_react.gd (autoload) mic / file / test groove -> bass, mid, high, level, beat
 demo/                       built-in shapes
 docs/RESEARCH.md            video toys, feedback, shader art, 3D, raster — the roadmap
 ```

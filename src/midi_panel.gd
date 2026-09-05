@@ -1,11 +1,13 @@
 extends PanelContainer
-## The MIDI-learn panel on the stage. Two columns: params (knobs) and actions
+## The control panel on the stage. Two columns: params (knobs) and actions
 ## (pads). Click a row to arm it, move a control to bind it. Right-click a row
-## to unbind. The host supplies the tables; this panel only talks to MidiMap.
+## to unbind. The ♪ button on each row cycles an audio band (bass/mid/high/
+## level for params, beat for actions). The host supplies the tables.
 
 var params: Array = []             # [{id, label}]
 var actions: Array = []            # [{id, label}]
 var _rows := {}                    # full id -> Button
+var _audio_btns := {}              # full id -> Button
 var _status: Label
 var _inputs: Label
 
@@ -16,7 +18,7 @@ func _ready() -> void:
 	col.add_theme_constant_override("separation", 6)
 	add_child(col)
 	var head := HBoxContainer.new()
-	head.add_child(UI.label("MIDI learn", 28, UI.ACCENT))
+	head.add_child(UI.label("MIDI + audio", 28, UI.ACCENT))
 	head.add_child(UI.hspace(16))
 	head.add_child(UI.button("Rescan", func():
 		MidiMap.rescan()
@@ -28,7 +30,7 @@ func _ready() -> void:
 	col.add_child(head)
 	_inputs = UI.label("", 16, UI.DIM)
 	col.add_child(_inputs)
-	col.add_child(UI.label("Click a row, then move a knob or hit a pad. Right-click a row to unbind. ; closes.", 16, UI.DIM))
+	col.add_child(UI.label("Click a row, then move a knob or hit a pad. Right-click to unbind. ♪ cycles an audio band. ; closes.", 16, UI.DIM))
 
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 16)
@@ -59,9 +61,12 @@ func _column(title: String, table: Array, prefix: String) -> Control:
 	scroll.add_child(list)
 	for e in table:
 		var full: String = prefix + e["id"]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
 		var b := Button.new()
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.custom_minimum_size = Vector2(0, 36)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.pressed.connect(func():
 			MidiMap.arm(full)
 			refresh())
@@ -71,8 +76,17 @@ func _column(title: String, table: Array, prefix: String) -> Control:
 				if MidiMap.armed_id == full:
 					MidiMap.disarm()
 				refresh())
-		list.add_child(b)
+		row.add_child(b)
+		var a := Button.new()
+		a.custom_minimum_size = Vector2(74, 36)
+		a.tooltip_text = "audio band driving this"
+		a.pressed.connect(func():
+			MidiMap.cycle_audio_binding(full)
+			refresh())
+		row.add_child(a)
+		list.add_child(row)
 		_rows[full] = b
+		_audio_btns[full] = a
 	return v
 
 
@@ -91,6 +105,10 @@ func refresh() -> void:
 		var armed: bool = MidiMap.armed_id == full
 		b.text = "%s%s" % [_label_for(full), ("   ← move a control…" if armed else ("   [%s]" % MidiMap.describe(bound) if bound != "" else ""))]
 		b.modulate = UI.ACCENT if armed else (Color.WHITE if bound != "" else UI.DIM)
+		var band: String = MidiMap.audio_binding_for(full)
+		var a: Button = _audio_btns[full]
+		a.text = ("♪ " + band) if band != "" else "♪"
+		a.modulate = Color.WHITE if band != "" else UI.DIM
 
 
 func _refresh_inputs() -> void:
