@@ -20,6 +20,7 @@ Needs Godot 4.7 (`GODOT=/path/to/godot` if it isn't on PATH or in /Applications)
 | --- | --- |
 | Find Icons | Type a word, browse free thumbnails, click to inspect the license, **Add to toolbox** (one metered download). Keep exploring: more pages, new words. |
 | Play | Click to spawn the selected icon. Verbs are toggles per slot and apply live to every actor from that slot. |
+| Scenes | Shader sources (plasma, warp, truchet, voronoi, blobs) and oscillators (ramp, bars, rings, noise) as a layer behind everything, crossfaded. |
 | Settings | Noun Project API key/secret, saved to `user://noun_credentials.cfg` (outside the repo). |
 | Attribution | Paginated list of every asset ever downloaded, with icon and creator links. Also on **Esc** / **☰** from any screen. |
 | Load demo shapes | Five built-in shapes so the toy plays with no API key. |
@@ -41,6 +42,8 @@ X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
                                       V      CRT off / soft / heavy
                                       D      glow off / soft / heavy
 F1-F12       recall preset            Shift+F1-F12  save preset (whole stage state, crossfaded)
+Tab          next scene (Shift+Tab previous, ` off)
+arrows       feedback drift           PgUp/PgDn  feedback warp amount   Home  reset warp
                                       M      monitor inside the scene (recursion)
                                       N      monitor size; drag it to move
                                       B      3D solid of the selected icon at the mouse
@@ -54,6 +57,18 @@ drop an image on the window   →  a raster toolbox slot (Shift+drop → chroma 
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
 ```
+
+## Scenes, oscillators, warp mesh
+
+A **scene** is a shader that runs as a layer behind everything in the world, so icons fly
+over it and feedback, effects and the monitor wrap it. Five art scenes and four oscillator
+primitives (ramps, bars, rings, noise — Lumen's building blocks) share one system and one
+palette. **Tab** cycles them in Play with a crossfade; the Scenes screen shows live previews.
+Three knobs — speed, scale, colour bias — are learnable params; next/previous/off are actions.
+
+The feedback "previous frame" is drawn through a **warp mesh**: a 32×18 grid whose vertices a
+shader displaces Milkdrop-style. Warp amount and speed, drift (pushed in every pass), and
+stretch are learnable; arrows / PgUp / PgDn / Home drive them from the keyboard.
 
 ## Presets
 
@@ -136,6 +151,8 @@ src/stage_screen.gd         play: SubViewport world + ping-pong feedback
 src/glow.gd + glow.gdshader bloom pass before fx
 src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma key, quantise, dither
 src/presets.gd              twelve stage snapshots, user://presets.json
+src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading layer, the shaders (common.gdshaderinc shared)
+src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader
 src/monitor.gd              the TV inside the world that shows the final composite
 src/solid.gd                a 3D shape wearing an icon; lives in a 3D viewport composited into the world
 src/actor.gd                one icon on stage; verbs read live from Toolbox

@@ -56,7 +56,7 @@ func _ready() -> void:
 	_panel.add_child(_menu)
 	_menu.add_child(UI.title("Menu", 40))
 	for m in [["Resume", "resume"], ["Attribution", "attribution"], ["Find Icons", "search"],
-			["Play", "stage"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
+			["Play", "stage"], ["Scenes", "scenes"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
 		_menu.add_child(UI.button(m[0], func(): _pick(m[1])))
 
 	_attrib = VBoxContainer.new()

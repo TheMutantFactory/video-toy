@@ -251,6 +251,21 @@ func _init() -> void:
 	var gsh = load("res://src/glow.gdshader")
 	_check("glow shader loads", gsh is Shader and gsh.get_code().contains("uniform float glow"))
 
+	# scenes table and shaders; warp mesh geometry
+	var all_load := true
+	for sid in Scenes.ids():
+		var sh2 = load(Scenes.shader_path(sid))
+		if not (sh2 is Shader) or not sh2.get_code().contains("common.gdshaderinc"):
+			all_load = false
+	_check("every scene shader loads and includes common", all_load and Scenes.ALL.size() == 9)
+	_check("scene neighbour wraps and enters from off", Scenes.neighbour("", 1) == "plasma" and Scenes.neighbour("noise", 1) == "plasma" and Scenes.neighbour("plasma", -1) == "noise")
+	var fm := FeedbackMesh.build(Vector2(1920, 1080), 4, 2)
+	_check("warp mesh has (cols+1)(rows+1) vertices and 6 indices per quad",
+		fm.get_surface_count() == 1 and fm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size() == FeedbackMesh.vertex_count(4, 2)
+		and fm.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() == 4 * 2 * 6)
+	var wm := FeedbackMesh.material()
+	_check("warp material has a vertex stage", wm.shader != null and wm.shader.code.contains("void vertex()"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

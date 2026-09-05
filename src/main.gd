@@ -8,6 +8,7 @@ const SCREENS := {
 	"search": "res://src/search_screen.gd",
 	"stage": "res://src/stage_screen.gd",
 	"settings": "res://src/settings_screen.gd",
+	"scenes": "res://src/scenes_screen.gd",
 }
 const MenuOverlay = preload("res://src/menu_overlay.gd")
 
@@ -84,6 +85,26 @@ func _selftest() -> void:
 	st._glow.set_level(0)
 	st.restore(snap, 0.0)
 	var ok_preset: bool = st.palette_index == 2 and is_equal_approx(st.fb_zoom, 1.11) and st._fx.crt_level == 2 and st._glow.level == 1
+	# scenes: every shader compiles into a material, switching crossfades, knobs apply
+	var ok_scenes := true
+	for sid in Scenes.ids():
+		var m := Scenes.material_for(sid, 0)
+		if m.shader == null:
+			ok_scenes = false
+			printerr("FAIL scene shader: ", sid)
+	st.set_scene("truchet", 0.0)
+	st.set_scene_knobs(2.0, 1.5, 0.25)
+	await get_tree().process_frame
+	var snap2: Dictionary = st.snapshot()
+	st.set_scene("", 0.0)
+	st.restore(snap2, 0.0)
+	ok_scenes = ok_scenes and Scenes.current == "truchet" and is_equal_approx(Scenes.speed, 2.0) and snap2["scene"]["id"] == "truchet"
+	st.set_scene("", 0.0)
+	if ok_scenes:
+		print("PASS scenes build, switch and round-trip through presets")
+	else:
+		fails += 1
+		printerr("FAIL scenes")
 	Presets.save(12, snap, "user://_selftest_presets.json")
 	var back: Dictionary = Presets.get_preset(12, "user://_selftest_presets.json")
 	ok_preset = ok_preset and int(back.get("fx", {}).get("crt", 0)) == 2 and int(back.get("glow", 0)) == 1
@@ -139,7 +160,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage"]
 	for name in shots:
 		match name:
 			"menu":
@@ -261,6 +282,31 @@ func _capture_all(dir: String) -> void:
 				current._set_feedback(false)
 				AudioReact.set_source("test")
 				await get_tree().create_timer(2.0).timeout
+			"scenes":
+				AudioReact.set_source("off")
+				show_screen("scenes")
+				await get_tree().create_timer(0.8).timeout
+			"scene_stage":
+				# Truchet scene behind bouncing icons, feedback through the warp
+				# mesh with drift and stretch, soft glow.
+				Scenes.current = "truchet"
+				Scenes.speed = 1.0
+				show_screen("stage")
+				await get_tree().create_timer(0.3).timeout
+				for i in Toolbox.slots.size():
+					for v in ["sparkle"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+				for i in 6:
+					Toolbox.select(i % Toolbox.slots.size())
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current._glow.set_level(1)
+				current.fb_warp = 0.5
+				current.fb_drift = Vector2(2, -1)
+				current.fb_stretch = Vector2(1.01, 0.99)
+				current._set_feedback(true)
+				await get_tree().create_timer(2.5).timeout
+				Scenes.current = ""
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

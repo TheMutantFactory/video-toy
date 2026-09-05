@@ -29,6 +29,7 @@ func _ready() -> void:
 	var modes := [
 		["Find Icons", "search", "search the Noun Project and fill the toolbox"],
 		["Play", "stage", "spawn icons, give them verbs, turn on feedback"],
+		["Scenes", "scenes", "shader backgrounds and oscillators"],
 		["Settings", "settings", "Noun Project API key"],
 		["Attribution", "attribution", "every downloaded asset, with links"],
 		["Quit", "quit", ""],

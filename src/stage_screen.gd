@@ -11,7 +11,9 @@ extends Control
 ## · Shift+B next shape · ; MIDI + audio panel · A audio source (drop an audio file)
 ## · drop an image = raster slot (Shift+drop = chroma backdrop) · Z webcam layer
 ## · S steal a palette from the selected raster / webcam · D glow
-## · F1-F12 recall preset · Shift+F1-F12 save preset · C clear · H help · Esc menu
+## · F1-F12 recall preset · Shift+F1-F12 save preset · Tab / Shift+Tab next / previous scene
+## · ` scene off · arrows feedback drift · PgUp/PgDn feedback warp · Home reset warp
+## · C clear · H help · Esc menu
 ##
 ## Render graph:  world3d (solids) ─> sprite in world
 ##                world (actors + monitor + world3d) ─┬─> screen ──┐
@@ -28,6 +30,7 @@ const SolidScript = preload("res://src/solid.gd")
 const MidiPanelScript = preload("res://src/midi_panel.gd")
 const WebcamScript = preload("res://src/webcam.gd")
 const GlowScript = preload("res://src/glow.gd")
+const SceneLayerScript = preload("res://src/scene_layer.gd")
 const WEBCAM_MODES := ["off", "layer", "backdrop"]
 const WORLD := Vector2i(1920, 1080)
 
@@ -61,6 +64,12 @@ var _webcam_mode := 0
 var _steal_note := ""
 var _glow
 var _fade_tween: Tween
+var _scene_layer: Node2D
+var _acc_mats: Array = []               # warp ShaderMaterials, one per accumulator
+var fb_warp := 0.0
+var fb_warp_speed := 1.0
+var fb_drift := Vector2.ZERO
+var fb_stretch := Vector2.ONE
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
@@ -71,6 +80,7 @@ var _fx_pixel_btn: Button
 var _fx_kaleido_btn: Button
 var _fx_crt_btn: Button
 var _fx_glow_btn: Button
+var _fx_scene_btn: Button
 var _fx_chroma: CheckButton
 var _fx_quant: CheckButton
 var _fx_dither: CheckButton
@@ -102,6 +112,9 @@ func _ready() -> void:
 	_world.transparent_bg = true
 	_world.disable_3d = true
 	add_child(_world)
+	_scene_layer = SceneLayerScript.new()
+	_scene_layer.size = Vector2(WORLD)
+	_world.add_child(_scene_layer)
 	_build_webcam()
 	_build_3d()
 	_actors = Node2D.new()
@@ -114,9 +127,12 @@ func _ready() -> void:
 		vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 		vp.transparent_bg = true
 		add_child(vp)
-		var prev := Sprite2D.new()
+		var prev := MeshInstance2D.new()          # the warp mesh (see feedback_mesh.gd)
+		prev.mesh = FeedbackMesh.build(Vector2(WORLD))
+		prev.material = FeedbackMesh.material()
 		prev.position = Vector2(WORLD) * 0.5
 		vp.add_child(prev)
+		_acc_mats.append(prev.material)
 		var live := Sprite2D.new()
 		live.position = Vector2(WORLD) * 0.5
 		live.texture = _world.get_texture()
@@ -299,6 +315,25 @@ func cycle_shape() -> void:
 	_update_hud()
 
 
+# ---------------- scenes ----------------
+func set_scene(id: String, fade := 0.8) -> void:
+	Scenes.current = id
+	_scene_layer.refresh(fade)
+	_update_hud()
+
+
+func step_scene(step: int) -> void:
+	set_scene(Scenes.neighbour(Scenes.current, step))
+
+
+func set_scene_knobs(speed: float, scale: float, bias: float) -> void:
+	Scenes.speed = speed
+	Scenes.scale = scale
+	Scenes.bias = bias
+	_scene_layer.apply_knobs()
+	_update_hud()
+
+
 # ---------------- presets ----------------
 ## Everything the stage remembers, as plain data.
 func snapshot() -> Dictionary:
@@ -316,6 +351,8 @@ func snapshot() -> Dictionary:
 		"shape": _shape_index,
 		"selected": Toolbox.selected,
 		"slots": verbs,
+		"scene": {"id": Scenes.current, "speed": Scenes.speed, "scale": Scenes.scale, "bias": Scenes.bias},
+		"warp": {"amount": fb_warp, "speed": fb_warp_speed, "dx": fb_drift.x, "dy": fb_drift.y, "sx": fb_stretch.x, "sy": fb_stretch.y},
 	}
 
 
@@ -362,6 +399,16 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 	Toolbox.save_to_disk()
 	Toolbox.changed.emit()
 	Toolbox.select(int(d.get("selected", Toolbox.selected)))
+	var sc: Dictionary = d.get("scene", {})
+	if not sc.is_empty():
+		set_scene_knobs(float(sc.get("speed", Scenes.speed)), float(sc.get("scale", Scenes.scale)), float(sc.get("bias", Scenes.bias)))
+		set_scene(str(sc.get("id", Scenes.current)), fade)
+	var w: Dictionary = d.get("warp", {})
+	if not w.is_empty():
+		fb_warp = float(w.get("amount", fb_warp))
+		fb_warp_speed = float(w.get("speed", fb_warp_speed))
+		fb_drift = Vector2(float(w.get("dx", fb_drift.x)), float(w.get("dy", fb_drift.y)))
+		fb_stretch = Vector2(float(w.get("sx", fb_stretch.x)), float(w.get("sy", fb_stretch.y)))
 	_apply_palette()
 	_refresh_fx()
 
@@ -416,6 +463,19 @@ func midi_params() -> Array:
 		{"id": "glow", "label": "Glow", "set": func(v):
 			_glow.set_level(_step(v, 3))
 			_update_hud()},
+		{"id": "scene", "label": "Scene", "set": func(v):
+			var n := Scenes.ALL.size() + 1
+			var i := _step(v, n)
+			set_scene("" if i == 0 else Scenes.ALL[i - 1]["id"])},
+		{"id": "scene_speed", "label": "Scene speed", "set": func(v): set_scene_knobs(lerpf(0.1, 4.0, v), Scenes.scale, Scenes.bias)},
+		{"id": "scene_scale", "label": "Scene scale", "set": func(v): set_scene_knobs(Scenes.speed, lerpf(0.3, 4.0, v), Scenes.bias)},
+		{"id": "scene_bias", "label": "Scene colour bias", "set": func(v): set_scene_knobs(Scenes.speed, Scenes.scale, v)},
+		{"id": "fb_warp", "label": "Feedback warp", "set": func(v): fb_warp = v},
+		{"id": "fb_warp_speed", "label": "Feedback warp speed", "set": func(v): fb_warp_speed = lerpf(0.1, 4.0, v)},
+		{"id": "fb_dx", "label": "Feedback drift X", "set": func(v): fb_drift.x = lerpf(-6.0, 6.0, v)},
+		{"id": "fb_dy", "label": "Feedback drift Y", "set": func(v): fb_drift.y = lerpf(-6.0, 6.0, v)},
+		{"id": "fb_sx", "label": "Feedback stretch X", "set": func(v): fb_stretch.x = lerpf(0.9, 1.1, v)},
+		{"id": "fb_sy", "label": "Feedback stretch Y", "set": func(v): fb_stretch.y = lerpf(0.9, 1.1, v)},
 	]
 
 
@@ -448,6 +508,14 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "next_scene", "label": "Next scene", "do": func(): step_scene(1)})
+	out.append({"id": "prev_scene", "label": "Previous scene", "do": func(): step_scene(-1)})
+	out.append({"id": "scene_off", "label": "Scene off", "do": func(): set_scene("")})
+	out.append({"id": "warp_reset", "label": "Reset feedback warp", "do": func():
+		fb_warp = 0.0
+		fb_drift = Vector2.ZERO
+		fb_stretch = Vector2.ONE
+		_update_hud()})
 	out.append({"id": "glow", "label": "Glow off/soft/heavy", "do": func():
 		_glow.cycle()
 		_update_hud()})
@@ -566,6 +634,9 @@ func _build_hud() -> void:
 		_glow.cycle()
 		_refresh_fx())
 	_verb_panel.add_child(_fx_glow_btn)
+	_fx_scene_btn = UI.button("", func(): step_scene(1))
+	_fx_scene_btn.tooltip_text = "Tab / Shift+Tab; ` turns it off"
+	_verb_panel.add_child(_fx_scene_btn)
 	_verb_panel.add_child(UI.vspace(6))
 	_verb_panel.add_child(UI.button("Recolor slot (X)", func(): _recolor()))
 	_verb_panel.add_child(UI.button("Remove slot (Del)", func(): Toolbox.remove(Toolbox.selected)))
@@ -588,6 +659,7 @@ func _build_hud() -> void:
 		+ "drop image   raster slot (Shift+drop: chroma backdrop)\nZ            webcam: off/layer/backdrop\n"
 		+ "S            steal palette from raster / webcam\nD            glow off/soft/heavy\n"
 		+ "F1-F12       recall preset · Shift+F saves\n"
+		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -681,6 +753,8 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 func _update_hud() -> void:
 	if _fx_glow_btn:
 		_fx_glow_btn.text = "D  Glow: %s" % _glow.describe()
+	if _fx_scene_btn:
+		_fx_scene_btn.text = "Tab  Scene: %s" % (Scenes.get_scene(Scenes.current).get("name", "?") if Scenes.current != "" else "off")
 	var cur := Toolbox.current()
 	var name := str(cur.get("term", "—")) if not cur.is_empty() else "empty toolbox — press Find Icons"
 	_hud.text = "slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   monitor: %s   ·   actors: %d" % [
@@ -696,6 +770,9 @@ func _update_hud() -> void:
 	line2 += "   ·   webcam: " + (("%s, %s" % [webcam_mode(), _webcam.status]) if _webcam_mode > 0 else "off (Z)")
 	if _steal_note != "":
 		line2 += "   ·   " + _steal_note
+	line2 += "   ·   scene: " + (("%s  spd %.1f  scl %.1f" % [Scenes.get_scene(Scenes.current).get("name", "?"), Scenes.speed, Scenes.scale]) if Scenes.current != "" else "off (Tab)")
+	if fb_warp > 0.0 or fb_drift != Vector2.ZERO:
+		line2 += "   ·   warp %.2f drift %d,%d" % [fb_warp, fb_drift.x, fb_drift.y]
 	_hud.text += "\n" + line2
 
 
@@ -714,6 +791,7 @@ func _apply_palette() -> void:
 	_fx.set_palette(palette_index)
 	_monitor.accent = Palettes.color(palette_index, 0)
 	_monitor.queue_redraw()
+	_scene_layer.set_palette(palette_index)
 	_hotbar.palette_index = palette_index
 	_hotbar.refresh()
 	for a in _actors.get_children() + _solids.get_children():
@@ -748,10 +826,15 @@ func _process(_delta: float) -> void:
 	if feedback:
 		var cur: int = _flip
 		_flip = 1 - _flip
-		var prev: Sprite2D = _acc_prev[cur]
+		var prev: MeshInstance2D = _acc_prev[cur]
 		prev.scale = Vector2.ONE * fb_zoom
 		prev.rotation = fb_rot
 		prev.modulate = Color(1, 1, 1, fb_fade)
+		var m: ShaderMaterial = _acc_mats[cur]
+		m.set_shader_parameter("warp", fb_warp)
+		m.set_shader_parameter("warp_speed", fb_warp_speed)
+		m.set_shader_parameter("drift", fb_drift)
+		m.set_shader_parameter("stretch", fb_stretch)
 		_acc[1 - cur].render_target_update_mode = SubViewport.UPDATE_DISABLED
 		_acc[cur].render_target_update_mode = SubViewport.UPDATE_ONCE
 		_screen.texture = _acc[cur].get_texture()
@@ -838,6 +921,24 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 	if k >= KEY_1 and k <= KEY_9:
 		Toolbox.select(k - KEY_1)
 		return
+	match k:
+		KEY_TAB:
+			step_scene(-1 if ev.shift_pressed else 1)
+			get_viewport().set_input_as_handled()
+			return
+		KEY_QUOTELEFT:
+			set_scene("")
+			return
+		KEY_UP: fb_drift.y -= 1.0
+		KEY_DOWN: fb_drift.y += 1.0
+		KEY_LEFT: fb_drift.x -= 1.0
+		KEY_RIGHT: fb_drift.x += 1.0
+		KEY_PAGEUP: fb_warp = minf(1.0, fb_warp + 0.05)
+		KEY_PAGEDOWN: fb_warp = maxf(0.0, fb_warp - 0.05)
+		KEY_HOME:
+			fb_warp = 0.0
+			fb_drift = Vector2.ZERO
+			fb_stretch = Vector2.ONE
 	var verb := Verbs.by_key(k)
 	if verb != "" and not Toolbox.current().is_empty():
 		Toolbox.toggle_verb(Toolbox.selected, verb)
