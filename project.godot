@@ -1,0 +1,35 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Video Toy"
+config/description="A Noun Project icon toy for streams, VODs and Knobcon."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+NounApi="*res://src/noun_api.gd"
+IconMedia="*res://src/icon_media.gd"
+Toolbox="*res://src/toolbox.gd"
+Ledger="*res://src/ledger.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=1

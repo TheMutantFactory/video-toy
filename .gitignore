@@ -1,0 +1,16 @@
+# Godot 4+
+.godot/
+/android/
+
+# macOS
+.DS_Store
+*.webloc
+
+# Secrets — never commit credentials (the real store lives in user:// anyway)
+*credentials*.cfg
+secrets.cfg
+.env
+
+# Test probes and captured screenshots
+tests/probe_*
+out/
