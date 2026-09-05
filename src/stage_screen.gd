@@ -185,6 +185,12 @@ var _rd_flip := 0
 var rd_preset := 0
 var rd_feed := 0.0545
 var rd_kill := 0.062
+var _ticker: Label
+var ticker_on := false
+var _roll: Control
+var _roll_body: VBoxContainer
+var _roll_t := 0.0
+var _roll_speed := 60.0
 var bank := 0
 var preset_fade := 1.0
 var last_preset := 0
@@ -320,6 +326,31 @@ func _ready() -> void:
 	_blackout.modulate.a = 0.0
 	_blackout.visible = false
 	add_child(_blackout)
+
+	# credits ticker: one line along the bottom of the picture, under the blackout
+	_ticker = UI.label("", 18, Color(0.92, 0.92, 0.95, 0.9))
+	_ticker.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	_ticker.offset_top = -30
+	_ticker.offset_left = 16
+	_ticker.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_ticker.clip_text = true
+	_ticker.visible = false
+	_ticker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_ticker)
+	move_child(_ticker, _blackout.get_index())
+
+	# credits roll: scrolls the full ledger up over the picture (end card)
+	_roll = Control.new()
+	_roll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_roll.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_roll.clip_contents = true
+	_roll.visible = false
+	add_child(_roll)
+	move_child(_roll, _blackout.get_index())
+	_roll_body = VBoxContainer.new()
+	_roll_body.add_theme_constant_override("separation", 10)
+	_roll_body.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_roll.add_child(_roll_body)
 
 	_monitor = MonitorScript.new()
 	_monitor.setup(_composite.get_texture(), Vector2(WORLD) * 0.5)
@@ -1046,6 +1077,94 @@ func _input(ev: InputEvent) -> void:
 		_p2_pad_button(ev.button_index)
 
 
+# ---------------- credits ----------------
+## Distinct slot ids of everything on stage (actors, riders, solids, formations).
+func onstage_ids() -> Array:
+	var ids := {}
+	for a in all_actors():
+		ids[a.slot_id] = true
+	for sol in _solids.get_children():
+		ids[sol.slot_id] = true
+	for f in _formations.get_children():
+		ids[f.slot_id] = true
+	return ids.keys()
+
+
+func onstage_credit_lines() -> Array:
+	var out: Array = []
+	var ids := onstage_ids()
+	for e in Ledger.entries:
+		if ids.has(str(e.get("id", ""))):
+			out.append(Ledger.credit_line(e))
+	return out
+
+
+func set_ticker(on: bool) -> void:
+	ticker_on = on
+	_ticker.visible = on
+	_refresh_ticker()
+	_update_hud()
+
+
+func _refresh_ticker() -> void:
+	if not ticker_on:
+		return
+	var parts: Array = []
+	var ids := onstage_ids()
+	for e in Ledger.entries:
+		if ids.has(str(e.get("id", ""))):
+			parts.append(Ledger.line_for(e))
+	_ticker.text = ("icons: " + "  ·  ".join(parts)) if not parts.is_empty() else "icons from The Noun Project — thenounproject.com"
+
+
+## Screenshot of the picture (composite, no HUD) with the credits burned in.
+func screenshot_with_credits() -> String:
+	var img: Image = _composite.get_texture().get_image()
+	if img == null or img.is_empty():
+		_steal_note = "screenshot: no picture (headless?)"
+		_update_hud()
+		return ""
+	var lines := onstage_credit_lines()
+	lines.push_front("Made with Video Toy — icons from The Noun Project (CC BY unless noted)")
+	var path := Shot.save(Shot.compose(img, lines))
+	_steal_note = ("saved " + ProjectSettings.globalize_path(path)) if path != "" else "screenshot failed"
+	_update_hud()
+	return path
+
+
+func start_credits_roll() -> void:
+	for c in _roll_body.get_children():
+		c.queue_free()
+	_roll_body.add_child(UI.label("Video Toy", 64, UI.ACCENT))
+	_roll_body.add_child(UI.label("icons from The Noun Project · thenounproject.com", 26))
+	_roll_body.add_child(UI.vspace(30))
+	for line in Ledger.credits_text().split("\n"):
+		if line.strip_edges() != "":
+			_roll_body.add_child(UI.label(line, 22 if not line.ends_with(":") else 26, Color.WHITE if not line.ends_with(":") else UI.ACCENT))
+	_roll_body.add_child(UI.vspace(80))
+	_roll_body.add_child(UI.label("thank you", 40, UI.ACCENT))
+	_roll_body.position = Vector2((1920 - 1200) * 0.5, 1080)
+	_roll_body.custom_minimum_size = Vector2(1200, 0)
+	_roll_t = 0.0
+	_roll.visible = true
+	_update_hud()
+
+
+func stop_credits_roll() -> void:
+	_roll.visible = false
+	_update_hud()
+
+
+func _tick_credits(delta: float) -> void:
+	if _roll.visible:
+		_roll_t += delta
+		_roll_body.position.y = 1080.0 - _roll_t * _roll_speed
+		if _roll_body.position.y + _roll_body.size.y < -20.0:
+			stop_credits_roll()
+	if ticker_on and Engine.get_process_frames() % 60 == 0:
+		_refresh_ticker()
+
+
 # ---------------- quality ----------------
 ## Frame delta is useless on a vsynced display (this one is 30 Hz), so the
 ## ladder watches real work: script time plus measured CPU + GPU render time
@@ -1168,6 +1287,7 @@ func panic() -> void:
 		toggle_record()
 	if blackout:
 		toggle_blackout()
+	stop_credits_roll()
 	_refresh_fx()
 	_steal_note = "PANIC: known-good look (toolbox kept)"
 	_update_hud()
@@ -1633,6 +1753,13 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "screenshot", "label": "Screenshot with credits", "do": func(): screenshot_with_credits()})
+	out.append({"id": "ticker", "label": "Credits ticker on/off", "do": func(): set_ticker(not ticker_on)})
+	out.append({"id": "credits_roll", "label": "Credits roll start/stop", "do": func():
+		if _roll.visible:
+			stop_credits_roll()
+		else:
+			start_credits_roll()})
 	out.append({"id": "panic", "label": "PANIC: known-good look", "do": panic})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": cycle_quality_lock})
@@ -1875,6 +2002,7 @@ func _build_hud() -> void:
 		+ "Shift+N      particle field (right-click scatters) · Shift+I Field verb\nShift+O      reaction-diffusion presets\n"
 		+ "keypad/pad   player 2: 8/2/4/6 or stick moves · 5/A spawns · 0/B removes\n             +/-/X slot · ./Y layer · */LB spin · //RB solid · Shift+2 hides\n"
 		+ "Shift+Esc    PANIC: known-good look · Shift+H blackout · Shift+F quality lock\n"
+		+ "Shift+V      screenshot + credits strip · Shift+L credits ticker · Shift+C credits roll\n"
 		+ "F1-F12       recall preset · Shift+F saves · Shift+, . bank · Shift+- = prev/next preset · Shift+; fade\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -1984,7 +2112,7 @@ func _update_hud() -> void:
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + ("   ·   BLACKOUT" if blackout else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
+		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + ("   ·   BLACKOUT" if blackout else "") + ("   ·   TICKER" if ticker_on else "") + ("   ·   CREDITS" if _roll.visible else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
 	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
@@ -2345,8 +2473,11 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				_update_hud()
 		KEY_M: set_monitor(not _monitor.visible)
 		KEY_V:
-			_fx.cycle_crt()
-			_refresh_fx()
+			if ev.shift_pressed:
+				screenshot_with_credits()
+			else:
+				_fx.cycle_crt()
+				_refresh_fx()
 		KEY_G:
 			if ev.shift_pressed:
 				_fx.key_threshold = fmod(_fx.key_threshold + 0.1, 0.95)
@@ -2361,8 +2492,11 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				_fx.cycle_pixelate()
 			_refresh_fx()
 		KEY_L:
-			_fx.toggle_quantize()
-			_refresh_fx()
+			if ev.shift_pressed:
+				set_ticker(not ticker_on)
+			else:
+				_fx.toggle_quantize()
+				_refresh_fx()
 		KEY_J:
 			_fx.toggle_dither()
 			_refresh_fx()
@@ -2373,6 +2507,12 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			if ev.shift_pressed: step_preset(1)
 			else: fb_fade = minf(0.995, fb_fade + 0.02)
 		KEY_C:
+			if ev.shift_pressed:
+				if _roll.visible:
+					stop_credits_roll()
+				else:
+					start_credits_roll()
+				return
 			clear_actors()
 			for a in _solids.get_children() + _formations.get_children():
 				a.queue_free()

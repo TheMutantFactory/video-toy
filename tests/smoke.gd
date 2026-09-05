@@ -89,10 +89,18 @@ func _init() -> void:
 	_check("ledger dedupes by id", led.count() == 23)
 	_check("ledger paginates", led.page_count(10) == 3 and led.page(2, 10).size() == 3 and led.page(5, 10).is_empty())
 	_check("ledger attribution line", led.line_for(led.entries[0]) == "t0 by C from The Noun Project")
+	led.record({"id": "n1", "term": "cat", "attribution": "cat by A from Noun Project", "license_description": "creative-commons-attribution",
+		"permalink": "/icon/cat-1/", "creator": {"name": "A", "permalink": "/creator/a/"}})
+	led.record({"id": "loc1", "term": "photo", "attribution": "photo.jpg — local image", "license": "user-supplied", "source": "local file"})
+	_check("credit line carries license and absolute link",
+		led.credit_line(led.entries[led.count() - 2]) == "cat by A from Noun Project (creative-commons-attribution) — https://thenounproject.com/icon/cat-1/")
+	var ct: String = led.credits_text(["n1", "loc1"])
+	_check("credits text groups Noun Project and other assets and filters by id",
+		ct.contains("Icons from The Noun Project") and ct.contains("cat by A") and ct.contains("Other assets:") and ct.contains("photo.jpg") and not ct.contains("t0 by C"))
 	var led2 = load("res://src/ledger.gd").new()
 	led2.path = led.path
 	led2.load_from_disk()
-	_check("ledger persists", led2.count() == 23)
+	_check("ledger persists", led2.count() == led.count() and led2.count() == 25)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(led.path))
 	led.free()
 	led2.free()

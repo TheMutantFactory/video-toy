@@ -379,6 +379,45 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL banks / crossfade (zoom=%.3f glow=%d dolly=%.2f)" % [st.fb_zoom, st._glow.level, st.cam_dolly])
+	# credits: on-stage ids, ticker text, roll, and the burned-in strip composer
+	var ok_cr := true
+	st.clear_actors()
+	Toolbox.select(0)
+	st.spawn_at(Vector2(500, 500))
+	Toolbox.select(2)
+	st.spawn_at(Vector2(700, 500))
+	await get_tree().process_frame
+	var ids: Array = st.onstage_ids()
+	ok_cr = ok_cr and ids.size() == 2 and ids.has(Toolbox.slots[0]["id"]) and ids.has(Toolbox.slots[2]["id"])
+	st.set_ticker(true)
+	ok_cr = ok_cr and st._ticker.visible and st._ticker.text.begins_with("icons: ") and st._ticker.text.contains("star")
+	st.set_ticker(false)
+	st.start_credits_roll()
+	st._tick_credits(0.5)
+	ok_cr = ok_cr and st._roll.visible and st._roll_body.position.y < 1080.0 and st._roll_body.get_child_count() > 4
+	st.stop_credits_roll()
+	var pic := Image.create(320, 180, false, Image.FORMAT_RGBA8)
+	pic.fill(Color(0.2, 0.3, 0.9))
+	var burned := Shot.compose(pic, ["Made with Video Toy", "star by The Mutant Factory (public-domain)"])
+	var strip_has_text := false
+	for yy in range(180, burned.get_height(), 2):
+		for xx in range(0, 320, 2):
+			if burned.get_pixel(xx, yy).r > 0.5:
+				strip_has_text = true
+	ok_cr = ok_cr and burned.get_height() == 180 + Shot.PAD * 2 + Shot.LINE_PX * 2 and burned.get_pixel(10, 10).b > 0.8 and strip_has_text
+	var saved_path := Shot.save(burned, "user://_selftest_shots")
+	ok_cr = ok_cr and saved_path != "" and FileAccess.file_exists(saved_path)
+	if saved_path != "":
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(saved_path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://_selftest_shots"))
+	var ctext: String = Ledger.credits_text()
+	ok_cr = ok_cr and ctext.begins_with("Made with Video Toy") and ctext.contains("Other assets:")
+	st.clear_actors()
+	if ok_cr:
+		print("PASS credits: on-stage ids, ticker, roll, burned-in strip, export text")
+	else:
+		fails += 1
+		printerr("FAIL credits")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -448,7 +487,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -828,6 +867,21 @@ func _capture_all(dir: String) -> void:
 				await get_tree().create_timer(0.3).timeout
 				current.toggle_blackout()
 				await get_tree().create_timer(0.25).timeout       # mid-fade
+			"credits":
+				# Ticker on, then the credits roll a few seconds in; and a burned-in shot.
+				if current.blackout:
+					current.toggle_blackout()
+					await get_tree().create_timer(0.6).timeout
+				current.p2_sleep()
+				Toolbox.select(1)
+				for i in 5:
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current.set_ticker(true)
+				await get_tree().create_timer(0.3).timeout
+				var shot_path: String = current.screenshot_with_credits()
+				print("SHOT ", shot_path)
+				current.start_credits_roll()
+				await get_tree().create_timer(4.0).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

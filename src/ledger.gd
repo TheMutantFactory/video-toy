@@ -74,6 +74,50 @@ func page_count(per_page: int) -> int:
 	return maxi(1, ceili(float(entries.size()) / per_page))
 
 
+## One credit line with the link: "term by Creator (license) — url".
+static func credit_line(e: Dictionary) -> String:
+	var line := line_for(e)
+	var lic := str(e.get("license", ""))
+	if lic != "":
+		line += " (%s)" % lic
+	var link := str(e.get("permalink", ""))
+	if link != "":
+		line += " — " + (link if link.begins_with("http") else "https://thenounproject.com" + link)
+	return line
+
+
+## The whole ledger (or just `ids`) as a text block for a VOD description.
+func credits_text(ids: Array = []) -> String:
+	var noun: Array = []
+	var local: Array = []
+	for e in entries:
+		if not ids.is_empty() and not ids.has(str(e.get("id", ""))):
+			continue
+		if str(e.get("source", "The Noun Project")) == "The Noun Project":
+			noun.append(credit_line(e))
+		else:
+			local.append(credit_line(e))
+	var out: Array = ["Made with Video Toy (github.com/TheMutantFactory/video-toy)"]
+	if not noun.is_empty():
+		out.append("")
+		out.append("Icons from The Noun Project (thenounproject.com):")
+		out.append_array(noun)
+	if not local.is_empty():
+		out.append("")
+		out.append("Other assets:")
+		out.append_array(local)
+	return "\n".join(out) + "\n"
+
+
+func write_credits(path := "user://credits.txt", ids: Array = []) -> String:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return ""
+	f.store_string(credits_text(ids))
+	f.close()
+	return path
+
+
 static func line_for(e: Dictionary) -> String:
 	var line := str(e.get("attribution", ""))
 	if line == "":

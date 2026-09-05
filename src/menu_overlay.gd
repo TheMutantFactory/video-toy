@@ -68,6 +68,14 @@ func _ready() -> void:
 	head.add_child(UI.button("← Menu", func(): show_menu()))
 	head.add_child(UI.hspace())
 	head.add_child(UI.label("Attribution", 36, UI.ACCENT))
+	head.add_child(UI.hspace(16))
+	head.add_child(UI.button("Copy credits", func():
+		DisplayServer.clipboard_set(Ledger.credits_text())
+		_page_lbl.text = "credits copied to the clipboard (%d assets)" % Ledger.count(), 160))
+	head.add_child(UI.hspace(6))
+	head.add_child(UI.button("Save credits.txt", func():
+		var p := Ledger.write_credits()
+		_page_lbl.text = ("saved " + ProjectSettings.globalize_path(p)) if p != "" else "could not write credits.txt", 190))
 	_attrib.add_child(head)
 	_attrib.add_child(UI.label("Every asset this toy has downloaded, with the license it came under. Click to open the icon or creator page.", 16, UI.DIM))
 	_list = VBoxContainer.new()
