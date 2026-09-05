@@ -130,6 +130,15 @@ stands. All of it is learnable, so two pads can be the vote.
 when none are saved — with a slow camera orbit and the monitor on. Any key, click, MIDI or pad
 ends it and restores the stage as it was. It is the screensaver and the table demo.
 
+## Icon distance fields: Morph and Outline
+
+Every icon gets a **signed distance field** (an 8SSEDT distance transform of its alpha at 200 px,
+cached in `user://icons/sdf`), and a shader draws shapes from it with crisp edges at any scale.
+The **Morph** verb (Shift+M) blends the icon's field into the next icon's in the toolbox — a star
+becomes a heart — then steps on to the next, every 1.5 s or, with audio on, in two jumps per
+beat. The **Outline** verb (Shift+J) hollows the icon to a ring that follows its silhouette;
+both together outline the morph.
+
 ## Timeline and attractors
 
 **Shift+R** records every param and action that arrives through the controllers (MIDI, pads,
@@ -286,6 +295,7 @@ src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vert
 src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)
 src/boids.gd                flocking maths (2D and 3D) for the Flock verb
 src/attractors.gd           Lorenz, Rössler, Clifford, de Jong (pure functions)
+src/sdf.gd + morph.gdshader signed distance fields (8SSEDT) and the Morph / Outline shader
 src/field.gd + particles.gdshader   curl-noise flow field (CPU for the verb, GPU for 12k dots)
 src/rd.gdshader             Gray-Scott step (ping-ponged by the stage, composited in _worldmix)
 src/p2_cursor.gd            player 2's cursor

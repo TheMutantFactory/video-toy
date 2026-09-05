@@ -20,6 +20,13 @@ var _map := Vector2.ZERO                   # iterated-map state
 var _map_from := Vector2.ZERO
 var _map_t := 1.0
 var _att_centre := Vector2.ZERO
+var _tex_orig: Texture2D                     # the plain icon texture
+var _sdf_mat: ShaderMaterial                 # set while morph / outline are on
+var _sdf_mult := 1.0                         # sprite scale factor when showing the SDF texture
+var _morph_target := ""                      # slot id being morphed to
+var _morph_t := 0.0
+var _morph_last_beat := 0.0
+var _sdf_shader: Shader = preload("res://src/morph.gdshader")
 var attract := false                       # stage: left button held on empty space
 var scatter_from := Vector2.INF            # stage: right-click on empty space (one frame)
 
@@ -52,6 +59,7 @@ func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
 
 	_sprite = Sprite2D.new()
 	_sprite.texture = IconMedia.texture_for(str(slot.get("svg_path", "")))
+	_tex_orig = _sprite.texture
 	_sprite.scale = Vector2.ONE * base_scale
 	_sprite.modulate = _base_color
 	add_child(_sprite)
@@ -210,7 +218,9 @@ func _process(delta: float) -> void:
 		s *= (1.0 + 0.7 * AudioReact.bass) if AudioReact.active() else (1.0 + 0.25 * sin(t * 4.0))
 	if AudioReact.active():
 		s *= 1.0 + 0.18 * AudioReact.beat_env              # everyone jumps on the beat
-	_sprite.scale = Vector2.ONE * s
+	_sprite.scale = Vector2.ONE * s * _sdf_mult
+
+	_tick_sdf(verbs, delta)
 
 	if verbs.has("rainbow"):
 		var c := _base_color
@@ -227,6 +237,95 @@ func _process(delta: float) -> void:
 	if verbs.has("sparkle") and AudioReact.active() and AudioReact.beat_env > _last_beat:
 		_burst.restart()
 	_last_beat = AudioReact.beat_env
+
+
+# ---------------- morph / outline (signed distance fields) ----------------
+func _sdf_enter() -> bool:
+	var i := Toolbox.index_of(slot_id)
+	if i < 0:
+		return false
+	var mine := IconMedia.sdf_for(str(Toolbox.slots[i].get("svg_path", "")))
+	if mine == null:
+		return false
+	_sdf_mat = ShaderMaterial.new()
+	_sdf_mat.shader = _sdf_shader
+	_sdf_mat.set_shader_parameter("sdf_b", mine)
+	_sdf_mat.set_shader_parameter("t", 0.0)
+	_sprite.texture = mine
+	_sprite.material = _sdf_mat
+	_sdf_mult = (_tex_orig.get_size().x / mine.get_size().x) if _tex_orig else 1.0
+	_morph_target = ""
+	_morph_t = 0.0
+	return true
+
+
+func _sdf_leave() -> void:
+	_sprite.texture = _tex_orig
+	_sprite.material = null
+	_sdf_mat = null
+	_sdf_mult = 1.0
+	_morph_target = ""
+
+
+## The next non-raster slot after `from_id` in the toolbox (wrapping), or "".
+static func next_morph_target(from_id: String) -> String:
+	var n := Toolbox.slots.size()
+	if n < 2:
+		return ""
+	var i := Toolbox.index_of(from_id)
+	for k in range(1, n):
+		var j := posmod(i + k, n)
+		if not Toolbox.is_raster_slot(Toolbox.slots[j]):
+			return str(Toolbox.slots[j]["id"])
+	return ""
+
+
+func _tick_sdf(verbs: Array, delta: float) -> void:
+	var want := verbs.has("morph") or verbs.has("outline")
+	if want and _sdf_mat == null:
+		if not _sdf_enter():
+			return
+	elif not want and _sdf_mat != null:
+		_sdf_leave()
+		return
+	if _sdf_mat == null:
+		return
+	_sdf_mat.set_shader_parameter("outline", 0.06 if verbs.has("outline") else 0.0)
+	if not verbs.has("morph"):
+		if _morph_t != 0.0:
+			_morph_t = 0.0
+			_sdf_mat.set_shader_parameter("t", 0.0)
+		return
+	if _morph_target == "":
+		_morph_target = next_morph_target(slot_id)
+		if _morph_target == "":
+			return
+		var ti := Toolbox.index_of(_morph_target)
+		var tex := IconMedia.sdf_for(str(Toolbox.slots[ti].get("svg_path", "")))
+		if tex == null:
+			_morph_target = ""
+			return
+		_sdf_mat.set_shader_parameter("sdf_b", tex)
+	# advance: steadily, or in jumps on the beat when audio is on
+	if AudioReact.active():
+		if AudioReact.beat_env > _morph_last_beat:
+			_morph_t = minf(1.0, _morph_t + 0.5)
+		_morph_last_beat = AudioReact.beat_env
+	else:
+		_morph_t = minf(1.0, _morph_t + delta / 1.5)
+	_sdf_mat.set_shader_parameter("t", smoothstep(0.0, 1.0, _morph_t))
+	if _morph_t >= 1.0:
+		# arrived: the target's field becomes A, pick the next B
+		_sprite.texture = _sdf_mat.get_shader_parameter("sdf_b")
+		var arrived := _morph_target
+		_morph_target = next_morph_target(arrived)
+		_morph_t = 0.0
+		_sdf_mat.set_shader_parameter("t", 0.0)
+		if _morph_target != "":
+			var ti2 := Toolbox.index_of(_morph_target)
+			var tex2 := IconMedia.sdf_for(str(Toolbox.slots[ti2].get("svg_path", "")))
+			if tex2:
+				_sdf_mat.set_shader_parameter("sdf_b", tex2)
 
 
 func _random_point() -> Vector2:

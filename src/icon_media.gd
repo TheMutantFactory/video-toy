@@ -11,8 +11,11 @@ const SVG_SCALE := 4.0                      # 100pt API canvas -> ~400px texture
 const RASTER_MAX := 512                     # raster slots are downscaled to this
 const RASTER_EXT := ["png", "jpg", "jpeg", "webp", "bmp", "tga"]
 
+const SDF_DIR := "user://icons/sdf"
+
 var _thumbs := {}                           # url -> ImageTexture
 var _svgs := {}                             # path -> ImageTexture
+var _sdfs := {}                             # path -> ImageTexture (distance field)
 
 
 func get_thumbnail(url: String, cb: Callable) -> void:
@@ -58,6 +61,25 @@ func texture_for(path: String) -> ImageTexture:
 	if tex:
 		_svgs[path] = tex
 	return tex
+
+
+## The icon's signed distance field (see sdf.gd), computed once per icon and
+## cached on disk. Any slot works; a photo's field is its alpha rectangle.
+func sdf_for(path: String) -> ImageTexture:
+	if _sdfs.has(path):
+		return _sdfs[path]
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SDF_DIR))
+	var disk := "%s/%d.png" % [SDF_DIR, absi(path.hash())]
+	var img := Image.new()
+	if not FileAccess.file_exists(disk) or img.load(ProjectSettings.globalize_path(disk)) != OK:
+		var tex := texture_for(path)
+		if tex == null:
+			return null
+		img = Sdf.from_alpha(tex.get_image())
+		img.save_png(ProjectSettings.globalize_path(disk))
+	var out := ImageTexture.create_from_image(img)
+	_sdfs[path] = out
+	return out
 
 
 static func is_raster(path: String) -> bool:

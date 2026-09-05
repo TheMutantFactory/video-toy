@@ -432,6 +432,33 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL credits")
+	# SDF: field cached, morph verb swaps texture + material and advances, outline sets the ring
+	var ok_sdf := true
+	var sdf_tex = IconMedia.sdf_for(str(Toolbox.slots[0]["svg_path"]))
+	ok_sdf = ok_sdf and sdf_tex != null and sdf_tex.get_width() == Sdf.RES and FileAccess.file_exists("%s/%d.png" % [IconMedia.SDF_DIR, absi(str(Toolbox.slots[0]["svg_path"]).hash())])
+	st.clear_actors()
+	if not Toolbox.has_verb(0, "morph"):
+		Toolbox.toggle_verb(0, "morph")
+	Toolbox.select(0)
+	st.spawn_at(Vector2(600, 500))
+	await get_tree().create_timer(0.4).timeout
+	var act = st.all_actors()[0]
+	var t_now: float = float(act._sdf_mat.get_shader_parameter("t")) if act._sdf_mat else -1.0
+	ok_sdf = ok_sdf and act._sdf_mat != null and act._sprite.texture == sdf_tex and act._morph_target == Toolbox.slots[1]["id"] and t_now > 0.05 and t_now < 0.9 and act._sdf_mult > 1.5
+	Toolbox.toggle_verb(0, "morph")
+	Toolbox.toggle_verb(0, "outline")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_sdf = ok_sdf and act._sdf_mat != null and float(act._sdf_mat.get_shader_parameter("outline")) > 0.0 and float(act._sdf_mat.get_shader_parameter("t")) == 0.0
+	Toolbox.toggle_verb(0, "outline")
+	await get_tree().process_frame
+	ok_sdf = ok_sdf and act._sdf_mat == null and act._sprite.material == null and act._sprite.texture == act._tex_orig
+	st.clear_actors()
+	if ok_sdf:
+		print("PASS icon SDFs cached, Morph advances toward the next slot, Outline rings, both restore")
+	else:
+		fails += 1
+		printerr("FAIL sdf / morph")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -501,7 +528,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -896,6 +923,26 @@ func _capture_all(dir: String) -> void:
 				print("SHOT ", shot_path)
 				current.start_credits_roll()
 				await get_tree().create_timer(4.0).timeout
+			"morph":
+				# Stars morphing toward hearts, hearts outlined, bolts both.
+				current.stop_credits_roll()
+				current.set_ticker(false)
+				current.clear_actors()
+				for i in Toolbox.slots.size():
+					for v in ["pulse", "bounce", "field", "dejong"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+				for pair in [[0, "morph"], [1, "outline"], [2, "morph"], [2, "outline"]]:
+					if not Toolbox.has_verb(pair[0], pair[1]):
+						Toolbox.toggle_verb(pair[0], pair[1])
+				for i in 4:
+					Toolbox.select(0)
+					current.spawn_at(Vector2(400 + i * 380, 300))
+					Toolbox.select(1)
+					current.spawn_at(Vector2(400 + i * 380, 560))
+					Toolbox.select(2)
+					current.spawn_at(Vector2(400 + i * 380, 820))
+				await get_tree().create_timer(0.8).timeout     # mid-morph
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

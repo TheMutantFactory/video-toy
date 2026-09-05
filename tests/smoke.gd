@@ -550,6 +550,26 @@ func _init() -> void:
 	_check("neighbour steps through filled slots and wraps", Presets.neighbour(2, 1, bp, 4) == 6 and Presets.neighbour(6, 1, bp, 4) == 2 and Presets.neighbour(6, -1, bp, 4) == 2 and Presets.neighbour(4, 1, bp, 4) == 6 and Presets.neighbour(1, 1, bp, 1) == 0)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(bp))
 
+	# signed distance field of a disc: inside high, outside low, 0.5 at the rim, symmetric
+	var disc := Image.create(120, 120, false, Image.FORMAT_RGBA8)
+	for y in 120:
+		for x in 120:
+			disc.set_pixel(x, y, Color(1, 1, 1, 1.0 if Vector2(x - 60, y - 60).length() < 40 else 0.0))
+	var t0 := Time.get_ticks_msec()
+	var field := Sdf.from_alpha(disc, 100, 14.0)
+	var took := Time.get_ticks_msec() - t0
+	var c := Sdf.sample(field, 0.5, 0.5)
+	var rim := Sdf.sample(field, 0.5 + 40.0 / 120.0, 0.5)
+	var corner := Sdf.sample(field, 0.02, 0.02)
+	var just_in := Sdf.sample(field, 0.5 + 34.0 / 120.0, 0.5)
+	var just_out := Sdf.sample(field, 0.5 + 46.0 / 120.0, 0.5)
+	_check("sdf: centre saturates inside, corner outside, rim at 0.5", c > 0.95 and corner < 0.05 and absf(rim - 0.5) < 0.08)
+	_check("sdf: monotone across the edge and symmetric", just_in > 0.6 and just_out < 0.4 and absf(Sdf.sample(field, 0.5 - 34.0 / 120.0, 0.5) - just_in) < 0.05)
+	_check("sdf: a 100 px field computes in well under a second", took < 800)
+	var msh = load("res://src/morph.gdshader")
+	_check("morph shader loads", msh is Shader and msh.get_code().contains("sdf_b") and msh.get_code().contains("outline"))
+	_check("morph and outline verbs are on Shift+M / Shift+J", Verbs.by_key(KEY_M, true) == "morph" and Verbs.by_key(KEY_J, true) == "outline")
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 
