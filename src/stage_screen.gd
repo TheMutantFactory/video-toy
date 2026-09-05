@@ -5,7 +5,8 @@ extends Control
 ##
 ## Keys: 1-9 slot · Q W E R T Y U I verbs · click spawn · right-click remove
 ## · Space random spawn · P palette · F feedback · [ ] zoom · , . rotate
-## · - = fade · K pixelate · L palette quantise · J dither · C clear · H help · Esc menu
+## · - = fade · O kaleidoscope · G chroma key (drop an image for the backdrop)
+## · K pixelate · L palette quantise · J dither · C clear · H help · Esc menu
 
 signal navigate(name: String)
 
@@ -33,6 +34,8 @@ var _help: PanelContainer
 var _verb_panel: VBoxContainer
 var _verb_checks := {}
 var _fx_pixel_btn: Button
+var _fx_kaleido_btn: Button
+var _fx_chroma: CheckButton
 var _fx_quant: CheckButton
 var _fx_dither: CheckButton
 var _hotbar
@@ -96,6 +99,12 @@ func _ready() -> void:
 	_refresh_verbs()
 	_apply_palette()
 	_refresh_fx()
+	get_window().files_dropped.connect(_on_files_dropped)
+
+
+func _exit_tree() -> void:
+	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
+		get_window().files_dropped.disconnect(_on_files_dropped)
 
 
 # ---------------- HUD ----------------
@@ -123,6 +132,17 @@ func _build_hud() -> void:
 		_verb_checks[v["id"]] = cb
 	_verb_panel.add_child(UI.vspace(6))
 	_verb_panel.add_child(UI.label("Effects", 18, UI.ACCENT))
+	_fx_kaleido_btn = UI.button("", func():
+		_fx.cycle_kaleido()
+		_refresh_fx())
+	_verb_panel.add_child(_fx_kaleido_btn)
+	_fx_chroma = CheckButton.new()
+	_fx_chroma.text = "G  Chroma key"
+	_fx_chroma.tooltip_text = "Keys out the palette background. Drop an image on the window for the backdrop; plasma otherwise."
+	_fx_chroma.toggled.connect(func(_on):
+		_fx.toggle_chroma()
+		_refresh_fx())
+	_verb_panel.add_child(_fx_chroma)
 	_fx_pixel_btn = UI.button("", func():
 		_fx.cycle_pixelate()
 		_refresh_fx())
@@ -152,7 +172,8 @@ func _build_hud() -> void:
 		"click        spawn selected icon\nright-click  remove nearest\nSpace        spawn somewhere\n"
 		+ "1-9          select slot\nQ..I         toggle verbs\nX            recolor slot\n"
 		+ "P            next palette\nF            feedback on/off\n[ ]          feedback zoom\n"
-		+ ", .          feedback twist\n- =          feedback fade\nK            pixelate size\n"
+		+ ", .          feedback twist\n- =          feedback fade\nO            kaleidoscope\n"
+		+ "G            chroma key (drop image = backdrop)\nK            pixelate size\n"
 		+ "L            palette quantise\nJ            dither\nC            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -187,6 +208,8 @@ func _refresh_verbs() -> void:
 
 
 func _refresh_fx() -> void:
+	_fx_kaleido_btn.text = "O  Kaleidoscope: %s" % ("off" if _fx.kaleido_step == 0 else "%d" % _fx.kaleido_segments())
+	_fx_chroma.set_pressed_no_signal(_fx.chroma)
 	_fx_pixel_btn.text = "K  Pixelate: %s" % ("off" if _fx.pixel_step == 0 else "%d px" % _fx.pixel_size())
 	_fx_quant.set_pressed_no_signal(_fx.quantize)
 	_fx_dither.set_pressed_no_signal(_fx.dither)
@@ -195,9 +218,19 @@ func _refresh_fx() -> void:
 
 
 ## Used by --capture.
-func set_fx(pixel: int, quant: bool, dith: bool) -> void:
-	_fx.set_state(pixel, quant, dith)
+func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false) -> void:
+	_fx.set_state(pixel, quant, dith, kaleido, chroma)
 	_refresh_fx()
+
+
+func _on_files_dropped(files: PackedStringArray) -> void:
+	for f in files:
+		if f.get_extension().to_lower() in ["png", "jpg", "jpeg", "webp", "bmp"]:
+			if _fx.set_backdrop_from_file(f):
+				if not _fx.chroma:
+					_fx.toggle_chroma()
+				_refresh_fx()
+			return
 
 
 func _update_hud() -> void:
@@ -328,6 +361,12 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_BRACKETRIGHT: fb_zoom = minf(1.20, fb_zoom + 0.01)
 		KEY_COMMA: fb_rot -= 0.01
 		KEY_PERIOD: fb_rot += 0.01
+		KEY_O:
+			_fx.cycle_kaleido()
+			_refresh_fx()
+		KEY_G:
+			_fx.toggle_chroma()
+			_refresh_fx()
 		KEY_K:
 			_fx.cycle_pixelate()
 			_refresh_fx()
