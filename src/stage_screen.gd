@@ -333,7 +333,7 @@ func _build_hud() -> void:
 
 	# Verb panel sits on a translucent card so it reads on light palettes too.
 	var card := PanelContainer.new()
-	card.position = Vector2(12, 56)
+	card.position = Vector2(12, 96)
 	add_child(card)
 	_verb_panel = VBoxContainer.new()
 	_verb_panel.add_theme_constant_override("separation", 2)
