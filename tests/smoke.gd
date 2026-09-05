@@ -476,6 +476,24 @@ func _init() -> void:
 	tl3.start_record(0.0)
 	_check("recording past MAX stops itself", not tl3.record("param", "a", 1.0, Timeline.MAX + 1.0) and not tl3.recording)
 
+	# flow field: bounded, varies in space, nearly divergence-free
+	var fmax := 0.0
+	var fsum := Vector2.ZERO
+	for i in 200:
+		var pnt := Vector2(randf() * 1920.0, randf() * 1080.0)
+		var c := Field.curl(pnt, 3.0)
+		fmax = maxf(fmax, c.length())
+		fsum += c
+	var e := 2.0
+	var q := Vector2(700, 400)
+	var div := (Field.curl(q + Vector2(e, 0), 1.0).x - Field.curl(q - Vector2(e, 0), 1.0).x) / (2 * e) \
+		+ (Field.curl(q + Vector2(0, e), 1.0).y - Field.curl(q - Vector2(0, e), 1.0).y) / (2 * e)
+	_check("curl field is bounded, non-trivial and divergence-free", fmax > 0.05 and fmax < 5.0 and absf(div) < 0.01 and Field.curl(Vector2(10, 10), 0.0) != Field.curl(Vector2(900, 700), 0.0))
+	_check("field verb is on Shift+I", Verbs.by_key(KEY_I, true) == "field" and Verbs.by_key(KEY_I, false) == "swarm")
+	var psh = load("res://src/particles.gdshader")
+	var rsh = load("res://src/rd.gdshader")
+	_check("particle and reaction-diffusion shaders load", psh is Shader and psh.get_code().contains("shader_type particles") and rsh is Shader and rsh.get_code().contains("feed"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

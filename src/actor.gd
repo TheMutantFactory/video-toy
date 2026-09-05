@@ -158,6 +158,14 @@ func _process(delta: float) -> void:
 		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
 		home = position
 		moved = true
+	if mobile and verbs.has("field"):
+		var f := Field.curl(position, t) * 240.0
+		velocity = velocity.lerp(f, minf(1.0, delta * 3.0))
+		position += velocity * delta
+		position = Vector2(fposmod(position.x, bounds.size.x), fposmod(position.y, bounds.size.y))
+		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
+		home = position
+		moved = true
 	if mobile and (verbs.has("lorenz") or verbs.has("rossler")):
 		var lor := verbs.has("lorenz")
 		_att = Attractors.lorenz_step(_att, delta * 0.9) if lor else Attractors.rossler_step(_att, delta * 1.6)
@@ -194,7 +202,7 @@ func _process(delta: float) -> void:
 
 	if verbs.has("spin"):
 		_sprite.rotation += delta * 2.2
-	elif not (verbs.has("flock") or verbs.has("lorenz") or verbs.has("rossler")):
+	elif not (verbs.has("flock") or verbs.has("lorenz") or verbs.has("rossler") or verbs.has("field")):
 		_sprite.rotation = lerpf(_sprite.rotation, 0.0, 6.0 * delta)
 	var s := base_scale
 	if verbs.has("pulse"):

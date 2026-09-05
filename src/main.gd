@@ -257,6 +257,27 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL timeline")
+	# particle field + reaction-diffusion: build, toggle, presets, round-trip
+	var ok_pf: bool = st._particles != null and st._pmat.shader != null and st._rd.size() == 2
+	st.set_particles(true)
+	st._push_particles()
+	ok_pf = ok_pf and st.particles_on and st._particles.emitting
+	st.set_rd_preset(2)
+	st._tick_rd()
+	st._tick_rd()
+	ok_pf = ok_pf and st.rd_describe().begins_with("mitosis") and bool(st._layer_mix.material.get_shader_parameter("rd_on"))
+	var snap5: Dictionary = st.snapshot()
+	st.set_particles(false)
+	st.set_rd_preset(0)
+	st.restore(snap5, 0.0)
+	ok_pf = ok_pf and st.particles_on and st.rd_preset == 2
+	st.set_particles(false)
+	st.set_rd_preset(0)
+	if ok_pf:
+		print("PASS particle field and reaction-diffusion build, toggle and round-trip")
+	else:
+		fails += 1
+		printerr("FAIL particles / rd")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -326,7 +347,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -638,6 +659,37 @@ func _capture_all(dir: String) -> void:
 				current.fb_rot = 0.0
 				current._set_feedback(true)
 				await get_tree().create_timer(4.0).timeout
+			"particles":
+				# 12k dots on the curl field, pulled toward three icons on Field.
+				current._set_feedback(false)
+				current.clear_actors()
+				for i in Toolbox.slots.size():
+					for v in ["lorenz", "rossler", "clifford", "swarm"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+				if not Toolbox.has_verb(1, "field"):
+					Toolbox.toggle_verb(1, "field")
+				Toolbox.select(1)
+				for i in 3:
+					current.spawn_at(Vector2(randf_range(500, 1400), randf_range(300, 800)))
+				current.particles_attract = 0.8
+				current.set_particles(true)
+				await get_tree().create_timer(3.0).timeout
+			"rd":
+				# Coral preset seeded by orbiting icons, a few seconds in.
+				current.set_particles(false)
+				current.clear_actors()
+				for i in Toolbox.slots.size():
+					if Toolbox.has_verb(i, "field"):
+						Toolbox.toggle_verb(i, "field")
+					if not Toolbox.has_verb(i, "orbit"):
+						Toolbox.toggle_verb(i, "orbit")
+				for i in 5:
+					Toolbox.select(i)
+					current.spawn_at(Vector2(400 + i * 280, 540))
+				current.set_rd_preset(1)
+				await get_tree().create_timer(6.0).timeout
+				current.set_rd_preset(0)
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

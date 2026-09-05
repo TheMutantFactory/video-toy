@@ -41,6 +41,15 @@ const GlowScript = preload("res://src/glow.gd")
 const SceneLayerScript = preload("res://src/scene_layer.gd")
 const FormationScript = preload("res://src/formation.gd")
 const RidePathScript = preload("res://src/ride_path.gd")
+const RD_PRESETS := [
+	{"name": "off", "feed": 0.0, "kill": 0.0},
+	{"name": "coral", "feed": 0.0545, "kill": 0.062},
+	{"name": "mitosis", "feed": 0.0367, "kill": 0.0649},
+	{"name": "worms", "feed": 0.078, "kill": 0.061},
+	{"name": "spots", "feed": 0.030, "kill": 0.062},
+	{"name": "waves", "feed": 0.014, "kill": 0.045},
+]
+const RD_SIZE := Vector2i(480, 270)
 const LAYER_COUNT := 3
 const BLENDS := ["mix", "add", "sub", "mul"]
 ## Layer compositing is one shader pass in its own viewport (_worldmix) that
@@ -52,6 +61,10 @@ const BLEND_SHADER := """
 shader_type canvas_item;
 render_mode blend_disabled;
 uniform sampler2D world_tex : filter_nearest, repeat_disable;
+uniform sampler2D rd_tex : filter_linear, repeat_disable;
+uniform bool rd_on = false;
+uniform int palette_count = 0;
+uniform vec4 palette[16];
 uniform sampler2D layer1 : filter_linear, repeat_disable;
 uniform sampler2D layer2 : filter_linear, repeat_disable;
 uniform int mode1 = 0;      // 0 mix, 1 add, 2 sub, 3 mul
@@ -69,8 +82,23 @@ vec4 blend(vec4 dst, vec4 src, int mode) {
 	return vec4(clamp(c, 0.0, 1.0), a);
 }
 
+vec3 ring_color(float t) {
+	int n = max(palette_count - 1, 1);
+	float f = fract(t) * float(n);
+	int i = int(floor(f));
+	int j = (i + 1) % n;
+	return mix(palette[i].rgb, palette[j].rgb, smoothstep(0.0, 1.0, fract(f)));
+}
+
 void fragment() {
 	vec4 dst = texture(world_tex, UV);
+	if (rd_on) {
+		// reaction-diffusion painted UNDER the world: V through the palette
+		float v = texture(rd_tex, UV).g;
+		float a = smoothstep(0.08, 0.35, v);
+		vec4 rd = vec4(ring_color(v * 1.6 + 0.15), a);
+		dst = vec4(mix(rd.rgb, dst.rgb, dst.a), dst.a + rd.a * (1.0 - dst.a));
+	}
 	vec4 s1 = texture(layer1, UV);
 	s1.a *= opacity1;
 	dst = blend(dst, s1, mode1);
@@ -143,6 +171,18 @@ var _attract_timer := 0.0
 var _idle := 0.0
 var timeline := Timeline.new()
 var _clock := 0.0
+var _particles: GPUParticles2D
+var _pmat: ShaderMaterial
+var particles_on := false
+var particles_flow := 1.0
+var particles_attract := 0.5
+var _scatter_until := 0.0
+var _rd: Array = []                     # two RD viewports (ping-pong)
+var _rd_mats: Array = []
+var _rd_flip := 0
+var rd_preset := 0
+var rd_feed := 0.0545
+var rd_kill := 0.062
 const IDLE_ATTRACT := 60.0
 const EVOLVE_SECONDS := 6.0
 const EVOLVE_BEATS := 8
@@ -200,6 +240,8 @@ func _ready() -> void:
 	_actors = Node2D.new()
 	_world.add_child(_actors)
 	_build_layers()
+	_build_particles()
+	_build_rd()
 
 	for i in 2:
 		var vp := SubViewport.new()
@@ -411,6 +453,138 @@ func end_stroke() -> int:
 	_steal_note = "%d riders on a %d px path" % [n, RidePathScript.length_of(pts)]
 	_update_hud()
 	return n
+
+
+# ---------------- particle field ----------------
+func _build_particles() -> void:
+	_particles = GPUParticles2D.new()
+	_particles.amount = 12000
+	_particles.lifetime = 600.0
+	_particles.explosiveness = 1.0            # all at once; emission would otherwise trickle over the lifetime
+	_particles.preprocess = 0.0
+	_particles.z_index = -1
+	_particles.emitting = false
+	_particles.visible = false
+	_pmat = ShaderMaterial.new()
+	_pmat.shader = load("res://src/particles.gdshader")
+	_pmat.set_shader_parameter("bounds", Vector2(WORLD))
+	_pmat.set_shader_parameter("dot_size", 0.6)          # x16 px texture -> ~10 px dots
+	_particles.process_material = _pmat
+	# a soft dot
+	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	for y in 16:
+		for x in 16:
+			var d := Vector2(x - 7.5, y - 7.5).length() / 7.5
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(1.0 - d, 0.0, 1.0)))
+	_particles.texture = ImageTexture.create_from_image(img)
+	_world.add_child(_particles)
+	_push_particles()
+
+
+func set_particles(on: bool) -> void:
+	particles_on = on
+	_particles.visible = on
+	_particles.emitting = on
+	if on:
+		_particles.restart()
+	_update_hud()
+
+
+func _push_particles() -> void:
+	_pmat.set_shader_parameter("flow", particles_flow)
+	var repel := _clock < _scatter_until
+	_pmat.set_shader_parameter("attract", -1.0 if repel else particles_attract)
+	Scenes.apply_palette(_pmat, palette_index)
+	# attractors: the mouse, then the first icons
+	var list: Array[Color] = []
+	if _display == null:                                   # still building
+		return
+	var mouse := _world_pos(get_local_mouse_position())
+	if Rect2(Vector2.ZERO, Vector2(WORLD)).has_point(mouse):
+		list.append(Color(mouse.x, mouse.y, 1.0, 420.0))
+	for a in all_actors():
+		if list.size() >= 16:
+			break
+		var gp: Vector2 = a.global_position if a.riding else a.position
+		list.append(Color(gp.x, gp.y, 0.6, 260.0))
+	var arr: Array[Color] = list.duplicate()
+	while arr.size() < 16:
+		arr.append(Color(0, 0, 0, 1))
+	_pmat.set_shader_parameter("attractors", PackedColorArray(arr))
+	_pmat.set_shader_parameter("attractor_count", list.size())
+
+
+func scatter_particles() -> void:
+	_scatter_until = _clock + 0.35
+
+
+# ---------------- reaction-diffusion ----------------
+## Gray-Scott in two 480x270 viewports that alternate each frame; the world
+## texture seeds V, and _worldmix paints V through the palette under the
+## actors (see BLEND_SHADER).
+func _build_rd() -> void:
+	for i in 2:
+		var vp := SubViewport.new()
+		vp.size = RD_SIZE
+		vp.disable_3d = true
+		vp.transparent_bg = true
+		vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		add_child(vp)
+		var r := ColorRect.new()
+		r.size = Vector2(RD_SIZE)
+		r.color = Color.WHITE
+		var m := ShaderMaterial.new()
+		m.shader = load("res://src/rd.gdshader")
+		m.set_shader_parameter("seed_tex", _world.get_texture())
+		m.set_shader_parameter("texel", Vector2(1.0 / RD_SIZE.x, 1.0 / RD_SIZE.y))
+		r.material = m
+		vp.add_child(r)
+		_rd.append(vp)
+		_rd_mats.append(m)
+	_rd_mats[0].set_shader_parameter("prev_tex", _rd[1].get_texture())
+	_rd_mats[1].set_shader_parameter("prev_tex", _rd[0].get_texture())
+	_layer_mix.material.set_shader_parameter("rd_tex", _rd[0].get_texture())
+	_push_rd()
+
+
+func set_rd_preset(i: int) -> void:
+	rd_preset = posmod(i, RD_PRESETS.size())
+	var p: Dictionary = RD_PRESETS[rd_preset]
+	if rd_preset > 0:
+		rd_feed = p["feed"]
+		rd_kill = p["kill"]
+	if rd_preset == 0:
+		for vp in _rd:
+			vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_push_rd()
+	_update_hud()
+
+
+func cycle_rd() -> void:
+	set_rd_preset(rd_preset + 1)
+
+
+func _push_rd() -> void:
+	for m in _rd_mats:
+		m.set_shader_parameter("feed", rd_feed)
+		m.set_shader_parameter("kill", rd_kill)
+	_layer_mix.material.set_shader_parameter("rd_on", rd_preset > 0)
+
+
+func _tick_rd() -> void:
+	if rd_preset == 0:
+		return
+	var cur := _rd_flip
+	_rd_flip = 1 - _rd_flip
+	_rd[1 - cur].render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_rd[cur].render_target_update_mode = SubViewport.UPDATE_ONCE
+	_layer_mix.material.set_shader_parameter("rd_tex", _rd[cur].get_texture())
+
+
+func rd_describe() -> String:
+	if rd_preset == 0:
+		return "off"
+	return "%s f%.3f k%.3f" % [RD_PRESETS[rd_preset]["name"], rd_feed, rd_kill]
 
 
 # ---------------- webcam ----------------
@@ -851,6 +1025,8 @@ func snapshot() -> Dictionary:
 		"formation": _formation_index,
 		"layers": _layers.map(func(l): return {"blend": l["blend"], "opacity": l["opacity"]}),
 		"active_layer": active_layer,
+		"particles": {"on": particles_on, "flow": particles_flow, "attract": particles_attract},
+		"rd": {"preset": rd_preset, "feed": rd_feed, "kill": rd_kill},
 	}
 
 
@@ -913,6 +1089,17 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 		cam_roll = float(cam.get("roll", cam_roll))
 		cam_height = float(cam.get("height", cam_height))
 	_formation_index = posmod(int(d.get("formation", _formation_index)), FormationScript.KINDS.size())
+	var pt: Dictionary = d.get("particles", {})
+	if not pt.is_empty():
+		particles_flow = float(pt.get("flow", particles_flow))
+		particles_attract = float(pt.get("attract", particles_attract))
+		set_particles(bool(pt.get("on", particles_on)))
+	var rdd: Dictionary = d.get("rd", {})
+	if not rdd.is_empty():
+		set_rd_preset(int(rdd.get("preset", rd_preset)))
+		rd_feed = float(rdd.get("feed", rd_feed))
+		rd_kill = float(rdd.get("kill", rd_kill))
+		_push_rd()
 	var lay: Array = d.get("layers", [])
 	for i in mini(lay.size(), _layers.size()):
 		if lay[i] is Dictionary:
@@ -1009,6 +1196,14 @@ func midi_params() -> Array:
 		{"id": "cam_dolly", "label": "Camera dolly", "set": func(v): cam_dolly = lerpf(3.0, 14.0, v)},
 		{"id": "cam_roll", "label": "Camera roll", "set": func(v): cam_roll = lerpf(-PI, PI, v)},
 		{"id": "cam_height", "label": "Camera height", "set": func(v): cam_height = lerpf(-4.0, 4.0, v)},
+		{"id": "particles_flow", "label": "Particle flow", "set": func(v): particles_flow = lerpf(0.0, 2.0, v)},
+		{"id": "particles_attract", "label": "Particle attract (-1..1)", "set": func(v): particles_attract = lerpf(-1.0, 1.0, v)},
+		{"id": "rd_feed", "label": "Reaction feed", "set": func(v):
+			rd_feed = lerpf(0.01, 0.09, v)
+			_push_rd()},
+		{"id": "rd_kill", "label": "Reaction kill", "set": func(v):
+			rd_kill = lerpf(0.04, 0.07, v)
+			_push_rd()},
 		{"id": "active_layer", "label": "Active layer", "set": func(v): set_active_layer(_step(v, LAYER_COUNT))},
 		{"id": "layer_opacity", "label": "Layer opacity (active)", "set": func(v): set_layer_opacity(v)},
 	]
@@ -1047,6 +1242,9 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "particles", "label": "Particle field on/off", "do": func(): set_particles(not particles_on)})
+	out.append({"id": "scatter", "label": "Scatter particles", "do": scatter_particles})
+	out.append({"id": "rd", "label": "Next reaction-diffusion preset", "do": cycle_rd})
 	out.append({"id": "timeline_record", "label": "Timeline: record on/off", "do": toggle_record})
 	out.append({"id": "timeline_play", "label": "Timeline: loop on/off", "do": toggle_play})
 	out.append({"id": "mosaic", "label": "Mosaic of selected slot", "do": func(): spawn_mosaic()})
@@ -1276,6 +1474,7 @@ func _build_hud() -> void:
 		+ "S            steal palette from raster / webcam · Shift+S mosaic\nD            glow off/soft/heavy\n"
 		+ "Shift+E      evolve (Enter keep · Shift+Enter discard)\nShift+A      attract mode (auto after 60 s idle)\n"
 		+ "Shift+R      record controller gestures · Shift+P loop them\nShift+W/T/Y/U  Lorenz / Rössler / Clifford / de Jong verbs\n"
+		+ "Shift+N      particle field (right-click scatters) · Shift+I Field verb\nShift+O      reaction-diffusion presets\n"
 		+ "F1-F12       recall preset · Shift+F saves\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -1395,6 +1594,10 @@ func _update_hud() -> void:
 	if _steal_note != "":
 		line2 += "   ·   " + _steal_note
 	line2 += "   ·   scene: " + (("%s  spd %.1f  scl %.1f" % [Scenes.get_scene(Scenes.current).get("name", "?"), Scenes.speed, Scenes.scale]) if Scenes.current != "" else "off (Tab)")
+	if particles_on:
+		line2 += "   ·   particles flow %.1f %s %.1f" % [particles_flow, "repel" if particles_attract < 0.0 else "attract", absf(particles_attract)]
+	if rd_preset > 0:
+		line2 += "   ·   rd " + rd_describe()
 	if fb_warp > 0.0 or fb_drift != Vector2.ZERO:
 		line2 += "   ·   warp %.2f drift %d,%d" % [fb_warp, fb_drift.x, fb_drift.y]
 	_hud.text += "\n" + line2
@@ -1413,6 +1616,7 @@ func _meter() -> String:
 func _apply_palette() -> void:
 	_bg.color = Palettes.bg(palette_index)
 	_fx.set_palette(palette_index)
+	Scenes.apply_palette(_layer_mix.material, palette_index)
 	_fx.set_source(_worldmix.get_texture(), Palettes.bg(palette_index))
 	_monitor.accent = Palettes.color(palette_index, 0)
 	_monitor.queue_redraw()
@@ -1447,6 +1651,9 @@ func _set_feedback(on: bool) -> void:
 func _process(_delta: float) -> void:
 	_tick_modes(_delta)
 	_tick_timeline(_delta)
+	_tick_rd()
+	if particles_on:
+		_push_particles()
 	var mouse := _world_pos(get_local_mouse_position())
 	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _dragging
 	for a in all_actors():
@@ -1533,6 +1740,7 @@ func _remove_nearest(world_pos: Vector2) -> void:
 	else:
 		for a in all_actors():                        # nothing near: scatter the flocks
 			a.scatter_from = world_pos
+		scatter_particles()
 
 
 func _gui_input(ev: InputEvent) -> void:
@@ -1659,6 +1867,18 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_E:
 			if ev.shift_pressed:
 				set_evolve(not evolve)
+		KEY_N:
+			if ev.shift_pressed:
+				set_particles(not particles_on)
+			else:
+				_monitor.cycle_size()
+				_update_hud()
+		KEY_O:
+			if ev.shift_pressed:
+				cycle_rd()
+			else:
+				_fx.cycle_kaleido()
+				_refresh_fx()
 		KEY_R:
 			if ev.shift_pressed:
 				toggle_record()
@@ -1681,14 +1901,8 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				AudioReact.cycle_source()
 				_update_hud()
 		KEY_M: set_monitor(not _monitor.visible)
-		KEY_N:
-			_monitor.cycle_size()
-			_update_hud()
 		KEY_V:
 			_fx.cycle_crt()
-			_refresh_fx()
-		KEY_O:
-			_fx.cycle_kaleido()
 			_refresh_fx()
 		KEY_G:
 			if ev.shift_pressed:

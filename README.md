@@ -139,6 +139,18 @@ Four **attractor verbs**: Lorenz and Rössler are integrated each frame and the 
 curve (3D solids trace them in 3D); Clifford and de Jong are iterated maps the icon glides
 between. With feedback fade high they paint the attractor.
 
+## Particle field, Field verb, reaction-diffusion
+
+**Shift+N** turns on 12,000 GPU dots riding a curl-noise flow field, pulled toward the mouse
+and the icons (or pushed away — the attract param runs from −1 to 1; right-click empty space
+scatters them for a beat). Flow and attract are learnable; the dots take palette colours by
+speed. The **Field** verb (Shift+I) puts icons on the same field.
+
+**Shift+O** cycles Gray-Scott **reaction-diffusion** presets. It runs in two 480×270
+viewports that alternate each frame, the world's icons seed the V chemical, and the pattern is
+painted through the palette *under* the actors — so icons grow coral, spots or worms around
+themselves. Feed and kill are learnable; everything is preset-saved.
+
 ## Presets
 
 **Shift+F1..F12** saves everything the stage remembers (palette, feedback, effects, glow,
@@ -231,6 +243,8 @@ src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vert
 src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)
 src/boids.gd                flocking maths (2D and 3D) for the Flock verb
 src/attractors.gd           Lorenz, Rössler, Clifford, de Jong (pure functions)
+src/field.gd + particles.gdshader   curl-noise flow field (CPU for the verb, GPU for 12k dots)
+src/rd.gdshader             Gray-Scott step (ping-ponged by the stage, composited in _worldmix)
 src/timeline.gd             record / loop of controller gestures
 src/ride_path.gd            a drawn stroke as a Curve2D with looping riders
 src/mosaic.gd               image -> grid of cells with colour / luminance (for Shift+S)

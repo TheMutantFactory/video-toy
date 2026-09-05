@@ -16,6 +16,7 @@ const ALL := [
 	{"id": "rossler", "name": "Rössler", "key": "⇧T", "hint": "ride the Rössler spiral", "shift": true},
 	{"id": "clifford", "name": "Clifford", "key": "⇧Y", "hint": "fly between points of the Clifford map", "shift": true},
 	{"id": "dejong", "name": "de Jong", "key": "⇧U", "hint": "fly between points of the de Jong map", "shift": true},
+	{"id": "field", "name": "Field", "key": "⇧I", "hint": "ride the curl-noise flow field (the same one the particles ride)", "shift": true},
 ]
 
 
