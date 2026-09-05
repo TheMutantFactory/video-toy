@@ -898,8 +898,12 @@ func _set_feedback(on: bool) -> void:
 
 func _process(_delta: float) -> void:
 	var mouse := _world_pos(get_local_mouse_position())
+	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _dragging
 	for a in _actors.get_children():
 		a.mouse_world = mouse
+		a.attract = held
+	for sol in _solids.get_children():
+		sol.attract = held
 	_cam_angle += cam_orbit * _delta
 	_camera.position = Vector3(sin(_cam_angle) * cam_dolly, cam_height, cos(_cam_angle) * cam_dolly)
 	_camera.look_at(Vector3.ZERO, Vector3.UP)
@@ -972,6 +976,9 @@ func _remove_nearest(world_pos: Vector2) -> void:
 			best = sol
 	if best and best_d < 160.0:
 		best.queue_free()
+	else:
+		for a in _actors.get_children():              # nothing near: scatter the flocks
+			a.scatter_from = world_pos
 
 
 func _gui_input(ev: InputEvent) -> void:
@@ -1039,7 +1046,7 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				fb_warp = 0.0
 				fb_drift = Vector2.ZERO
 				fb_stretch = Vector2.ONE
-	var verb := Verbs.by_key(k)
+	var verb := Verbs.by_key(k, ev.shift_pressed)
 	if verb != "" and not Toolbox.current().is_empty():
 		Toolbox.toggle_verb(Toolbox.selected, verb)
 		return

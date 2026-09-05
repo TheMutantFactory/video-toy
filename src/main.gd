@@ -191,7 +191,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock"]
 	for name in shots:
 		match name:
 			"menu":
@@ -360,6 +360,30 @@ func _capture_all(dir: String) -> void:
 				for f in current._formations.get_children():
 					f.queue_free()
 				current.reset_camera()
+			"text_flock":
+				# A word as a slot, forty of them flocking; the star flocks too.
+				current._glow.set_level(1)
+				for a in current._actors.get_children() + current._solids.get_children():
+					a.queue_free()
+				var ti: int = Toolbox.add_text("HAPPY BDAY")
+				Ledger.record_local(Toolbox.slots[ti])
+				for i in [ti, 0]:
+					if not Toolbox.has_verb(i, "flock"):
+						Toolbox.toggle_verb(i, "flock")
+					if Toolbox.has_verb(i, "orbit"):
+						Toolbox.toggle_verb(i, "orbit")
+					if Toolbox.has_verb(i, "spin"):
+						Toolbox.toggle_verb(i, "spin")
+					if Toolbox.has_verb(i, "pulse"):
+						Toolbox.toggle_verb(i, "pulse")
+				AudioReact.set_source("off")
+				Toolbox.select(ti)
+				for i in 24:
+					current.spawn_at(Vector2(randf_range(400, 1500), randf_range(200, 900)))
+				Toolbox.select(0)
+				for i in 30:
+					current.spawn_at(Vector2(randf_range(400, 1500), randf_range(200, 900)))
+				await get_tree().create_timer(2.5).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout
@@ -383,6 +407,11 @@ func _capture_all(dir: String) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(Toolbox.slots[cap_slot]["svg_path"]))
 		Toolbox.remove(cap_slot)
 		Ledger.remove(cap_id)
+	var text_slot := Toolbox.index_of("text-%d" % absi("HAPPY BDAY".hash()))
+	if text_slot >= 0:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Toolbox.slots[text_slot]["svg_path"]))
+		Ledger.remove(Toolbox.slots[text_slot]["id"])
+		Toolbox.remove(text_slot)
 	for i in range(Palettes.extra.size() - 1, -1, -1):
 		if Palettes.extra[i].get("name") == "Capture Photo":
 			Palettes.extra.remove_at(i)

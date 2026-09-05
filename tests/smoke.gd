@@ -286,6 +286,43 @@ func _init() -> void:
 	_check("solid slab has sides only on its 16 boundary edges", slab.surface_get_arrays(1)[Mesh.ARRAY_INDEX].size() == 16 * 6)
 	# (formation.gd reads autoloads, so its transforms are checked in --selftest)
 
+	# text slots: CPU glyph rasterisation, white on alpha, wider than tall
+	var timg := TextRaster.render("Hello", 120)
+	var topaque := TextRaster.opaque_count(timg)
+	var twhite := true
+	for y in range(0, timg.get_height(), 3):
+		for x in range(0, timg.get_width(), 3):
+			var c := timg.get_pixel(x, y)
+			if c.a > 0.5 and (c.r < 0.99 or c.g < 0.99 or c.b < 0.99):
+				twhite = false
+	_check("text renders white-on-alpha glyphs", topaque > 1000 and twhite and timg.get_width() > timg.get_height())
+	_check("longer words are wider", TextRaster.render("HAPPY BIRTHDAY", 120).get_width() > timg.get_width() * 3)
+	var tbox = load("res://src/toolbox.gd").new()
+	tbox.path = "user://_smoke_toolbox3.json"
+	tbox.load_from_disk()
+	tbox.clear()
+	var ti: int = tbox.add_text("  Knobcon ")
+	_check("word becomes a tinted (non-raster) text slot with a png", ti == 0 and tbox.slots[0]["kind"] == "text"
+		and tbox.slots[0]["term"] == "Knobcon" and not tbox.is_raster_slot(tbox.slots[0]) and FileAccess.file_exists(tbox.slots[0]["svg_path"]))
+	_check("same word twice is one slot; empty word rejected", tbox.add_text("Knobcon") == 0 and tbox.add_text("   ") == -1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tbox.slots[0]["svg_path"]))
+	tbox.clear()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tbox.path))
+	tbox.free()
+	_check("flock verb is on Shift+Q only", Verbs.by_key(KEY_Q, true) == "flock" and Verbs.by_key(KEY_Q, false) == "wander")
+
+	# boids: separation pushes apart, cohesion pulls together, attractor pulls
+	var close := Boids.steer2(Vector2(0, 0), Vector2.ZERO, [[Vector2(20, 0), Vector2.ZERO]])
+	_check("boids separate when too close", close.x < 0.0)
+	var far := Boids.steer2(Vector2(0, 0), Vector2.ZERO, [[Vector2(150, 0), Vector2.ZERO]])
+	_check("boids cohere at mid range", far.x > 0.0)
+	var pulled := Boids.steer2(Vector2(0, 0), Vector2.ZERO, [], Vector2(0, 300))
+	_check("boids follow the attractor", pulled.y > 0.0 and absf(pulled.x) < 1.0)
+	var alone := Boids.steer2(Vector2(0, 0), Vector2(10, 0), [])
+	_check("a lone boid without attractor gets no force", alone == Vector2.ZERO)
+	var c3 := Boids.steer3(Vector3.ZERO, Vector3.ZERO, [[Vector3(0.3, 0, 0), Vector3.ZERO]])
+	_check("3D boids separate", c3.x < 0.0)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

@@ -24,6 +24,7 @@ Needs Godot 4.7 (`GODOT=/path/to/godot` if it isn't on PATH or in /Applications)
 | Settings | Noun Project API key/secret, saved to `user://noun_credentials.cfg` (outside the repo). |
 | Attribution | Paginated list of every asset ever downloaded, with icon and creator links. Also on **Esc** / **☰** from any screen. |
 | Load demo shapes | Five built-in shapes so the toy plays with no API key. |
+| Add word | Type a word on the start screen (or in Find Icons): it is rendered white-on-alpha like an icon, so it tints, gets verbs, wraps solids and extrudes. |
 
 ### Play keys
 
@@ -164,6 +165,8 @@ src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma ke
 src/presets.gd              twelve stage snapshots, user://presets.json
 src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading layer, the shaders (common.gdshaderinc shared)
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader
+src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)
+src/boids.gd                flocking maths (2D and 3D) for the Flock verb
 src/extrude.gd              icon alpha -> extruded "cookie" mesh (textured faces + plain sides)
 src/formation.gd            200 copies in a helix / lattice / shell / ring as one MultiMesh
 src/monitor.gd              the TV inside the world that shows the final composite

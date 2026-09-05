@@ -10,6 +10,7 @@ signal selection_changed(index: int)
 
 const PATH := "user://toolbox.json"
 const RASTER_DIR := "user://raster"
+const TEXT_DIR := "user://text"
 const MAX_SLOTS := 9
 
 var slots: Array = []                      # Array of Dictionary
@@ -98,6 +99,39 @@ func add_raster(src_path: String) -> int:
 		"svg_path": dst, "thumbnail_url": "",
 		"attribution": "%s — local image" % src_path.get_file(),
 		"license": "user-supplied", "permalink": "",
+		"creator_name": "", "creator_permalink": "",
+		"verbs": [], "color_index": slots.size(),
+		"added_at": int(Time.get_unix_time_from_system()),
+	}
+	slots.append(slot)
+	selected = slots.size() - 1
+	save_to_disk()
+	changed.emit()
+	selection_changed.emit(selected)
+	return selected
+
+
+## A word as a slot: rendered white-on-alpha like an icon, so it tints, gets
+## verbs, wraps solids and extrudes. Returns the slot index or -1.
+func add_text(word: String) -> int:
+	word = word.strip_edges()
+	if word == "" or is_full():
+		return -1
+	var id := "text-%d" % absi(word.hash())
+	var existing := index_of(id)
+	if existing >= 0:
+		return existing
+	var img := TextRaster.render(word)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TEXT_DIR))
+	var dst := "%s/%s.png" % [TEXT_DIR, id]
+	if img.save_png(ProjectSettings.globalize_path(dst)) != OK:
+		return -1
+	var slot := {
+		"id": id, "kind": "text",
+		"term": word,
+		"svg_path": dst, "thumbnail_url": "",
+		"attribution": "“%s” — text" % word,
+		"license": "yours", "permalink": "",
 		"creator_name": "", "creator_permalink": "",
 		"verbs": [], "color_index": slots.size(),
 		"added_at": int(Time.get_unix_time_from_system()),

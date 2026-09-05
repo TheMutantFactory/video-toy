@@ -11,6 +11,7 @@ const ALL := [
 	{"id": "sparkle", "name": "Sparkle", "key": "Y", "hint": "spawn particles"},
 	{"id": "rainbow", "name": "Rainbow", "key": "U", "hint": "cycle the hue"},
 	{"id": "swarm", "name": "Swarm", "key": "I", "hint": "chase the mouse"},
+	{"id": "flock", "name": "Flock", "key": "⇧Q", "hint": "boids with the others from this slot; hold click to attract, right-click empty space to scatter", "shift": true},
 ]
 
 
@@ -21,9 +22,12 @@ static func ids() -> Array:
 	return out
 
 
-static func by_key(keycode: int) -> String:
+static func by_key(keycode: int, shift := false) -> String:
+	var name := OS.get_keycode_string(keycode).to_upper()
 	for v in ALL:
-		if OS.get_keycode_string(keycode).to_upper() == v["key"]:
+		var wants_shift: bool = v.get("shift", false)
+		var key: String = v["key"].trim_prefix("⇧")
+		if name == key and shift == wants_shift:
 			return v["id"]
 	return ""
 

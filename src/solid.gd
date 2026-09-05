@@ -17,6 +17,7 @@ var base_scale := 1.0
 var orbit_radius := 2.0
 var wander_target := Vector3.ZERO
 var mouse_point := Vector3.ZERO
+var attract := false
 var spin_axis := Vector3(0.3, 1.0, 0.2).normalized()
 
 var _body: MeshInstance3D
@@ -187,6 +188,24 @@ func _process(delta: float) -> void:
 		if position.distance_to(wander_target) < 0.15:
 			wander_target = _random_point()
 		position = position.move_toward(wander_target, 1.2 * delta)
+		home = position
+		moved = true
+	if verbs.has("flock"):
+		var others: Array = []
+		for o in get_parent().get_children():
+			if o != self and o.slot_id == slot_id and is_instance_valid(o):
+				others.append([o.position, o.velocity])
+		var acc := Boids.steer3(position, velocity, others, mouse_point if attract else Vector3.INF, 1.5)
+		velocity = (velocity + acc * delta).limit_length(Boids.MAX_SPEED * 0.01)
+		if velocity.length() < 0.4:
+			velocity = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-0.5, 0.5)).normalized() * 1.2
+		position += velocity * delta
+		for axis in 3:
+			if absf(position[axis]) > bounds[axis]:
+				velocity[axis] -= signf(position[axis]) * 6.0 * delta
+		position = position.clamp(-bounds, bounds)
+		if velocity.length() > 0.01:
+			look_at(position + velocity, Vector3.UP)
 		home = position
 		moved = true
 	if verbs.has("swarm"):

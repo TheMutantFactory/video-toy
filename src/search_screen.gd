@@ -25,6 +25,7 @@ var _inspect_creator: Label
 var _add_btn: Button
 var _open_btn: Button
 var _quota: Label
+var _word: LineEdit
 
 
 func _ready() -> void:
@@ -116,6 +117,18 @@ func _ready() -> void:
 			OS.shell_open(NP + str(_selected["permalink"])))
 	_open_btn.disabled = true
 	rv.add_child(_open_btn)
+	rv.add_child(UI.vspace(14))
+	rv.add_child(UI.label("…or add a word", 18, UI.ACCENT))
+	var wrow := HBoxContainer.new()
+	wrow.add_theme_constant_override("separation", 8)
+	_word = LineEdit.new()
+	_word.placeholder_text = "HAPPY BIRTHDAY"
+	_word.custom_minimum_size = Vector2(0, 44)
+	_word.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_word.text_submitted.connect(func(_t): _add_word())
+	wrow.add_child(_word)
+	wrow.add_child(UI.button("Add", _add_word, 90))
+	rv.add_child(wrow)
 
 	# --- hotbar
 	var bar := HotbarScript.new()
@@ -232,6 +245,16 @@ func _on_download_result(ok: bool, meta: Dictionary, svg_path: String, message: 
 		if c is Button and c.tooltip_text.begins_with(str(merged.get("term", "")) + "\n") and c.icon == _inspect_icon.texture:
 			c.text = "✓"
 	_show_quota()
+
+
+func _add_word() -> void:
+	var idx := Toolbox.add_text(_word.text)
+	if idx < 0:
+		_status.text = "Could not add the word (empty, or toolbox full)."
+		return
+	Ledger.record_local(Toolbox.slots[idx])
+	_status.text = "Added “%s” to slot %d as a text icon." % [Toolbox.slots[idx]["term"], idx + 1]
+	_word.text = ""
 
 
 func _show_quota() -> void:

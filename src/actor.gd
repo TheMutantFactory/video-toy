@@ -13,6 +13,8 @@ var base_scale := 0.5
 var orbit_radius := 160.0
 var wander_target := Vector2.ZERO
 var mouse_world := Vector2.ZERO
+var attract := false                       # stage: left button held on empty space
+var scatter_from := Vector2.INF            # stage: right-click on empty space (one frame)
 
 var raster := false
 var _sprite: Sprite2D
@@ -119,6 +121,29 @@ func _process(delta: float) -> void:
 		position = position.move_toward(wander_target, speed * delta)
 		home = position
 		moved = true
+	if verbs.has("flock"):
+		var others: Array = []
+		for a in get_parent().get_children():
+			if a != self and a.slot_id == slot_id and is_instance_valid(a):
+				others.append([a.position, a.velocity])
+		var acc := Boids.steer2(position, velocity, others, mouse_world if attract else Vector2.INF, 1.5)
+		if scatter_from != Vector2.INF:
+			acc += (position - scatter_from).normalized() * Boids.MAX_FORCE * 6.0
+			scatter_from = Vector2.INF
+		velocity = (velocity + acc * delta).limit_length(Boids.MAX_SPEED)
+		if velocity.length() < 40.0:
+			velocity = Vector2.from_angle(randf() * TAU) * 120.0
+		position += velocity * delta
+		# soft walls: turn back inside the bounds
+		var margin := 80.0
+		if position.x < bounds.position.x + margin: velocity.x += 600.0 * delta
+		if position.x > bounds.end.x - margin: velocity.x -= 600.0 * delta
+		if position.y < bounds.position.y + margin: velocity.y += 600.0 * delta
+		if position.y > bounds.end.y - margin: velocity.y -= 600.0 * delta
+		position = position.clamp(bounds.position, bounds.end)
+		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
+		home = position
+		moved = true
 	if verbs.has("swarm"):
 		var to_mouse := mouse_world - position
 		velocity = velocity.lerp(to_mouse.normalized() * 380.0, 2.0 * delta)
@@ -132,7 +157,10 @@ func _process(delta: float) -> void:
 		if moved:
 			position = centre + Vector2.from_angle(angle) * (orbit_radius * 0.35)
 
-	_sprite.rotation = _sprite.rotation + delta * 2.2 if verbs.has("spin") else lerpf(_sprite.rotation, 0.0, 6.0 * delta)
+	if verbs.has("spin"):
+		_sprite.rotation += delta * 2.2
+	elif not verbs.has("flock"):
+		_sprite.rotation = lerpf(_sprite.rotation, 0.0, 6.0 * delta)
 	var s := base_scale
 	if verbs.has("pulse"):
 		# With audio on, Pulse follows the bass instead of a sine.
