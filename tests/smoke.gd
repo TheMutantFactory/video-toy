@@ -518,6 +518,30 @@ func _init() -> void:
 	_check("ladder sheds load monotonically", Quality.get_level(0)["particles"] > Quality.get_level(3)["particles"]
 		and Quality.get_level(3)["rd_every"] > Quality.get_level(0)["rd_every"] and Quality.get_level(3)["glow_taps"] < Quality.get_level(0)["glow_taps"])
 
+	# state lerp: continuous fields interpolate, discrete flip at the midpoint, layers' opacity too
+	var sa := {"palette": 0, "glow": 0, "feedback": {"on": false, "zoom": 1.0, "rot": 0.0, "fade": 0.9},
+		"camera": {"orbit": 0.0, "dolly": 6.0}, "layers": [{"blend": 0, "opacity": 1.0}, {"blend": 1, "opacity": 0.0}], "fx": {"crt": 0, "key_threshold": 0.2}}
+	var sb := {"palette": 3, "glow": 2, "feedback": {"on": true, "zoom": 1.2, "rot": 0.1, "fade": 0.5},
+		"camera": {"orbit": 1.0, "dolly": 10.0}, "layers": [{"blend": 0, "opacity": 1.0}, {"blend": 3, "opacity": 1.0}], "fx": {"crt": 2, "key_threshold": 0.6}}
+	var q1 := StateLerp.mix(sa, sb, 0.25)
+	var q2 := StateLerp.mix(sa, sb, 0.75)
+	_check("state lerp: continuous at t=0.25", is_equal_approx(q1["feedback"]["zoom"], 1.05) and is_equal_approx(q1["camera"]["dolly"], 7.0)
+		and is_equal_approx(q1["layers"][1]["opacity"], 0.25) and is_equal_approx(q1["fx"]["key_threshold"], 0.3))
+	_check("state lerp: discrete from A before the midpoint, B after", q1["palette"] == 0 and q1["glow"] == 0 and q1["feedback"]["on"] == false and q1["layers"][1]["blend"] == 1
+		and q2["palette"] == 3 and q2["glow"] == 2 and q2["feedback"]["on"] == true and q2["layers"][1]["blend"] == 3 and q2["fx"]["crt"] == 2)
+	_check("state lerp: ends are exact", StateLerp.mix(sa, sb, 0.0)["feedback"]["zoom"] == 1.0 and StateLerp.mix(sa, sb, 1.0)["feedback"]["zoom"] == 1.2)
+	# preset banks: isolation and legacy layout
+	var bp := "user://_smoke_banks.json"
+	var lf := FileAccess.open(bp, FileAccess.WRITE)
+	lf.store_string(JSON.stringify({"presets": {"2": {"palette": 1}}}))          # an old, bank-less file
+	lf.close()
+	_check("legacy preset file is bank 0", Presets.get_preset(2, bp, 0).get("palette") == 1 and Presets.filled(bp, 0) == [2])
+	Presets.save(2, {"palette": 7}, bp, 4)
+	_check("banks are isolated and the old bank survives", Presets.get_preset(2, bp, 4).get("palette") == 7 and Presets.get_preset(2, bp, 0).get("palette") == 1 and Presets.filled(bp, 3).is_empty())
+	Presets.save(6, {"palette": 2}, bp, 4)
+	_check("neighbour steps through filled slots and wraps", Presets.neighbour(2, 1, bp, 4) == 6 and Presets.neighbour(6, 1, bp, 4) == 2 and Presets.neighbour(6, -1, bp, 4) == 2 and Presets.neighbour(4, 1, bp, 4) == 6 and Presets.neighbour(1, 1, bp, 1) == 0)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(bp))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

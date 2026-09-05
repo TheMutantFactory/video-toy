@@ -45,6 +45,8 @@ X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
                                       V      CRT off / soft / heavy
                                       D      glow off / soft / heavy
 F1-F12       recall preset            Shift+F1-F12  save preset (whole stage state, crossfaded)
+Shift+, .    previous / next bank (8)  Shift+- =     previous / next filled preset (foot switch)
+Shift+;      crossfade time 0 / 0.5 / 1 / 2 / 4 s
 Tab          next scene (Shift+Tab previous, ` off)
 arrows       feedback drift           PgUp/PgDn  feedback warp amount   Home  reset warp
                                       M      monitor inside the scene (recursion)
@@ -176,9 +178,15 @@ cyan ring on the hotbar. The toolbox and verbs are shared, so both players shape
 
 ## Presets
 
-**Shift+F1..F12** saves everything the stage remembers (palette, feedback, effects, glow,
-monitor, webcam, shape, every slot's verbs and colours); **F1..F12** recalls it, crossfading the
-feedback numbers over a second. Recall is also a learnable action, so a pad row can be a set list.
+**Shift+F1..F12** saves everything the stage remembers (palette, feedback, warp, effects, glow,
+monitor, webcam, shape, camera, layers, particles, reaction-diffusion, scene, every slot's verbs
+and colours) into the current **bank** (eight banks, Shift+, and Shift+.); **F1..F12** recalls.
+A recall **crossfades everything**: continuous values lerp over the fade time (Shift+; cycles
+0 / 0.5 / 1 / 2 / 4 s, also a learnable param) and discrete values flip at the midpoint.
+**Shift+-** / **Shift+=** step to the previous / next filled preset in the bank — a foot switch —
+and a **preset morph** param scrubs from the last recalled preset toward the next one. Bank,
+next / previous preset and bank are all learnable, so a pad row can be a set list. Old preset
+files load as bank 1.
 
 The **Sparkle** verb emits small copies of the icon itself (2D and on 3D solids); with audio on
 it also bursts on every beat.
@@ -260,7 +268,8 @@ src/search_screen.gd        Noun Project search → inspect → add
 src/stage_screen.gd         play: SubViewport world + ping-pong feedback
 src/glow.gd + glow.gdshader bloom pass before fx
 src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma key, quantise, dither
-src/presets.gd              twelve stage snapshots, user://presets.json
+src/presets.gd              eight banks x twelve stage snapshots, user://presets.json
+src/state_lerp.gd           crossfade maths: continuous fields lerp, discrete flip at the midpoint
 src/quality.gd              the quality ladder + frame-time monitor
 src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading layer, the shaders (common.gdshaderinc shared)
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader

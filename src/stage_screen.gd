@@ -185,6 +185,11 @@ var _rd_flip := 0
 var rd_preset := 0
 var rd_feed := 0.0545
 var rd_kill := 0.062
+var bank := 0
+var preset_fade := 1.0
+var last_preset := 0
+var _xf := {}                            # {from, to, t, dur}
+var _morph_a := {}
 var quality := Quality.new()
 var _quality_applied := -1
 var _measured: Array = []               # viewport RIDs with render-time measurement on
@@ -655,6 +660,9 @@ func webcam_mode() -> String:
 
 
 func set_webcam_mode(i: int) -> void:
+	if posmod(i, WEBCAM_MODES.size()) == _webcam_mode and _webcam != null and (_webcam_mode == 0) == (not _webcam.is_processing()):
+		_refresh_fx()
+		return
 	_webcam_mode = posmod(i, WEBCAM_MODES.size())
 	var on := _webcam_mode > 0
 	_webcam.set_process(on)
@@ -990,10 +998,7 @@ func set_attract(on: bool) -> void:
 
 
 func attract_step() -> void:
-	var saved: Array = []
-	for i in Presets.COUNT:
-		if Presets.has(i + 1):
-			saved.append(i + 1)
+	var saved: Array = Presets.filled(Presets.PATH, bank)
 	if saved.is_empty():
 		var notes: Array = []
 		for i in 3:
@@ -1001,8 +1006,8 @@ func attract_step() -> void:
 		_steal_note = "attract: " + ", ".join(notes)
 	else:
 		var n: int = saved[randi() % saved.size()]
-		restore(Presets.get_preset(n), 1.0)
-		_steal_note = "attract: preset %d" % n
+		restore(Presets.get_preset(n, Presets.PATH, bank), maxf(preset_fade, 1.0))
+		_steal_note = "attract: preset %d.%d" % [bank + 1, n]
 	_update_hud()
 
 
@@ -1321,24 +1326,51 @@ func snapshot() -> Dictionary:
 	}
 
 
-## Apply a snapshot. Continuous feedback params crossfade over `fade` seconds.
+## Apply a snapshot. With `fade` > 0 everything crossfades: continuous values
+## lerp over the time, discrete ones flip at the midpoint (StateLerp).
 func restore(d: Dictionary, fade := 1.0) -> void:
 	if d.is_empty():
 		return
-	palette_index = posmod(int(d.get("palette", palette_index)), Palettes.count())
+	if fade <= 0.0:
+		_xf = {}
+		_apply_snapshot(d, true)
+		return
+	_xf = {"from": snapshot(), "to": d, "t": 0.0, "dur": fade}
+
+
+func _tick_crossfade(delta: float) -> void:
+	if _xf.is_empty():
+		return
+	_xf["t"] += delta
+	var t: float = float(_xf["t"]) / float(_xf["dur"])
+	if t >= 1.0:
+		var to: Dictionary = _xf["to"]
+		_xf = {}
+		_apply_snapshot(to, true)
+		return
+	_apply_snapshot(StateLerp.mix(_xf["from"], _xf["to"], t), false)
+
+
+func crossfading() -> bool:
+	return not _xf.is_empty()
+
+
+## Immediate apply. `persist` writes the toolbox verbs to disk (skipped on the
+## per-frame crossfade path). Every setter is guarded so re-applying the same
+## state each frame does not restart particles, webcams or scenes.
+func _apply_snapshot(d: Dictionary, persist: bool) -> void:
+	var pal := posmod(int(d.get("palette", palette_index)), Palettes.count())
+	var pal_changed := pal != palette_index
+	palette_index = pal
 	var fb: Dictionary = d.get("feedback", {})
 	if _fade_tween:
 		_fade_tween.kill()
-	if fade > 0.0 and feedback and bool(fb.get("on", feedback)):
-		_fade_tween = create_tween().set_parallel(true)
-		_fade_tween.tween_property(self, "fb_zoom", float(fb.get("zoom", fb_zoom)), fade)
-		_fade_tween.tween_property(self, "fb_rot", float(fb.get("rot", fb_rot)), fade)
-		_fade_tween.tween_property(self, "fb_fade", float(fb.get("fade", fb_fade)), fade)
-	else:
-		fb_zoom = float(fb.get("zoom", fb_zoom))
-		fb_rot = float(fb.get("rot", fb_rot))
-		fb_fade = float(fb.get("fade", fb_fade))
-	_set_feedback(bool(fb.get("on", feedback)))
+	fb_zoom = float(fb.get("zoom", fb_zoom))
+	fb_rot = float(fb.get("rot", fb_rot))
+	fb_fade = float(fb.get("fade", fb_fade))
+	var fb_on := bool(fb.get("on", feedback))
+	if fb_on != feedback:
+		_set_feedback(fb_on)
 	var fx: Dictionary = d.get("fx", {})
 	_fx.pixel_step = clampi(int(fx.get("pixel", _fx.pixel_step)), 0, _fx.PIXEL_STEPS.size() - 1)
 	_fx.kaleido_step = clampi(int(fx.get("kaleido", _fx.kaleido_step)), 0, _fx.KALEIDO_STEPS.size() - 1)
@@ -1354,25 +1386,16 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 	_fx._push()
 	_glow.set_level(int(d.get("glow", _glow.level)))
 	var mon: Dictionary = d.get("monitor", {})
-	_monitor.size_step = clampi(int(mon.get("size", _monitor.size_step)), 0, _monitor.SIZES.size() - 1)
-	_monitor._apply_scale()
+	var msize := clampi(int(mon.get("size", _monitor.size_step)), 0, _monitor.SIZES.size() - 1)
+	if msize != _monitor.size_step:
+		_monitor.size_step = msize
+		_monitor._apply_scale()
 	_monitor.position = Vector2(float(mon.get("x", _monitor.position.x)), float(mon.get("y", _monitor.position.y)))
 	_monitor.visible = bool(mon.get("on", _monitor.visible))
-	set_webcam_mode(int(d.get("webcam", _webcam_mode)))
+	var wm := int(d.get("webcam", _webcam_mode))
+	if wm != _webcam_mode:
+		set_webcam_mode(wm)
 	_shape_index = posmod(int(d.get("shape", _shape_index)), SolidScript.SHAPES.size())
-	var slots: Dictionary = d.get("slots", {})
-	for i in Toolbox.slots.size():
-		var rec = slots.get(str(Toolbox.slots[i]["id"]))
-		if rec is Dictionary:
-			Toolbox.slots[i]["verbs"] = Array(rec.get("verbs", [])).duplicate()
-			Toolbox.slots[i]["color_index"] = int(rec.get("color_index", Toolbox.slots[i].get("color_index", 0)))
-	Toolbox.save_to_disk()
-	Toolbox.changed.emit()
-	Toolbox.select(int(d.get("selected", Toolbox.selected)))
-	var sc: Dictionary = d.get("scene", {})
-	if not sc.is_empty():
-		set_scene_knobs(float(sc.get("speed", Scenes.speed)), float(sc.get("scale", Scenes.scale)), float(sc.get("bias", Scenes.bias)))
-		set_scene(str(sc.get("id", Scenes.current)), fade)
 	var cam: Dictionary = d.get("camera", {})
 	if not cam.is_empty():
 		cam_orbit = float(cam.get("orbit", cam_orbit))
@@ -1384,10 +1407,14 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 	if not pt.is_empty():
 		particles_flow = float(pt.get("flow", particles_flow))
 		particles_attract = float(pt.get("attract", particles_attract))
-		set_particles(bool(pt.get("on", particles_on)))
+		var pon := bool(pt.get("on", particles_on))
+		if pon != particles_on:
+			set_particles(pon)
 	var rdd: Dictionary = d.get("rd", {})
 	if not rdd.is_empty():
-		set_rd_preset(int(rdd.get("preset", rd_preset)))
+		var rp := int(rdd.get("preset", rd_preset))
+		if rp != rd_preset:
+			set_rd_preset(rp)
 		rd_feed = float(rdd.get("feed", rd_feed))
 		rd_kill = float(rdd.get("kill", rd_kill))
 		_push_rd()
@@ -1404,23 +1431,91 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 		fb_warp_speed = float(w.get("speed", fb_warp_speed))
 		fb_drift = Vector2(float(w.get("dx", fb_drift.x)), float(w.get("dy", fb_drift.y)))
 		fb_stretch = Vector2(float(w.get("sx", fb_stretch.x)), float(w.get("sy", fb_stretch.y)))
-	_apply_palette()
+	var slots: Dictionary = d.get("slots", {})
+	var verbs_changed := false
+	for i in Toolbox.slots.size():
+		var rec = slots.get(str(Toolbox.slots[i]["id"]))
+		if rec is Dictionary:
+			var nv: Array = Array(rec.get("verbs", [])).duplicate()
+			var nc := int(rec.get("color_index", Toolbox.slots[i].get("color_index", 0)))
+			if nv != Toolbox.slots[i].get("verbs", []) or nc != int(Toolbox.slots[i].get("color_index", 0)):
+				Toolbox.slots[i]["verbs"] = nv
+				Toolbox.slots[i]["color_index"] = nc
+				verbs_changed = true
+	if verbs_changed:
+		if persist:
+			Toolbox.save_to_disk()
+		Toolbox.changed.emit()
+	var sel := int(d.get("selected", Toolbox.selected))
+	if sel != Toolbox.selected:
+		Toolbox.select(sel)
+	var sc: Dictionary = d.get("scene", {})
+	if not sc.is_empty():
+		Scenes.speed = float(sc.get("speed", Scenes.speed))
+		Scenes.scale = float(sc.get("scale", Scenes.scale))
+		Scenes.bias = float(sc.get("bias", Scenes.bias))
+		_scene_layer.apply_knobs()
+		var sid := str(sc.get("id", Scenes.current))
+		if sid != Scenes.current:
+			set_scene(sid, 0.8)
+	if pal_changed or verbs_changed:
+		_apply_palette()
 	_refresh_fx()
+	_update_hud()
+
+
+# ---------------- banks, stepping, morph ----------------
+func set_bank(b: int) -> void:
+	bank = posmod(b, Presets.BANKS)
+	_steal_note = "bank %d: %d presets" % [bank + 1, Presets.filled(Presets.PATH, bank).size()]
+	_update_hud()
+
+
+func step_preset(step: int) -> void:
+	var n := Presets.neighbour(last_preset, step, Presets.PATH, bank)
+	if n == 0:
+		_steal_note = "bank %d is empty — Shift+F1..F12 saves" % (bank + 1)
+		_update_hud()
+		return
+	recall_preset(n)
+
+
+func cycle_fade() -> void:
+	var steps := [0.0, 0.5, 1.0, 2.0, 4.0]
+	var i := steps.find(preset_fade)
+	preset_fade = steps[(i + 1) % steps.size()] if i >= 0 else 1.0
+	_steal_note = "preset crossfade %.1f s" % preset_fade
+	_update_hud()
+
+
+## 0..1 scrub from the last recalled preset toward the next filled one.
+func morph(v: float) -> void:
+	if _morph_a.is_empty():
+		_morph_a = snapshot()
+	var n := Presets.neighbour(last_preset, 1, Presets.PATH, bank)
+	if n == 0:
+		return
+	_xf = {}
+	_apply_snapshot(StateLerp.mix(_morph_a, Presets.get_preset(n, Presets.PATH, bank), v), false)
 
 
 func save_preset(i: int) -> void:
-	Presets.save(i, snapshot())
-	_steal_note = "saved preset %d (F%d)" % [i, i]
+	Presets.save(i, snapshot(), Presets.PATH, bank)
+	last_preset = i
+	_morph_a = snapshot()
+	_steal_note = "saved preset %d in bank %d (F%d)" % [i, bank + 1, i]
 	_update_hud()
 
 
 func recall_preset(i: int) -> void:
-	var d := Presets.get_preset(i)
+	var d := Presets.get_preset(i, Presets.PATH, bank)
 	if d.is_empty():
-		_steal_note = "preset %d is empty — Shift+F%d saves" % [i, i]
+		_steal_note = "preset %d in bank %d is empty — Shift+F%d saves" % [i, bank + 1, i]
 	else:
-		restore(d)
-		_steal_note = "preset %d" % i
+		restore(d, preset_fade)
+		last_preset = i
+		_morph_a = d.duplicate(true)
+		_steal_note = "preset %d.%d%s" % [bank + 1, i, ("  (crossfade %.1f s)" % preset_fade) if preset_fade > 0.0 else ""]
 	_update_hud()
 
 
@@ -1495,6 +1590,11 @@ func midi_params() -> Array:
 		{"id": "rd_kill", "label": "Reaction kill", "set": func(v):
 			rd_kill = lerpf(0.04, 0.07, v)
 			_push_rd()},
+		{"id": "bank", "label": "Preset bank", "set": func(v): set_bank(_step(v, Presets.BANKS))},
+		{"id": "preset_fade", "label": "Preset crossfade time", "set": func(v):
+			preset_fade = lerpf(0.0, 5.0, v)
+			_update_hud()},
+		{"id": "preset_morph", "label": "Preset morph (to next)", "set": morph},
 		{"id": "active_layer", "label": "Active layer", "set": func(v): set_active_layer(_step(v, LAYER_COUNT))},
 		{"id": "layer_opacity", "label": "Layer opacity (active)", "set": func(v): set_layer_opacity(v)},
 	]
@@ -1571,6 +1671,10 @@ func midi_actions() -> Array:
 	out.append({"id": "glow", "label": "Glow off/soft/heavy", "do": func():
 		_glow.cycle()
 		_update_hud()})
+	out.append({"id": "next_preset", "label": "Next preset (in bank)", "do": func(): step_preset(1)})
+	out.append({"id": "prev_preset", "label": "Previous preset (in bank)", "do": func(): step_preset(-1)})
+	out.append({"id": "next_bank", "label": "Next bank", "do": func(): set_bank(bank + 1)})
+	out.append({"id": "prev_bank", "label": "Previous bank", "do": func(): set_bank(bank - 1)})
 	for i in Presets.COUNT:
 		out.append({"id": "preset_%d" % (i + 1), "label": "Recall preset %d" % (i + 1), "do": func(): recall_preset(i + 1)})
 	for i in Toolbox.MAX_SLOTS:
@@ -1771,7 +1875,7 @@ func _build_hud() -> void:
 		+ "Shift+N      particle field (right-click scatters) · Shift+I Field verb\nShift+O      reaction-diffusion presets\n"
 		+ "keypad/pad   player 2: 8/2/4/6 or stick moves · 5/A spawns · 0/B removes\n             +/-/X slot · ./Y layer · */LB spin · //RB solid · Shift+2 hides\n"
 		+ "Shift+Esc    PANIC: known-good look · Shift+H blackout · Shift+F quality lock\n"
-		+ "F1-F12       recall preset · Shift+F saves\n"
+		+ "F1-F12       recall preset · Shift+F saves · Shift+, . bank · Shift+- = prev/next preset · Shift+; fade\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
 		+ "Shift+Space  formation of 200 (Shift+X: helix/lattice/shell/ring)\n"
@@ -1890,6 +1994,7 @@ func _update_hud() -> void:
 	line2 += "   ·   webcam: " + (("%s, %s" % [webcam_mode(), _webcam.status]) if _webcam_mode > 0 else "off (Z)")
 	if _steal_note != "":
 		line2 += "   ·   " + _steal_note
+	line2 += "   ·   bank %d · fade %.1fs%s" % [bank + 1, preset_fade, "   XFADE" if crossfading() else ""]
 	line2 += "   ·   scene: " + (("%s  spd %.1f  scl %.1f" % [Scenes.get_scene(Scenes.current).get("name", "?"), Scenes.speed, Scenes.scale]) if Scenes.current != "" else "off (Tab)")
 	if p2_active:
 		line2 += "   ·   P2: slot %d, layer %d" % [p2_slot + 1, p2_layer + 1]
@@ -2167,14 +2272,22 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_BRACKETRIGHT:
 			if ev.shift_pressed: set_layer_opacity(_layers[active_layer]["opacity"] + 0.1)
 			else: fb_zoom = minf(1.20, fb_zoom + 0.01)
-		KEY_COMMA: fb_rot -= 0.01
-		KEY_PERIOD: fb_rot += 0.01
+		KEY_COMMA:
+			if ev.shift_pressed: set_bank(bank - 1)
+			else: fb_rot -= 0.01
+		KEY_PERIOD:
+			if ev.shift_pressed: set_bank(bank + 1)
+			else: fb_rot += 0.01
 		KEY_B:
 			if ev.shift_pressed:
 				cycle_shape()
 			else:
 				spawn_solid(_world_pos(get_local_mouse_position()) if get_global_rect().has_point(get_global_mouse_position()) else Vector2(-1, -1))
-		KEY_SEMICOLON: toggle_midi_panel()
+		KEY_SEMICOLON:
+			if ev.shift_pressed:
+				cycle_fade()
+			else:
+				toggle_midi_panel()
 		KEY_Z: cycle_webcam()
 		KEY_D:
 			if ev.shift_pressed:
@@ -2253,8 +2366,12 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_J:
 			_fx.toggle_dither()
 			_refresh_fx()
-		KEY_MINUS: fb_fade = maxf(0.5, fb_fade - 0.02)
-		KEY_EQUAL: fb_fade = minf(0.995, fb_fade + 0.02)
+		KEY_MINUS:
+			if ev.shift_pressed: step_preset(-1)
+			else: fb_fade = maxf(0.5, fb_fade - 0.02)
+		KEY_EQUAL:
+			if ev.shift_pressed: step_preset(1)
+			else: fb_fade = minf(0.995, fb_fade + 0.02)
 		KEY_C:
 			clear_actors()
 			for a in _solids.get_children() + _formations.get_children():

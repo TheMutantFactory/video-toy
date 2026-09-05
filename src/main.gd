@@ -348,6 +348,37 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL quality / panic / blackout")
+	# banks + crossfade: continuous lerps, discrete flips at the midpoint, lands exactly
+	var ok_xf := true
+	var pp := "user://_selftest_banks.json"
+	var a: Dictionary = st.snapshot()
+	a["feedback"]["zoom"] = 1.0
+	a["glow"] = 0
+	a["camera"]["dolly"] = 6.0
+	var b: Dictionary = a.duplicate(true)
+	b["feedback"]["zoom"] = 1.2
+	b["glow"] = 2
+	b["camera"]["dolly"] = 10.0
+	Presets.save(3, a, pp, 0)
+	Presets.save(5, b, pp, 2)
+	Presets.save(9, b, pp, 2)
+	ok_xf = ok_xf and Presets.filled(pp, 2) == [5, 9] and Presets.filled(pp, 0) == [3] and not Presets.has(5, pp, 0)
+	ok_xf = ok_xf and Presets.neighbour(5, 1, pp, 2) == 9 and Presets.neighbour(9, 1, pp, 2) == 5 and Presets.neighbour(0, 1, pp, 2) == 5 and Presets.neighbour(0, -1, pp, 2) == 9
+	st.restore(a, 0.0)
+	st.restore(b, 1.0)
+	st._tick_crossfade(0.25)
+	ok_xf = ok_xf and st.crossfading() and is_equal_approx(st.fb_zoom, 1.05) and st._glow.level == 0 and is_equal_approx(st.cam_dolly, 7.0)
+	st._tick_crossfade(0.30)                              # t = 0.55: discrete flipped
+	ok_xf = ok_xf and is_equal_approx(st.fb_zoom, 1.11) and st._glow.level == 2
+	st._tick_crossfade(0.60)                              # done: exact landing
+	ok_xf = ok_xf and not st.crossfading() and is_equal_approx(st.fb_zoom, 1.2) and is_equal_approx(st.cam_dolly, 10.0)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(pp))
+	st.restore(a, 0.0)
+	if ok_xf:
+		print("PASS preset banks, neighbour stepping, crossfade of everything")
+	else:
+		fails += 1
+		printerr("FAIL banks / crossfade (zoom=%.3f glow=%d dolly=%.2f)" % [st.fb_zoom, st._glow.level, st.cam_dolly])
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
