@@ -213,6 +213,8 @@ func _selftest() -> void:
 	if ok_osc:
 		var tx := PacketPeerUDP.new()
 		tx.set_dest_address("127.0.0.1", Osc.port)
+		if st._fade_tween:                                # an earlier restore() may still be crossfading
+			st._fade_tween.kill()
 		st.fb_zoom = 1.0
 		tx.put_packet(Osc.build("/vt/param/fb_zoom", [0.5]))
 		var solids_before: int = st._solids.get_child_count()
