@@ -17,6 +17,8 @@ var mouse_world := Vector2.ZERO
 var raster := false
 var _sprite: Sprite2D
 var _particles: CPUParticles2D
+var _burst: CPUParticles2D
+var _last_beat := 0.0
 var _base_color := Color.WHITE
 
 
@@ -41,26 +43,47 @@ func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
 	_sprite.modulate = _base_color
 	add_child(_sprite)
 
-	_particles = CPUParticles2D.new()
-	_particles.emitting = false
-	_particles.amount = 40
-	_particles.lifetime = 1.2
-	_particles.direction = Vector2(0, -1)
-	_particles.spread = 180.0
-	_particles.gravity = Vector2(0, 120)
-	_particles.initial_velocity_min = 40.0
-	_particles.initial_velocity_max = 140.0
-	_particles.scale_amount_min = 3.0
-	_particles.scale_amount_max = 7.0
-	_particles.color = _base_color
-	_particles.z_index = -1
+	# Sparkle emits tiny copies of the icon itself, in the slot colour.
+	_particles = _make_emitter(_sprite.texture, 40, 1.4, false)
 	add_child(_particles)
+	_burst = _make_emitter(_sprite.texture, 28, 1.1, true)      # on the beat
+	add_child(_burst)
+
+
+func _make_emitter(tex: Texture2D, amount: int, life: float, one_shot: bool) -> CPUParticles2D:
+	var p := CPUParticles2D.new()
+	p.emitting = false
+	p.one_shot = one_shot
+	p.explosiveness = 1.0 if one_shot else 0.0
+	p.amount = amount
+	p.lifetime = life
+	p.texture = tex
+	p.direction = Vector2(0, -1)
+	p.spread = 180.0
+	p.gravity = Vector2(0, 90)
+	p.initial_velocity_min = 60.0 if not one_shot else 160.0
+	p.initial_velocity_max = 160.0 if not one_shot else 380.0
+	p.angular_velocity_min = -180.0
+	p.angular_velocity_max = 180.0
+	p.angle_min = 0.0
+	p.angle_max = 360.0
+	var size := tex.get_size().x if tex else 400.0
+	p.scale_amount_min = 18.0 / size            # ~18-34 px copies of the icon
+	p.scale_amount_max = 34.0 / size
+	var curve := Curve.new()                    # shrink out
+	curve.add_point(Vector2(0, 1))
+	curve.add_point(Vector2(1, 0))
+	p.scale_amount_curve = curve
+	p.color = _base_color
+	p.z_index = -1
+	return p
 
 
 func set_palette(pal: int, color_index: int) -> void:
 	palette_index = pal
 	_base_color = Color.WHITE if raster else Palettes.color(pal, color_index)
-	_particles.color = Palettes.color(pal, color_index)
+	_particles.color = _base_color
+	_burst.color = _base_color
 
 
 func _verbs() -> Array:
@@ -124,10 +147,15 @@ func _process(delta: float) -> void:
 		c.s = maxf(c.s, 0.7)
 		_sprite.modulate = c
 		_particles.color = c
+		_burst.color = c
 	else:
 		_sprite.modulate = _base_color
 
 	_particles.emitting = verbs.has("sparkle")
+	# Beat burst: a one-shot puff of icons whenever the envelope restarts.
+	if verbs.has("sparkle") and AudioReact.active() and AudioReact.beat_env > _last_beat:
+		_burst.restart()
+	_last_beat = AudioReact.beat_env
 
 
 func _random_point() -> Vector2:

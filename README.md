@@ -39,6 +39,8 @@ X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
                                       L      palette quantise
                                       J      dither (with quantise)
                                       V      CRT off / soft / heavy
+                                      D      glow off / soft / heavy
+F1-F12       recall preset            Shift+F1-F12  save preset (whole stage state, crossfaded)
                                       M      monitor inside the scene (recursion)
                                       N      monitor size; drag it to move
                                       B      3D solid of the selected icon at the mouse
@@ -52,6 +54,15 @@ drop an image on the window   →  a raster toolbox slot (Shift+drop → chroma 
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
 ```
+
+## Presets
+
+**Shift+F1..F12** saves everything the stage remembers (palette, feedback, effects, glow,
+monitor, webcam, shape, every slot's verbs and colours); **F1..F12** recalls it, crossfading the
+feedback numbers over a second. Recall is also a learnable action, so a pad row can be a set list.
+
+The **Sparkle** verb emits small copies of the icon itself (2D and on 3D solids); with audio on
+it also bursts on every beat.
 
 ## MIDI-learn (Knobcon)
 
@@ -122,7 +133,9 @@ src/menu_overlay.gd         ☰ / Esc menu + paginated Attribution
 src/start_screen.gd         modes
 src/search_screen.gd        Noun Project search → inspect → add
 src/stage_screen.gd         play: SubViewport world + ping-pong feedback
+src/glow.gd + glow.gdshader bloom pass before fx
 src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma key, quantise, dither
+src/presets.gd              twelve stage snapshots, user://presets.json
 src/monitor.gd              the TV inside the world that shows the final composite
 src/solid.gd                a 3D shape wearing an icon; lives in a 3D viewport composited into the world
 src/actor.gd                one icon on stage; verbs read live from Toolbox

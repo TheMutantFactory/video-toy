@@ -21,6 +21,8 @@ var spin_axis := Vector3(0.3, 1.0, 0.2).normalized()
 
 var _body: MeshInstance3D
 var _skin: MeshInstance3D
+var _particles: CPUParticles3D
+var _pmat: StandardMaterial3D
 var _body_mat: StandardMaterial3D
 var _skin_mat: StandardMaterial3D
 var _base_color := Color.WHITE
@@ -104,6 +106,30 @@ func setup(slot: Dictionary, kind: String, pos: Vector3, pal: int, icon: Texture
 	_skin_mat.texture_repeat = true
 	_skin.material_override = _skin_mat
 	add_child(_skin)
+
+	# Sparkle: little billboarded copies of the icon drifting off the solid.
+	_particles = CPUParticles3D.new()
+	_particles.emitting = false
+	_particles.amount = 30
+	_particles.lifetime = 1.4
+	_particles.direction = Vector3(0, 1, 0)
+	_particles.spread = 180.0
+	_particles.gravity = Vector3(0, -0.6, 0)
+	_particles.initial_velocity_min = 0.6
+	_particles.initial_velocity_max = 1.6
+	_particles.scale_amount_min = 0.08
+	_particles.scale_amount_max = 0.16
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	_pmat = StandardMaterial3D.new()
+	_pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	_pmat.alpha_scissor_threshold = 0.5
+	_pmat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	_pmat.albedo_texture = icon
+	quad.material = _pmat
+	_particles.mesh = quad
+	add_child(_particles)
 	_apply_color(_base_color)
 	scale = Vector3.ONE * base_scale
 
@@ -117,6 +143,8 @@ func _apply_color(c: Color) -> void:
 	# A raster keeps its own colours; the body under it still takes the palette.
 	_skin_mat.albedo_color = c if not raster or c != _base_color else Color.WHITE
 	_body_mat.albedo_color = c.darkened(0.72)
+	if _pmat:
+		_pmat.albedo_color = _skin_mat.albedo_color
 
 
 func _verbs() -> Array:
@@ -173,6 +201,7 @@ func _process(delta: float) -> void:
 		_apply_color(c)
 	else:
 		_apply_color(_base_color)
+	_particles.emitting = verbs.has("sparkle")
 
 
 func _random_point() -> Vector3:

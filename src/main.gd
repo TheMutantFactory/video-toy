@@ -69,6 +69,30 @@ func _selftest() -> void:
 	await get_tree().process_frame
 	print("PASS attribution overlay opens (%d entries)" % Ledger.count())
 	menu.close()
+	# presets: snapshot -> change -> restore round-trips through the real stage
+	show_screen("stage")
+	await get_tree().process_frame
+	var st = current
+	st.palette_index = 2
+	st.fb_zoom = 1.11
+	st._fx.crt_level = 2
+	st._glow.set_level(1)
+	var snap: Dictionary = st.snapshot()
+	st.palette_index = 0
+	st.fb_zoom = 1.0
+	st._fx.crt_level = 0
+	st._glow.set_level(0)
+	st.restore(snap, 0.0)
+	var ok_preset: bool = st.palette_index == 2 and is_equal_approx(st.fb_zoom, 1.11) and st._fx.crt_level == 2 and st._glow.level == 1
+	Presets.save(12, snap, "user://_selftest_presets.json")
+	var back: Dictionary = Presets.get_preset(12, "user://_selftest_presets.json")
+	ok_preset = ok_preset and int(back.get("fx", {}).get("crt", 0)) == 2 and int(back.get("glow", 0)) == 1
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://_selftest_presets.json"))
+	if ok_preset:
+		print("PASS stage snapshot/restore and preset file round-trip")
+	else:
+		fails += 1
+		printerr("FAIL preset round-trip")
 	# 3D solids need the autoloads, so they are checked here, not in smoke.gd
 	var Solid = load("res://src/solid.gd")
 	var ok_shapes: bool = Solid != null and Solid.SHAPES.size() == 5
@@ -115,7 +139,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow"]
 	for name in shots:
 		match name:
 			"menu":
@@ -216,6 +240,27 @@ func _capture_all(dir: String) -> void:
 				current.steal_palette()
 				current.set_webcam_mode(1)          # shows "no camera" here; live elsewhere
 				await get_tree().create_timer(1.2).timeout
+			"glow":
+				# Glow heavy, icon-shaped sparkle, test groove for beat bursts,
+				# and the whole thing saved to a throwaway preset slot.
+				current.toggle_midi_panel()
+				current.set_webcam_mode(0)
+				current.palette_index = 0
+				current._apply_palette()
+				for a in current._actors.get_children() + current._solids.get_children():
+					a.queue_free()
+				for i in Toolbox.slots.size():
+					for v in ["orbit", "sparkle"]:
+						if not Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+				for i in 8:
+					Toolbox.select(i % Toolbox.slots.size())
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current.spawn_solid()
+				current._glow.set_level(2)
+				current._set_feedback(false)
+				AudioReact.set_source("test")
+				await get_tree().create_timer(2.0).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

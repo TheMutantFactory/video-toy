@@ -10,7 +10,8 @@ extends Control
 ## · drag the monitor to move it · B spawn a 3D solid of the selected icon
 ## · Shift+B next shape · ; MIDI + audio panel · A audio source (drop an audio file)
 ## · drop an image = raster slot (Shift+drop = chroma backdrop) · Z webcam layer
-## · S steal a palette from the selected raster / webcam · C clear · H help · Esc menu
+## · S steal a palette from the selected raster / webcam · D glow
+## · F1-F12 recall preset · Shift+F1-F12 save preset · C clear · H help · Esc menu
 ##
 ## Render graph:  world3d (solids) ─> sprite in world
 ##                world (actors + monitor + world3d) ─┬─> screen ──┐
@@ -26,6 +27,7 @@ const MonitorScript = preload("res://src/monitor.gd")
 const SolidScript = preload("res://src/solid.gd")
 const MidiPanelScript = preload("res://src/midi_panel.gd")
 const WebcamScript = preload("res://src/webcam.gd")
+const GlowScript = preload("res://src/glow.gd")
 const WEBCAM_MODES := ["off", "layer", "backdrop"]
 const WORLD := Vector2i(1920, 1080)
 
@@ -57,6 +59,8 @@ var _webcam_vp: SubViewport
 var _webcam_sprite: Sprite2D
 var _webcam_mode := 0
 var _steal_note := ""
+var _glow
+var _fade_tween: Tween
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
@@ -66,6 +70,7 @@ var _verb_checks := {}
 var _fx_pixel_btn: Button
 var _fx_kaleido_btn: Button
 var _fx_crt_btn: Button
+var _fx_glow_btn: Button
 var _fx_chroma: CheckButton
 var _fx_quant: CheckButton
 var _fx_dither: CheckButton
@@ -128,6 +133,9 @@ func _ready() -> void:
 	_screen.texture = _world.get_texture()
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_composite.add_child(_screen)
+
+	_glow = GlowScript.new()                     # bloom before fx, so CRT sees it
+	_composite.add_child(_glow)
 
 	_fx = FxScript.new()
 	_composite.add_child(_fx)
@@ -291,6 +299,89 @@ func cycle_shape() -> void:
 	_update_hud()
 
 
+# ---------------- presets ----------------
+## Everything the stage remembers, as plain data.
+func snapshot() -> Dictionary:
+	var verbs := {}
+	for sl in Toolbox.slots:
+		verbs[str(sl["id"])] = {"verbs": sl.get("verbs", []).duplicate(), "color_index": int(sl.get("color_index", 0))}
+	return {
+		"palette": palette_index,
+		"feedback": {"on": feedback, "zoom": fb_zoom, "rot": fb_rot, "fade": fb_fade},
+		"fx": {"pixel": _fx.pixel_step, "kaleido": _fx.kaleido_step, "crt": _fx.crt_level,
+			"chroma": _fx.chroma, "quantize": _fx.quantize, "dither": _fx.dither},
+		"glow": _glow.level,
+		"monitor": {"on": _monitor.visible, "size": _monitor.size_step, "x": _monitor.position.x, "y": _monitor.position.y},
+		"webcam": _webcam_mode,
+		"shape": _shape_index,
+		"selected": Toolbox.selected,
+		"slots": verbs,
+	}
+
+
+## Apply a snapshot. Continuous feedback params crossfade over `fade` seconds.
+func restore(d: Dictionary, fade := 1.0) -> void:
+	if d.is_empty():
+		return
+	palette_index = posmod(int(d.get("palette", palette_index)), Palettes.count())
+	var fb: Dictionary = d.get("feedback", {})
+	if _fade_tween:
+		_fade_tween.kill()
+	if fade > 0.0 and feedback and bool(fb.get("on", feedback)):
+		_fade_tween = create_tween().set_parallel(true)
+		_fade_tween.tween_property(self, "fb_zoom", float(fb.get("zoom", fb_zoom)), fade)
+		_fade_tween.tween_property(self, "fb_rot", float(fb.get("rot", fb_rot)), fade)
+		_fade_tween.tween_property(self, "fb_fade", float(fb.get("fade", fb_fade)), fade)
+	else:
+		fb_zoom = float(fb.get("zoom", fb_zoom))
+		fb_rot = float(fb.get("rot", fb_rot))
+		fb_fade = float(fb.get("fade", fb_fade))
+	_set_feedback(bool(fb.get("on", feedback)))
+	var fx: Dictionary = d.get("fx", {})
+	_fx.pixel_step = clampi(int(fx.get("pixel", _fx.pixel_step)), 0, _fx.PIXEL_STEPS.size() - 1)
+	_fx.kaleido_step = clampi(int(fx.get("kaleido", _fx.kaleido_step)), 0, _fx.KALEIDO_STEPS.size() - 1)
+	_fx.crt_level = clampi(int(fx.get("crt", _fx.crt_level)), 0, 2)
+	_fx.chroma = bool(fx.get("chroma", _fx.chroma))
+	_fx.quantize = bool(fx.get("quantize", _fx.quantize))
+	_fx.dither = bool(fx.get("dither", _fx.dither))
+	_fx._push()
+	_glow.set_level(int(d.get("glow", _glow.level)))
+	var mon: Dictionary = d.get("monitor", {})
+	_monitor.size_step = clampi(int(mon.get("size", _monitor.size_step)), 0, _monitor.SIZES.size() - 1)
+	_monitor._apply_scale()
+	_monitor.position = Vector2(float(mon.get("x", _monitor.position.x)), float(mon.get("y", _monitor.position.y)))
+	_monitor.visible = bool(mon.get("on", _monitor.visible))
+	set_webcam_mode(int(d.get("webcam", _webcam_mode)))
+	_shape_index = posmod(int(d.get("shape", _shape_index)), SolidScript.SHAPES.size())
+	var slots: Dictionary = d.get("slots", {})
+	for i in Toolbox.slots.size():
+		var rec = slots.get(str(Toolbox.slots[i]["id"]))
+		if rec is Dictionary:
+			Toolbox.slots[i]["verbs"] = Array(rec.get("verbs", [])).duplicate()
+			Toolbox.slots[i]["color_index"] = int(rec.get("color_index", Toolbox.slots[i].get("color_index", 0)))
+	Toolbox.save_to_disk()
+	Toolbox.changed.emit()
+	Toolbox.select(int(d.get("selected", Toolbox.selected)))
+	_apply_palette()
+	_refresh_fx()
+
+
+func save_preset(i: int) -> void:
+	Presets.save(i, snapshot())
+	_steal_note = "saved preset %d (F%d)" % [i, i]
+	_update_hud()
+
+
+func recall_preset(i: int) -> void:
+	var d := Presets.get_preset(i)
+	if d.is_empty():
+		_steal_note = "preset %d is empty — Shift+F%d saves" % [i, i]
+	else:
+		restore(d)
+		_steal_note = "preset %d" % i
+	_update_hud()
+
+
 # ---------------- MIDI ----------------
 ## Continuous params: id, label, setter(0..1). Actions: id, label, callable.
 func midi_params() -> Array:
@@ -322,6 +413,9 @@ func midi_params() -> Array:
 			if not Toolbox.slots.is_empty():
 				Toolbox.select(_step(v, Toolbox.slots.size()))},
 		{"id": "audio_gain", "label": "Audio gain", "set": func(v): AudioReact.gain = lerpf(0.25, 4.0, v)},
+		{"id": "glow", "label": "Glow", "set": func(v):
+			_glow.set_level(_step(v, 3))
+			_update_hud()},
 	]
 
 
@@ -354,6 +448,11 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "glow", "label": "Glow off/soft/heavy", "do": func():
+		_glow.cycle()
+		_update_hud()})
+	for i in Presets.COUNT:
+		out.append({"id": "preset_%d" % (i + 1), "label": "Recall preset %d" % (i + 1), "do": func(): recall_preset(i + 1)})
 	for i in Toolbox.MAX_SLOTS:
 		out.append({"id": "slot_%d" % (i + 1), "label": "Select slot %d" % (i + 1), "do": func(): Toolbox.select(i)})
 	for v in Verbs.ALL:
@@ -463,6 +562,10 @@ func _build_hud() -> void:
 		_fx.cycle_crt()
 		_refresh_fx())
 	_verb_panel.add_child(_fx_crt_btn)
+	_fx_glow_btn = UI.button("", func():
+		_glow.cycle()
+		_refresh_fx())
+	_verb_panel.add_child(_fx_glow_btn)
 	_verb_panel.add_child(UI.vspace(6))
 	_verb_panel.add_child(UI.button("Recolor slot (X)", func(): _recolor()))
 	_verb_panel.add_child(UI.button("Remove slot (Del)", func(): Toolbox.remove(Toolbox.selected)))
@@ -483,7 +586,8 @@ func _build_hud() -> void:
 		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
 		+ ";            MIDI + audio panel\nA            audio: off/mic/test/file (drop mp3/ogg/wav)\n"
 		+ "drop image   raster slot (Shift+drop: chroma backdrop)\nZ            webcam: off/layer/backdrop\n"
-		+ "S            steal palette from raster / webcam\n"
+		+ "S            steal palette from raster / webcam\nD            glow off/soft/heavy\n"
+		+ "F1-F12       recall preset · Shift+F saves\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -521,6 +625,7 @@ func _refresh_fx() -> void:
 	_fx_kaleido_btn.text = "O  Kaleidoscope: %s" % ("off" if _fx.kaleido_step == 0 else "%d" % _fx.kaleido_segments())
 	_fx_chroma.set_pressed_no_signal(_fx.chroma)
 	_fx_crt_btn.text = "V  CRT: %s" % ["off", "soft", "heavy"][_fx.crt_level]
+	_fx_glow_btn.text = "D  Glow: %s" % _glow.describe()
 	_fx_pixel_btn.text = "K  Pixelate: %s" % ("off" if _fx.pixel_step == 0 else "%d px" % _fx.pixel_size())
 	_fx_quant.set_pressed_no_signal(_fx.quantize)
 	_fx_dither.set_pressed_no_signal(_fx.dither)
@@ -574,12 +679,14 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 
 
 func _update_hud() -> void:
+	if _fx_glow_btn:
+		_fx_glow_btn.text = "D  Glow: %s" % _glow.describe()
 	var cur := Toolbox.current()
 	var name := str(cur.get("term", "—")) if not cur.is_empty() else "empty toolbox — press Find Icons"
 	_hud.text = "slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   monitor: %s   ·   actors: %d" % [
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
-		_fx.describe(), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
+		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
 		_actors.get_child_count()] + "   ·   solids: %d (next: %s)" % [_solids.get_child_count(), next_shape()]
 	# second line: controllers
 	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
@@ -721,6 +828,13 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 	if not (ev is InputEventKey and ev.pressed):
 		return
 	var k: int = ev.keycode
+	if k >= KEY_F1 and k <= KEY_F12:
+		var n := k - KEY_F1 + 1
+		if ev.shift_pressed:
+			save_preset(n)
+		else:
+			recall_preset(n)
+		return
 	if k >= KEY_1 and k <= KEY_9:
 		Toolbox.select(k - KEY_1)
 		return
@@ -747,6 +861,9 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				spawn_solid(_world_pos(get_local_mouse_position()) if get_global_rect().has_point(get_global_mouse_position()) else Vector2(-1, -1))
 		KEY_SEMICOLON: toggle_midi_panel()
 		KEY_Z: cycle_webcam()
+		KEY_D:
+			_glow.cycle()
+			_update_hud()
 		KEY_S: steal_palette()
 		KEY_A:
 			AudioReact.cycle_source()

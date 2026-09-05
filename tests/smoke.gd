@@ -239,6 +239,18 @@ func _init() -> void:
 	var Webcam = load("res://src/webcam.gd")
 	_check("webcam script loads standalone", Webcam != null and Webcam.can_instantiate())
 
+	# presets file: save / get / has / clear, independent slots
+	var pp := "user://_smoke_presets.json"
+	Presets.save(1, {"palette": 3, "glow": 2}, pp)
+	Presets.save(7, {"palette": 1}, pp)
+	_check("preset saves and reads back", Presets.get_preset(1, pp).get("palette") == 3 and Presets.get_preset(1, pp).get("glow") == 2)
+	_check("presets are independent slots", Presets.has(7, pp) and not Presets.has(2, pp) and Presets.get_preset(2, pp).is_empty())
+	Presets.clear(1, pp)
+	_check("preset clear", not Presets.has(1, pp) and Presets.has(7, pp))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(pp))
+	var gsh = load("res://src/glow.gdshader")
+	_check("glow shader loads", gsh is Shader and gsh.get_code().contains("uniform float glow"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 
