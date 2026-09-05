@@ -55,7 +55,8 @@ func _ready() -> void:
 	_menu.add_theme_constant_override("separation", 8)
 	_panel.add_child(_menu)
 	_menu.add_child(UI.title("Menu", 40))
-	for m in [["Resume", "resume"], ["Attribution", "attribution"], ["Find Icons", "search"],
+	for m in [["Resume", "resume"], ["Panic — known-good look", "panic"], ["Blackout", "blackout"],
+			["Attribution", "attribution"], ["Find Icons", "search"],
 			["Play", "stage"], ["Scenes", "scenes"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
 		_menu.add_child(UI.button(m[0], func(): _pick(m[1])))
 
@@ -171,6 +172,6 @@ func _open(link: String) -> void:
 
 
 func _unhandled_input(ev: InputEvent) -> void:
-	if ev is InputEventKey and ev.pressed and ev.keycode == KEY_ESCAPE:
+	if ev is InputEventKey and ev.pressed and ev.keycode == KEY_ESCAPE and not ev.shift_pressed:
 		toggle()
 		get_viewport().set_input_as_handled()

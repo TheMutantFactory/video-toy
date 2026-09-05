@@ -185,6 +185,13 @@ var _rd_flip := 0
 var rd_preset := 0
 var rd_feed := 0.0545
 var rd_kill := 0.062
+var quality := Quality.new()
+var _quality_applied := -1
+var _measured: Array = []               # viewport RIDs with render-time measurement on
+var work_ms := 0.0                      # script + measured render time, vsync excluded
+var _blackout: ColorRect
+var blackout := false
+var _blackout_tween: Tween
 var p2_active := false
 var p2_slot := 0
 var p2_layer := 1
@@ -301,6 +308,14 @@ func _ready() -> void:
 	_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_display)
 
+	_blackout = ColorRect.new()
+	_blackout.color = Color.BLACK
+	_blackout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_blackout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_blackout.modulate.a = 0.0
+	_blackout.visible = false
+	add_child(_blackout)
+
 	_monitor = MonitorScript.new()
 	_monitor.setup(_composite.get_texture(), Vector2(WORLD) * 0.5)
 	_monitor.visible = false
@@ -314,6 +329,14 @@ func _ready() -> void:
 	_refresh_fx()
 	get_window().files_dropped.connect(_on_files_dropped)
 	_build_midi()
+	var args := OS.get_cmdline_user_args()
+	var qi := args.find("--quality")
+	if qi >= 0 and qi + 1 < args.size():
+		var names := Quality.LEVELS.map(func(l): return l["name"])
+		var want: String = args[qi + 1]
+		quality.locked = names.find(want) if names.has(want) else (int(want) if want.is_valid_int() else -1)
+	apply_quality(quality.effective())
+	_enable_measurement()
 
 
 func _exit_tree() -> void:
@@ -586,6 +609,8 @@ func _push_rd() -> void:
 
 func _tick_rd() -> void:
 	if rd_preset == 0:
+		return
+	if Engine.get_process_frames() % int(Quality.get_level(quality.effective())["rd_every"]) != 0:
 		return
 	var cur := _rd_flip
 	_rd_flip = 1 - _rd_flip
@@ -1016,6 +1041,145 @@ func _input(ev: InputEvent) -> void:
 		_p2_pad_button(ev.button_index)
 
 
+# ---------------- quality ----------------
+## Frame delta is useless on a vsynced display (this one is 30 Hz), so the
+## ladder watches real work: script time plus measured CPU + GPU render time
+## of the window and every SubViewport the stage owns.
+func _enable_measurement() -> void:
+	_measured = [get_viewport().get_viewport_rid()]
+	for vp in _find_viewports(self):
+		_measured.append(vp.get_viewport_rid())
+	for rid in _measured:
+		RenderingServer.viewport_set_measure_render_time(rid, true)
+	# Performance.TIME_PROCESS includes the present/vsync wait on macOS, so
+	# script time is bracketed by hand: process_frame -> frame_pre_draw.
+	get_tree().process_frame.connect(func(): _t_proc = Time.get_ticks_usec())
+	RenderingServer.frame_pre_draw.connect(func():
+		if _t_proc > 0:
+			script_ms = (Time.get_ticks_usec() - _t_proc) / 1000.0)
+
+
+var _t_proc := 0
+var script_ms := 0.0
+
+
+func _find_viewports(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is SubViewport:
+			out.append(c)
+		out.append_array(_find_viewports(c))
+	return out
+
+
+func measure_work_ms() -> float:
+	var ms := script_ms
+	for rid in _measured:
+		ms += RenderingServer.viewport_get_measured_render_time_cpu(rid) + RenderingServer.viewport_get_measured_render_time_gpu(rid)
+	return ms
+
+
+## Where the frame goes: script, then cpu/gpu per measured viewport (debug HUD / capture).
+func perf_breakdown() -> String:
+	var parts := ["script %.1f (TIME_PROCESS %.1f)" % [script_ms, Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0]]
+	var i := 0
+	for rid in _measured:
+		var c := RenderingServer.viewport_get_measured_render_time_cpu(rid)
+		var g := RenderingServer.viewport_get_measured_render_time_gpu(rid)
+		if c + g > 0.3:
+			parts.append("vp%d %.1f/%.1f" % [i, c, g])
+		i += 1
+	var rest := "   nodes %d  orphans %d  objects %d  draw_calls %d" % [Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+		Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), Performance.get_monitor(Performance.OBJECT_COUNT),
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)]
+	return "  ".join(parts) + "   stage_process(us) " + str(_prof) + rest
+
+
+func apply_quality(level: int) -> void:
+	level = clampi(level, 0, Quality.count() - 1)
+	if level == _quality_applied:
+		return
+	_quality_applied = level
+	var q: Dictionary = Quality.get_level(level)
+	if _particles.amount != int(q["particles"]):
+		_particles.amount = int(q["particles"])           # restarts the system
+		if particles_on:
+			_particles.restart()
+	_fx.slit_stride = int(q["slit_stride"])
+	_glow.set_taps(int(q["glow_taps"]))
+	_world3d.msaa_3d = Viewport.MSAA_2X if q["msaa"] else Viewport.MSAA_DISABLED
+	_update_hud()
+
+
+func _tick_quality(delta: float) -> void:
+	if Engine.get_process_frames() % 10 == 0:            # the render-time queries cost ~1.5 ms; sample, don't poll
+		work_ms = measure_work_ms()
+	if quality.update(work_ms, delta):
+		_steal_note = "quality → " + quality.describe()
+	apply_quality(quality.effective())
+	_enable_measurement()
+
+
+func cycle_quality_lock() -> void:
+	quality.cycle_lock()
+	apply_quality(quality.effective())
+	_enable_measurement()
+	_steal_note = "quality " + quality.describe()
+	_update_hud()
+
+
+# ---------------- panic / blackout ----------------
+## A known-good look, toolbox and actors untouched.
+func panic() -> void:
+	if _fade_tween:
+		_fade_tween.kill()
+	_set_feedback(false)
+	fb_zoom = 1.04
+	fb_rot = 0.02
+	fb_fade = 0.92
+	fb_warp = 0.0
+	fb_drift = Vector2.ZERO
+	fb_stretch = Vector2.ONE
+	_fx.set_state(0, false, false, 0, false, 0, 0, 0)
+	_glow.set_level(1)
+	set_particles(false)
+	set_rd_preset(0)
+	set_scene("", 0.3)
+	set_monitor(false)
+	set_webcam_mode(0)
+	for i in range(1, LAYER_COUNT):
+		_layers[i]["blend"] = 0
+		_layers[i]["opacity"] = 1.0
+	_apply_layers()
+	set_active_layer(0)
+	reset_camera()
+	draw_mode = false
+	set_evolve(false)
+	if attract:
+		attract = false
+		_attract_base = {}
+	timeline.stop_play()
+	if timeline.recording:
+		toggle_record()
+	if blackout:
+		toggle_blackout()
+	_refresh_fx()
+	_steal_note = "PANIC: known-good look (toolbox kept)"
+	_update_hud()
+
+
+func toggle_blackout() -> void:
+	blackout = not blackout
+	if _blackout_tween:
+		_blackout_tween.kill()
+	_blackout.visible = true
+	_blackout_tween = create_tween()
+	_blackout_tween.tween_property(_blackout, "modulate:a", 1.0 if blackout else 0.0, 0.5)
+	if not blackout:
+		_blackout_tween.tween_callback(func(): _blackout.visible = false)
+	_update_hud()
+
+
 # ---------------- player 2 ----------------
 func p2_wake() -> void:
 	if not p2_active:
@@ -1369,6 +1533,9 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "panic", "label": "PANIC: known-good look", "do": panic})
+	out.append({"id": "blackout", "label": "Blackout on/off", "do": toggle_blackout})
+	out.append({"id": "quality", "label": "Quality lock: cycle", "do": cycle_quality_lock})
 	out.append({"id": "particles", "label": "Particle field on/off", "do": func(): set_particles(not particles_on)})
 	out.append({"id": "scatter", "label": "Scatter particles", "do": scatter_particles})
 	out.append({"id": "rd", "label": "Next reaction-diffusion preset", "do": cycle_rd})
@@ -1603,6 +1770,7 @@ func _build_hud() -> void:
 		+ "Shift+R      record controller gestures · Shift+P loop them\nShift+W/T/Y/U  Lorenz / Rössler / Clifford / de Jong verbs\n"
 		+ "Shift+N      particle field (right-click scatters) · Shift+I Field verb\nShift+O      reaction-diffusion presets\n"
 		+ "keypad/pad   player 2: 8/2/4/6 or stick moves · 5/A spawns · 0/B removes\n             +/-/X slot · ./Y layer · */LB spin · //RB solid · Shift+2 hides\n"
+		+ "Shift+Esc    PANIC: known-good look · Shift+H blackout · Shift+F quality lock\n"
 		+ "F1-F12       recall preset · Shift+F saves\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -1707,11 +1875,12 @@ func _update_hud() -> void:
 		_fx_scene_btn.text = "Tab  Scene: %s" % (Scenes.get_scene(Scenes.current).get("name", "?") if Scenes.current != "" else "off")
 	var cur := Toolbox.current()
 	var name := str(cur.get("term", "—")) if not cur.is_empty() else "empty toolbox — press Find Icons"
-	_hud.text = "slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   monitor: %s   ·   actors: %d" % [
+	_hud.text = "fps %d/%dHz · work %.1f ms · q %s   ·   slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   monitor: %s   ·   actors: %d" % [
+		Engine.get_frames_per_second(), roundi(DisplayServer.screen_get_refresh_rate()), quality.avg_ms, quality.describe(),
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
 		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
-		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
+		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + ("   ·   BLACKOUT" if blackout else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
 	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
@@ -1780,13 +1949,24 @@ func _set_feedback(on: bool) -> void:
 	_update_hud()
 
 
+var _prof := {}
+
+
 func _process(_delta: float) -> void:
+	var t0 := Time.get_ticks_usec()
 	_tick_modes(_delta)
+	var t1 := Time.get_ticks_usec()
 	_tick_timeline(_delta)
 	_tick_rd()
+	var t2 := Time.get_ticks_usec()
+	_tick_quality(_delta)
+	var t3 := Time.get_ticks_usec()
 	_tick_p2(_delta)
+	var t4 := Time.get_ticks_usec()
 	if particles_on:
 		_push_particles()
+	var t5 := Time.get_ticks_usec()
+	_prof = {"modes": t1 - t0, "tl_rd": t2 - t1, "quality": t3 - t2, "p2": t4 - t3, "particles": t5 - t4}
 	var mouse := _world_pos(get_local_mouse_position())
 	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _dragging
 	for a in all_actors():
@@ -1921,6 +2101,9 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 	if k == KEY_2 and ev.shift_pressed:
 		p2_sleep()
 		return
+	if k == KEY_ESCAPE and ev.shift_pressed:
+		panic()
+		return
 	if k >= KEY_1 and k <= KEY_9:
 		Toolbox.select(k - KEY_1)
 		return
@@ -1973,7 +2156,11 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			else:
 				_recolor()
 		KEY_DELETE, KEY_BACKSPACE: Toolbox.remove(Toolbox.selected)
-		KEY_F: _set_feedback(not feedback)
+		KEY_F:
+			if ev.shift_pressed:
+				cycle_quality_lock()
+			else:
+				_set_feedback(not feedback)
 		KEY_BRACKETLEFT:
 			if ev.shift_pressed: set_layer_opacity(_layers[active_layer]["opacity"] - 0.1)
 			else: fb_zoom = maxf(0.90, fb_zoom - 0.01)
@@ -2073,6 +2260,9 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			for a in _solids.get_children() + _formations.get_children():
 				a.queue_free()
 		KEY_H:
+			if ev.shift_pressed:
+				toggle_blackout()
+				return
 			_help.visible = not _help.visible
 			_verb_panel.get_parent().visible = _help.visible
 			_hud.get_parent().visible = _help.visible

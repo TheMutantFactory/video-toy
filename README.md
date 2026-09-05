@@ -151,6 +151,20 @@ viewports that alternate each frame, the world's icons seed the V chemical, and 
 painted through the palette *under* the actors — so icons grow coral, spots or worms around
 themselves. Feed and kill are learnable; everything is preset-saved.
 
+## Show safety: frame rate, auto-quality, panic, blackout
+
+The HUD shows fps against the display's refresh rate and the smoothed **work** per frame —
+script time plus Godot's measured CPU + GPU render time across every viewport, so a vsync wait on
+a 30 Hz display does not read as slowness. A **quality ladder** (full / high / medium / low)
+sheds load — particle count, reaction-diffusion rate, slit-scan stride, glow taps, 3D
+anti-aliasing — and steps down by itself after a second over 20 ms of work, back up after five
+seconds under 12 ms, with a three-second cooldown. **Shift+F** locks a level (or `./run.sh play low`).
+
+**Shift+Esc** is **panic**: every effect, feedback, particles, reaction-diffusion, scene, monitor,
+webcam, layer blend, camera, draw / evolve / attract / timeline off, glow soft — toolbox and actors
+untouched. **Shift+H** is a **blackout** that fades over half a second. Both are in the Esc menu
+and are learnable actions, so a pad can be the emergency stop.
+
 ## Two-player
 
 A second person plays from the **numeric keypad** or a **gamepad**, with their own slot,
@@ -247,6 +261,7 @@ src/stage_screen.gd         play: SubViewport world + ping-pong feedback
 src/glow.gd + glow.gdshader bloom pass before fx
 src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma key, quantise, dither
 src/presets.gd              twelve stage snapshots, user://presets.json
+src/quality.gd              the quality ladder + frame-time monitor
 src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading layer, the shaders (common.gdshaderinc shared)
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader
 src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)

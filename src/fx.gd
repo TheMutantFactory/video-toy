@@ -9,6 +9,7 @@ const SLIT_MODES := ["off", "rows", "cols", "radial"]
 const SLIT_COLS := 6
 const SLIT_ROWS := 6
 const SLIT_STRIDE := 2                      # capture every Nth frame -> ~1.2 s of history
+var slit_stride := SLIT_STRIDE              # raised by the quality ladder
 const BACKDROP_PATH := "user://backdrop.png"
 
 var pixel_step := 0
@@ -144,7 +145,7 @@ func _process(_delta: float) -> void:
 		var cur := _frame % 2
 		_prev[cur].render_target_update_mode = SubViewport.UPDATE_ONCE
 		_mat.set_shader_parameter("prev_tex", _prev[1 - cur].get_texture())
-	if slit_mode > 0 and _frame % SLIT_STRIDE == 0:
+	if slit_mode > 0 and _frame % maxi(1, slit_stride) == 0:
 		_hist[_flip].render_target_update_mode = SubViewport.UPDATE_ONCE
 		_mat.set_shader_parameter("slit_tex", _hist[_flip].get_texture())
 		_flip = 1 - _flip

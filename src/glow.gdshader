@@ -7,6 +7,7 @@ shader_type canvas_item;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear, repeat_disable;
 uniform float glow = 0.0;
 uniform float threshold = 0.45;
+uniform int taps = 16;             // quality ladder halves this
 
 const int TAPS = 16;
 const vec2 POISSON[16] = vec2[16](
@@ -27,11 +28,13 @@ void fragment() {
 		float radius_px = 14.0 + 16.0 * glow;
 		vec2 r = radius_px * SCREEN_PIXEL_SIZE;
 		vec3 acc = vec3(0.0);
+		int n = clamp(taps, 1, TAPS);
 		for (int i = 0; i < TAPS; i++) {
+			if (i >= n) break;
 			acc += bright(SCREEN_UV + POISSON[i] * r);
 			acc += bright(SCREEN_UV + POISSON[i] * r * 0.45);
 		}
-		acc /= float(TAPS * 2);
+		acc /= float(n * 2);
 		c += acc * (0.9 * glow);
 	}
 	COLOR = vec4(c, 1.0);

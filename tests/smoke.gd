@@ -494,6 +494,30 @@ func _init() -> void:
 	var rsh = load("res://src/rd.gdshader")
 	_check("particle and reaction-diffusion shaders load", psh is Shader and psh.get_code().contains("shader_type particles") and rsh is Shader and rsh.get_code().contains("feed"))
 
+	# quality monitor: steps down after sustained slow frames, up after sustained fast ones, honours the lock
+	var qm := Quality.new()
+	var changed := 0
+	for i in 200:                                          # 3.3 s at 30 ms frames
+		if qm.update(30.0, 1.0 / 60.0):
+			changed += 1
+	_check("quality steps down under sustained 30 ms frames (once per cooldown)", qm.level >= 1 and changed == qm.level)
+	var lvl := qm.level
+	for i in 60:                                           # 1 s in the dead band: nothing
+		qm.update(16.0, 1.0 / 60.0)
+	_check("dead band holds the level", qm.level == lvl)
+	for i in 900:                                          # 15 s at 8 ms frames
+		qm.update(8.0, 1.0 / 60.0)
+	_check("quality steps back up under sustained fast frames", qm.level < lvl)
+	qm.locked = 2
+	for i in 300:
+		qm.update(40.0, 1.0 / 60.0)
+	_check("a locked level never moves; effective is the lock", qm.effective() == 2 and qm.describe() == "medium")
+	qm.locked = 3
+	qm.cycle_lock()
+	_check("lock cycles back to auto", qm.locked == -1 and qm.describe().ends_with("(auto)"))
+	_check("ladder sheds load monotonically", Quality.get_level(0)["particles"] > Quality.get_level(3)["particles"]
+		and Quality.get_level(3)["rd_every"] > Quality.get_level(0)["rd_every"] and Quality.get_level(3)["glow_taps"] < Quality.get_level(0)["glow_taps"])
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

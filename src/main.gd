@@ -42,6 +42,14 @@ func show_screen(name: String) -> void:
 	if name == "attribution":
 		menu.show_attribution()
 		return
+	if name == "panic" or name == "blackout":
+		if current_name != "stage":
+			show_screen("stage")
+		if name == "panic":
+			current.panic()
+		else:
+			current.toggle_blackout()
+		return
 	if not SCREENS.has(name):
 		push_warning("Unknown screen: " + name)
 		return
@@ -310,6 +318,36 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL player 2")
+	# quality ladder applies, panic resets, blackout fades
+	var ok_q := true
+	st.set_particles(true)
+	st.apply_quality(3)
+	ok_q = ok_q and st._particles.amount == 1500 and st._fx.slit_stride == 6 and st._world3d.msaa_3d == Viewport.MSAA_DISABLED
+	st.apply_quality(0)
+	ok_q = ok_q and st._particles.amount == 12000 and st._fx.slit_stride == 2 and st._world3d.msaa_3d == Viewport.MSAA_2X
+	st.quality.locked = 2
+	st.cycle_quality_lock()
+	ok_q = ok_q and st.quality.locked == 3 and st._quality_applied == 3
+	st.cycle_quality_lock()
+	ok_q = ok_q and st.quality.locked == -1
+	st._set_feedback(true)
+	st.set_rd_preset(1)
+	st.set_scene("plasma", 0.0)
+	st._fx.set_state(12, true, true, 6, false, 2)
+	st.set_evolve(true)
+	st.panic()
+	ok_q = ok_q and not st.feedback and st.rd_preset == 0 and Scenes.current == "" and not st._fx.is_active() \
+		and st._glow.level == 1 and not st.particles_on and not st.evolve and Toolbox.slots.size() > 0
+	st.toggle_blackout()
+	ok_q = ok_q and st.blackout and st._blackout.visible
+	st.toggle_blackout()
+	await get_tree().create_timer(0.6).timeout
+	ok_q = ok_q and not st.blackout and not st._blackout.visible
+	if ok_q:
+		print("PASS quality ladder applies, lock cycles, panic resets, blackout fades")
+	else:
+		fails += 1
+		printerr("FAIL quality / panic / blackout")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -379,7 +417,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -747,6 +785,18 @@ func _capture_all(dir: String) -> void:
 				current.p2_cursor = Vector2(1150, 700)
 				current._refresh_p2()
 				await get_tree().create_timer(1.0).timeout
+			"blackout":
+				# Everything on, then PANIC, then blackout: the shot is the fade.
+				current.p2_sleep()
+				current.set_particles(true)
+				current._glow.set_level(2)
+				current.set_fx(12, true, true, 6, false, 2)
+				current._set_feedback(true)
+				await get_tree().create_timer(0.5).timeout
+				current.panic()
+				await get_tree().create_timer(0.3).timeout
+				current.toggle_blackout()
+				await get_tree().create_timer(0.25).timeout       # mid-fade
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout
@@ -760,6 +810,8 @@ func _capture_all(dir: String) -> void:
 				show_screen(name)
 				await get_tree().create_timer(0.5).timeout
 		await RenderingServer.frame_post_draw
+		if current_name == "stage":
+			print("PERF ", name, ": ", current.perf_breakdown())
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(dir.path_join(name + ".png"))
 		print("captured ", name)

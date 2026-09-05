@@ -24,6 +24,10 @@ func set_level(l: int) -> void:
 	_push()
 
 
+func set_taps(n: int) -> void:
+	_mat.set_shader_parameter("taps", n)
+
+
 func describe() -> String:
 	return ["off", "soft", "heavy"][level]
 

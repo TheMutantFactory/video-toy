@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ./run.sh            play
+# ./run.sh [play] [low|medium|high|full]   play (optionally lock the quality level)
 # ./run.sh test       headless smoke tests (no network, no quota)
 # ./run.sh capture    screenshot every screen into out/
 # ./run.sh import     (re)import assets headlessly
@@ -32,7 +32,7 @@ audio_override() {
 }
 
 case "${1:-play}" in
-  play)    audio_override; exec "$G" --path . ;;
+  play)    audio_override; exec "$G" --path . -- ${2:+--quality "$2"} ;;
   test)    "$G" --headless --path . --import >/dev/null 2>&1 || true
            # perl alarm = portable timeout: a script that errors before quit() would hang forever
            perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -s tests/smoke.gd \
