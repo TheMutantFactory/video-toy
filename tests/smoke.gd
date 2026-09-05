@@ -352,6 +352,79 @@ func _init() -> void:
 	_check("mosaic cells cover only the opaque half", mc.size() > 0 and absi(mc.size() - mg.x * mg.y / 2) <= mg.y and left_only)
 	_check("mosaic nearest colour", Mosaic.nearest(Color(0.9, 0.1, 0.1), [Color.BLUE, Color.RED, Color.GREEN]) == 1 and Mosaic.nearest(Color.WHITE, []) == -1)
 
+	# OSC codec: message, types, bundle; and the map's pad / osc feeds
+	var OscC = load("res://src/osc.gd")
+	var pk: PackedByteArray = OscC.build("/vt/param/fb_zoom", [0.75])
+	var msgs: Array = OscC.parse(pk)
+	_check("osc message round-trips a float", pk.size() % 4 == 0 and msgs.size() == 1 and msgs[0]["address"] == "/vt/param/fb_zoom" and is_equal_approx(msgs[0]["args"][0], 0.75))
+	var multi: Array = OscC.parse(OscC.build("/x", [3, "hi", 0.25, true]))
+	_check("osc int / string / float / bool args", multi[0]["args"] == [3, "hi", 0.25, true])
+	var m1: PackedByteArray = OscC.build("/a", [1.0])
+	var m2: PackedByteArray = OscC.build("/b/c", [2])
+	var bundle := PackedByteArray()
+	bundle.append_array("#bundle".to_ascii_buffer())
+	bundle.append(0)
+	bundle.resize(16)                                     # zero timetag
+	for m in [m1, m2]:
+		var sz := PackedByteArray()
+		sz.resize(4)
+		sz.encode_u32(0, m.size())
+		sz.reverse()
+		bundle.append_array(sz)
+		bundle.append_array(m)
+	var bm: Array = OscC.parse(bundle)
+	_check("osc bundle yields its messages in order", bm.size() == 2 and bm[0]["address"] == "/a" and bm[1]["address"] == "/b/c" and bm[1]["args"][0] == 2)
+	_check("osc garbage is ignored", OscC.parse("nope".to_ascii_buffer()).is_empty() and OscC.parse(PackedByteArray()).is_empty())
+	var cm = load("res://src/midi_map.gd").new()
+	cm.path = "user://_smoke_ctrl.json"
+	var got2 := {"param": [], "action": []}
+	cm.param.connect(func(id, v): got2["param"].append([id, snappedf(v, 0.01)]))
+	cm.action.connect(func(id): got2["action"].append(id))
+	cm.feed_osc("/vt/param/glow", 0.6)
+	cm.feed_osc("/vt/action/clear", 1.0)
+	_check("osc direct routes need no learning", got2["param"] == [["glow", 0.6]] and got2["action"] == ["clear"])
+	cm.arm("fb_twist")
+	cm.feed_osc("/1/fader3", 0.2)
+	cm.feed_osc("/1/fader3", 0.9)
+	_check("osc address learns like a CC", cm.binding_for("fb_twist") == "osc:/1/fader3" and got2["param"][-1] == ["fb_twist", 0.9] and cm.describe("osc:/1/fader3") == "osc /1/fader3")
+	var ax := InputEventJoypadMotion.new()
+	ax.device = 0
+	ax.axis = JOY_AXIS_LEFT_X
+	ax.axis_value = 0.02
+	cm.arm("fb_dx")
+	cm.feed_pad(ax)                                       # noise: not learned
+	ax.axis_value = 1.0
+	cm.feed_pad(ax)                                       # deliberate: learned, then value
+	ax.axis_value = -1.0
+	cm.feed_pad(ax)
+	ax.axis_value = 0.0
+	cm.feed_pad(ax)
+	var vals: Array = got2["param"].filter(func(p): return p[0] == "fb_dx").map(func(p): return p[1])
+	_check("stick learns on a deliberate move and maps -1..1 to 0..1 with a centre deadzone", cm.binding_for("fb_dx") == "pad:0:axis:0" and vals == [0.0, 0.5])
+	var tr := InputEventJoypadMotion.new()
+	tr.axis = JOY_AXIS_TRIGGER_RIGHT
+	tr.axis_value = 0.7
+	cm.arm("glow")
+	cm.feed_pad(tr)
+	tr.axis_value = 0.3
+	cm.feed_pad(tr)
+	_check("trigger maps 0..1 directly", got2["param"][-1] == ["glow", 0.3])
+	var bt := InputEventJoypadButton.new()
+	bt.device = 1
+	bt.button_index = JOY_BUTTON_A
+	bt.pressed = true
+	cm.arm("act:spawn")
+	cm.feed_pad(bt)
+	got2["action"].clear()
+	cm.feed_pad(bt)
+	bt.pressed = false
+	cm.feed_pad(bt)
+	bt.pressed = true
+	cm.feed_pad(bt)
+	_check("button learns on press, fires on each press not release", cm.binding_for("act:spawn") == "pad:1:btn:0" and got2["action"] == ["spawn", "spawn"] and cm.describe("pad:1:btn:0") == "pad1 btn 0")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(cm.path))
+	cm.free()
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

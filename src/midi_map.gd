@@ -9,6 +9,12 @@ extends Node
 ##   note on   -> param: velocity/127     action: trigger (velocity > 0)
 ##   pitch bend-> param: pitch/16383      action: rising edge through centre
 ##
+## Gamepads and OSC are controllers too:
+##   pad:<device>:axis:<n>  param: stick -1..1 -> 0..1, trigger 0..1; action: crossing 0.5
+##   pad:<device>:btn:<n>   param: 1/0;  action: press
+##   osc:<address>          param: first float arg (0..1); action: any message
+##   /vt/param/<id> and /vt/action/<id> address params and actions directly.
+##
 ## Audio bands are virtual controllers: audio_bindings maps an id to "bass",
 ## "mid", "high", "level" (params) or "beat" (actions); feed_audio() and
 ## feed_beat() emit exactly like a knob or a pad would.
@@ -119,12 +125,18 @@ static func describe(key: String) -> String:
 		"cc": return "CC %s ch%s" % [p[2], p[1]]
 		"note": return "note %s ch%s" % [p[2], p[1]]
 		"bend": return "bend ch%s" % p[1]
+		"pad":
+			if p.size() >= 4:
+				return "pad%s %s %s" % [p[1], "axis" if p[2] == "axis" else "btn", p[3]]
+		"osc": return "osc " + key.substr(4)
 	return key
 
 
 func _input(ev: InputEvent) -> void:
 	if ev is InputEventMIDI:
 		feed(ev)
+	elif ev is InputEventJoypadMotion or ev is InputEventJoypadButton:
+		feed_pad(ev)
 
 
 ## Message -> (key, value 0..1). Empty key = ignored message.
@@ -147,13 +159,54 @@ func feed(ev: InputEventMIDI) -> void:
 	var value: float = d[1]
 	if key == "":
 		return
-	last_text = "%s = %d" % [describe(key), roundi(value * 127.0)]
-	activity.emit(last_text)
-
 	var is_off := ev.message == MIDI_MESSAGE_NOTE_OFF or (ev.message == MIDI_MESSAGE_NOTE_ON and ev.velocity == 0)
+	var is_note := ev.message == MIDI_MESSAGE_NOTE_ON or ev.message == MIDI_MESSAGE_NOTE_OFF
+	_handle(key, value, is_off, is_note, "%s = %d" % [describe(key), roundi(value * 127.0)])
+
+
+## Gamepad: sticks and triggers are params, buttons are actions or 1/0 params.
+func feed_pad(ev: InputEvent) -> void:
+	if ev is InputEventJoypadMotion:
+		var raw: float = ev.axis_value
+		var trigger: bool = ev.axis == JOY_AXIS_TRIGGER_LEFT or ev.axis == JOY_AXIS_TRIGGER_RIGHT
+		var value := clampf(raw if trigger else raw * 0.5 + 0.5, 0.0, 1.0)
+		var key := "pad:%d:axis:%d" % [ev.device, ev.axis]
+		# learning needs a deliberate move, not stick noise
+		if armed_id != "" and absf(raw) < 0.5:
+			return
+		if absf(raw) < 0.08 and not trigger:
+			value = 0.5
+		_handle(key, value, false, false, "%s = %.2f" % [describe(key), value])
+	elif ev is InputEventJoypadButton:
+		var key := "pad:%d:btn:%d" % [ev.device, ev.button_index]
+		_handle(key, 1.0 if ev.pressed else 0.0, not ev.pressed, true, "%s %s" % [describe(key), "down" if ev.pressed else "up"])
+
+
+## OSC: /vt/param/<id> and /vt/action/<id> go straight through; anything else
+## is a learnable "osc:<address>" controller.
+func feed_osc(address: String, value: float) -> void:
+	if address.begins_with("/vt/param/"):
+		var id := address.trim_prefix("/vt/param/")
+		last_text = "osc %s = %.2f" % [id, value]
+		activity.emit(last_text)
+		param.emit(id, clampf(value, 0.0, 1.0))
+		return
+	if address.begins_with("/vt/action/"):
+		var id := address.trim_prefix("/vt/action/")
+		last_text = "osc " + id
+		activity.emit(last_text)
+		action.emit(id)
+		return
+	_handle("osc:" + address, clampf(value, 0.0, 1.0), false, false, "%s = %.2f" % [describe("osc:" + address), value])
+
+
+## Shared learn / dispatch. `is_note`: actions fire on press rather than on a
+## value crossing 0.5; `is_off`: a release, never learned and never a param.
+func _handle(key: String, value: float, is_off: bool, is_note: bool, text: String) -> void:
+	last_text = text
+	activity.emit(last_text)
 	if armed_id != "" and not is_off:
-		# steal the message from any earlier binding
-		var old := binding_for(armed_id)
+		var old := binding_for(armed_id)          # steal the message from any earlier binding
 		if old != "":
 			bindings.erase(old)
 		bindings[key] = armed_id
@@ -162,20 +215,17 @@ func feed(ev: InputEventMIDI) -> void:
 		save_to_disk()
 		learned.emit(id, describe(key))
 		return
-
 	if not bindings.has(key):
 		_last_value[key] = value
 		return
 	var id: String = bindings[key]
 	if id.begins_with("act:"):
 		var prev: float = _last_value.get(key, 0.0)
-		var rising := (value >= 0.5 and prev < 0.5) if key.begins_with("cc") or key.begins_with("bend") \
-			else (ev.message == MIDI_MESSAGE_NOTE_ON and ev.velocity > 0)
+		var rising := (not is_off and value > 0.0) if is_note else (value >= 0.5 and prev < 0.5)
 		if rising:
 			action.emit(id.trim_prefix("act:"))
-	else:
-		if not is_off:
-			param.emit(id, value)
+	elif not is_off:
+		param.emit(id, value)
 	_last_value[key] = value
 
 

@@ -28,6 +28,7 @@ Toolbox="*res://src/toolbox.gd"
 Ledger="*res://src/ledger.gd"
 MidiMap="*res://src/midi_map.gd"
 AudioReact="*res://src/audio_react.gd"
+Osc="*res://src/osc.gd"
 
 [display]
 

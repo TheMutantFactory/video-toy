@@ -150,6 +150,12 @@ row, then move a knob or hit a pad: that message is bound to it. Right-click a r
 
 Bindings live in `user://midi.json`. The HUD shows the last message received.
 
+**Gamepads** learn the same way: sticks and triggers are params (sticks map -1..1 to 0..1 with
+a centre deadzone), buttons are actions (or 1/0 params). **OSC** listens on UDP 9000
+(`VIDEO_TOY_OSC_PORT` to change): `/vt/param/<id> <0..1>` and `/vt/action/<id>` drive things by
+name with no learning, and any other address (`/1/fader3` from TouchOSC, say) is learnable like a
+CC. The `;` panel lists connected pads and the OSC port.
+
 ## Audio reactivity
 
 Press **A** to cycle the source: **mic**, a built-in **test** groove (120 BPM, no input
@@ -227,7 +233,8 @@ src/noun_api.gd  (autoload) OAuth 1.0a client (pinned to RFC 5849 vector)
 src/icon_media.gd(autoload) thumbnails + white SVG rasteriser
 src/palettes.gd             named colour sets
 src/verbs.gd                verb table
-src/midi_map.gd  (autoload) MIDI-learn: opens inputs, binds messages to params/actions, user://midi.json
+src/midi_map.gd  (autoload) the learn table: MIDI, gamepad, OSC and audio bands -> params/actions, user://midi.json
+src/osc.gd       (autoload) OSC over UDP: listener, message/bundle codec, /vt/param and /vt/action routes
 src/midi_panel.gd           the MIDI + audio panel on the stage
 src/audio_react.gd (autoload) mic / file / test groove -> bass, mid, high, level, beat
 src/webcam.gd               CameraServer feed (RGB or YCbCr) as a sprite; rendered to a viewport on the stage

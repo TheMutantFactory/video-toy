@@ -818,7 +818,8 @@ func _tick_modes(delta: float) -> void:
 
 
 func _input(ev: InputEvent) -> void:
-	if ev is InputEventKey or ev is InputEventMouseButton or ev is InputEventMIDI or ev is InputEventJoypadButton:
+	if ev is InputEventKey or ev is InputEventMouseButton or ev is InputEventMIDI or ev is InputEventJoypadButton \
+			or (ev is InputEventJoypadMotion and absf(ev.axis_value) > 0.5):
 		_idle = 0.0
 		if attract:
 			set_attract(false)

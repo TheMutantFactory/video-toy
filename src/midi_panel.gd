@@ -10,6 +10,7 @@ var _rows := {}                    # full id -> Button
 var _audio_btns := {}              # full id -> Button
 var _status: Label
 var _inputs: Label
+var _osc_line: Label
 
 
 func _ready() -> void:
@@ -18,7 +19,7 @@ func _ready() -> void:
 	col.add_theme_constant_override("separation", 6)
 	add_child(col)
 	var head := HBoxContainer.new()
-	head.add_child(UI.label("MIDI + audio", 28, UI.ACCENT))
+	head.add_child(UI.label("MIDI · pads · OSC · audio", 28, UI.ACCENT))
 	head.add_child(UI.hspace(16))
 	head.add_child(UI.button("Rescan", func():
 		MidiMap.rescan()
@@ -30,7 +31,9 @@ func _ready() -> void:
 	col.add_child(head)
 	_inputs = UI.label("", 16, UI.DIM)
 	col.add_child(_inputs)
-	col.add_child(UI.label("Click a row, then move a knob or hit a pad. Right-click to unbind. ♪ cycles an audio band. ; closes.", 16, UI.DIM))
+	col.add_child(UI.label("Click a row, then move a knob / stick / fader or hit a pad / button / send an OSC message. Right-click to unbind. ♪ cycles an audio band. ; closes.", 16, UI.DIM))
+	_osc_line = UI.label("", 16, UI.DIM)
+	col.add_child(_osc_line)
 
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 16)
@@ -113,4 +116,9 @@ func refresh() -> void:
 
 func _refresh_inputs() -> void:
 	var names := MidiMap.inputs()
-	_inputs.text = ("inputs: " + ", ".join(names)) if names.size() > 0 else "inputs: none found (plug in a controller and Rescan)"
+	var line := ("MIDI: " + ", ".join(names)) if names.size() > 0 else "MIDI: none found (plug in a controller and Rescan)"
+	var pads := Input.get_connected_joypads()
+	line += "   ·   gamepads: " + (", ".join(pads.map(func(i): return Input.get_joy_name(i))) if pads.size() > 0 else "none")
+	_inputs.text = line
+	_osc_line.text = ("OSC: listening on UDP %d — /vt/param/<id> <0..1>, /vt/action/<id>, or learn any address" % Osc.port) if Osc.listening \
+		else "OSC: port %d not available (VIDEO_TOY_OSC_PORT to change)" % Osc.port

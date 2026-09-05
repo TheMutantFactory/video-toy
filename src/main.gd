@@ -208,6 +208,26 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL mosaic / evolve / attract")
+	# OSC: a real UDP packet into the listener drives a stage param and an action
+	var ok_osc: bool = Osc.listening
+	if ok_osc:
+		var tx := PacketPeerUDP.new()
+		tx.set_dest_address("127.0.0.1", Osc.port)
+		st.fb_zoom = 1.0
+		tx.put_packet(Osc.build("/vt/param/fb_zoom", [0.5]))
+		var solids_before: int = st._solids.get_child_count()
+		Toolbox.select(0)
+		tx.put_packet(Osc.build("/vt/action/spawn_solid"))
+		for i in 6:
+			await get_tree().process_frame
+		ok_osc = is_equal_approx(st.fb_zoom, 1.05) and st._solids.get_child_count() == solids_before + 1 and Osc.received >= 2
+		for sol in st._solids.get_children():
+			sol.queue_free()
+	if ok_osc:
+		print("PASS OSC over UDP drives a param and an action on the stage")
+	else:
+		fails += 1
+		printerr("FAIL OSC (listening=%s received=%d fb_zoom=%.3f)" % [Osc.listening, Osc.received, st.fb_zoom])
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
