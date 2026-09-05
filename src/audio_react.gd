@@ -64,8 +64,25 @@ func _make_bus(name: String, volume_db: float) -> int:
 	return idx
 
 
+var _clock: Node
+
+
 func active() -> bool:
-	return source != "off"
+	return source != "off" or clock_running()
+
+
+func clock_running() -> bool:
+	if _clock == null:
+		_clock = get_node_or_null("/root/Clock")
+	return _clock != null and _clock.running
+
+
+## A beat from the tempo clock: the envelope and the beat signal fire exactly
+## as they would from the bass detector, so everything beat-driven follows.
+func pulse_beat() -> void:
+	beat_env = 1.0
+	_cooldown = 0.18
+	beat.emit()
 
 
 ## True when the engine fell back to the silent dummy driver in a real run
@@ -135,6 +152,7 @@ func load_file(path: String) -> bool:
 
 func _process(delta: float) -> void:
 	if source == "off":
+		beat_env = maxf(0.0, beat_env - delta * 4.0)      # clock pulses still decay
 		return
 	var raw: Dictionary
 	if source == "test":

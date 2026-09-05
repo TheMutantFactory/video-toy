@@ -185,6 +185,21 @@ runs a **credits roll** of the whole ledger over the picture as an end card, and
 saves a **screenshot** of the picture (no HUD) with a strip listing the on-stage credits burned
 in — CC BY on a thumbnail. All three are learnable actions.
 
+## Syphon output and MIDI clock
+
+**Shift+Z** publishes the composite — the picture, no HUD — as a Syphon server named
+"Video Toy" for OBS, Resolume, VDMX or any Syphon client, through the vendored
+[godot-syphon](https://github.com/buresu/godot-syphon) GDExtension (MIT; macOS, Forward+/Metal
+only; binaries in `addons/godot-syphon`). The capture run reads the server back through a client
+to prove it. Windows would want Spout instead.
+
+A **MIDI clock** (24 ppqn with start / stop / continue) or the **internal clock** (an action in
+the `;` panel, BPM a learnable param) drives every beat-driven thing — sparkle bursts, Morph,
+evolve, the pulse — through the same beat path as the audio detector. While a clock runs, the
+timeline loop's length rounds to whole bars and playback waits for the next bar, and "lock
+scenes to BPM" ties the oscillator scenes' speed to the tempo. The HUD shows source, BPM and
+the beat in the bar.
+
 ## Two-player
 
 A second person plays from the **numeric keypad** or a **gamepad**, with their own slot,
@@ -289,6 +304,8 @@ src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma ke
 src/presets.gd              eight banks x twelve stage snapshots, user://presets.json
 src/state_lerp.gd           crossfade maths: continuous fields lerp, discrete flip at the midpoint
 src/quality.gd              the quality ladder + frame-time monitor
+src/clock.gd     (autoload) MIDI clock in / internal clock: bpm, beats, bars
+addons/godot-syphon         vendored Syphon GDExtension (MIT), macOS Forward+
 src/shot.gd                 screenshot + burned-in credits strip
 src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading layer, the shaders (common.gdshaderinc shared)
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader

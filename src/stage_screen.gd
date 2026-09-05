@@ -185,6 +185,9 @@ var _rd_flip := 0
 var rd_preset := 0
 var rd_feed := 0.0545
 var rd_kill := 0.062
+var _syphon: Node
+var syphon_on := false
+var _play_pending := false
 var _ticker: Label
 var ticker_on := false
 var _roll: Control
@@ -1077,6 +1080,49 @@ func _input(ev: InputEvent) -> void:
 		_p2_pad_button(ev.button_index)
 
 
+# ---------------- syphon ----------------
+func syphon_available() -> bool:
+	return ClassDB.class_exists("SyphonOutput") and DisplayServer.get_name() != "headless"
+
+
+## Publishes the composite (the picture, no HUD) as a Syphon server named
+## "Video Toy". The addon cannot switch textures on a live output, so the
+## node is created fresh each time it is turned on.
+func set_syphon(on: bool) -> void:
+	if on and not syphon_available():
+		_steal_note = "Syphon: addon not loaded (macOS + Forward+ only)"
+		syphon_on = false
+		_update_hud()
+		return
+	if _syphon:
+		_syphon.queue_free()
+		_syphon = null
+	syphon_on = on
+	if on:
+		_syphon = ClassDB.instantiate("SyphonOutput")
+		_syphon.server_name = "Video Toy"
+		add_child(_syphon)
+		_syphon.texture = _composite.get_texture()
+		_steal_note = "Syphon: publishing 'Video Toy' (1920x1080, no HUD)"
+	else:
+		_steal_note = "Syphon: off"
+	_update_hud()
+
+
+# ---------------- clock ----------------
+func _tick_clock() -> void:
+	if Clock.lock_scenes and Clock.running and Scenes.current != "":
+		var want := Clock.bpm / 120.0
+		if not is_equal_approx(want, Scenes.speed):
+			set_scene_knobs(want, Scenes.scale, Scenes.bias)
+	if _play_pending and timeline.has_loop():
+		if not Clock.running or Clock.until_next_bar() <= get_process_delta_time() * 1.5:
+			_play_pending = false
+			timeline.start_play(_clock)
+			_steal_note = "looping %.1f s on the bar" % timeline.length
+			_update_hud()
+
+
 # ---------------- credits ----------------
 ## Distinct slot ids of everything on stage (actors, riders, solids, formations).
 func onstage_ids() -> Array:
@@ -1720,6 +1766,9 @@ func midi_params() -> Array:
 		{"id": "rd_kill", "label": "Reaction kill", "set": func(v):
 			rd_kill = lerpf(0.04, 0.07, v)
 			_push_rd()},
+		{"id": "bpm", "label": "Internal clock BPM", "set": func(v):
+			Clock.bpm = lerpf(60.0, 200.0, v)
+			_update_hud()},
 		{"id": "bank", "label": "Preset bank", "set": func(v): set_bank(_step(v, Presets.BANKS))},
 		{"id": "preset_fade", "label": "Preset crossfade time", "set": func(v):
 			preset_fade = lerpf(0.0, 5.0, v)
@@ -1763,6 +1812,13 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "syphon", "label": "Syphon output on/off", "do": func(): set_syphon(not syphon_on)})
+	out.append({"id": "clock_internal", "label": "Internal clock on/off", "do": func():
+		Clock.toggle_internal()
+		_update_hud()})
+	out.append({"id": "clock_lock_scenes", "label": "Lock scenes to BPM on/off", "do": func():
+		Clock.lock_scenes = not Clock.lock_scenes
+		_update_hud()})
 	out.append({"id": "screenshot", "label": "Screenshot with credits", "do": func(): screenshot_with_credits()})
 	out.append({"id": "ticker", "label": "Credits ticker on/off", "do": func(): set_ticker(not ticker_on)})
 	out.append({"id": "credits_roll", "label": "Credits roll start/stop", "do": func():
@@ -1867,6 +1923,8 @@ func _on_midi_action(id: String) -> void:
 func toggle_record() -> void:
 	if timeline.recording:
 		timeline.stop_record(_clock)
+		if Clock.running:
+			timeline.length = Clock.quantise_to_bars(timeline.length)
 		timeline.save()
 		_steal_note = "recorded %.1f s, %d events — Shift+P loops it" % [timeline.length, timeline.events.size()]
 	else:
@@ -1876,15 +1934,20 @@ func toggle_record() -> void:
 
 
 func toggle_play() -> void:
-	if timeline.playing:
+	if timeline.playing or _play_pending:
 		timeline.stop_play()
+		_play_pending = false
 		_steal_note = "loop stopped"
 	else:
 		if not timeline.has_loop():
 			timeline.load()
 		if timeline.has_loop():
-			timeline.start_play(_clock)
-			_steal_note = "looping %.1f s of gestures" % timeline.length
+			if Clock.running:
+				_play_pending = true
+				_steal_note = "loop starts on the next bar (%.1f s)" % Clock.until_next_bar()
+			else:
+				timeline.start_play(_clock)
+				_steal_note = "looping %.1f s of gestures" % timeline.length
 		else:
 			_steal_note = "nothing recorded — Shift+R records controller moves"
 	_update_hud()
@@ -2013,6 +2076,7 @@ func _build_hud() -> void:
 		+ "keypad/pad   player 2: 8/2/4/6 or stick moves · 5/A spawns · 0/B removes\n             +/-/X slot · ./Y layer · */LB spin · //RB solid · Shift+2 hides\n"
 		+ "Shift+Esc    PANIC: known-good look · Shift+H blackout · Shift+F quality lock\n"
 		+ "Shift+V      screenshot + credits strip · Shift+L credits ticker · Shift+C credits roll\n"
+		+ "Shift+Z      Syphon output (picture, no HUD) · clock: ; panel or MIDI clock in\n"
 		+ "F1-F12       recall preset · Shift+F saves · Shift+, . bank · Shift+- = prev/next preset · Shift+; fade\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -2132,6 +2196,9 @@ func _update_hud() -> void:
 	line2 += "   ·   webcam: " + (("%s, %s" % [webcam_mode(), _webcam.status]) if _webcam_mode > 0 else "off (Z)")
 	if _steal_note != "":
 		line2 += "   ·   " + _steal_note
+	line2 += "   ·   clock: " + Clock.describe() + (" ·lock" if Clock.lock_scenes else "")
+	if syphon_on:
+		line2 += "   ·   SYPHON"
 	line2 += "   ·   bank %d · fade %.1fs%s" % [bank + 1, preset_fade, "   XFADE" if crossfading() else ""]
 	line2 += "   ·   scene: " + (("%s  spd %.1f  scl %.1f" % [Scenes.get_scene(Scenes.current).get("name", "?"), Scenes.speed, Scenes.scale]) if Scenes.current != "" else "off (Tab)")
 	if p2_active:
@@ -2199,6 +2266,7 @@ func _process(_delta: float) -> void:
 	var t0 := Time.get_ticks_usec()
 	_tick_crossfade(_delta)
 	_tick_credits(_delta)
+	_tick_clock()
 	_tick_modes(_delta)
 	var t1 := Time.get_ticks_usec()
 	_tick_timeline(_delta)
@@ -2428,7 +2496,11 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				cycle_fade()
 			else:
 				toggle_midi_panel()
-		KEY_Z: cycle_webcam()
+		KEY_Z:
+			if ev.shift_pressed:
+				set_syphon(not syphon_on)
+			else:
+				cycle_webcam()
 		KEY_D:
 			if ev.shift_pressed:
 				draw_mode = not draw_mode

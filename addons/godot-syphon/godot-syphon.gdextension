@@ -1,0 +1,20 @@
+[configuration]
+
+entry_symbol = "syphon_library_init"
+compatibility_minimum = "4.3"
+
+[libraries]
+
+macos.debug.x86_64 = "res://addons/godot-syphon/bin/libgodot-syphon.macos.debug.x86_64.dylib"
+macos.release.x86_64 = "res://addons/godot-syphon/bin/libgodot-syphon.macos.release.x86_64.dylib"
+macos.debug.arm64 = "res://addons/godot-syphon/bin/libgodot-syphon.macos.debug.arm64.dylib"
+macos.release.arm64 = "res://addons/godot-syphon/bin/libgodot-syphon.macos.release.arm64.dylib"
+
+[dependencies]
+
+macos.debug = {
+    "res://addons/godot-syphon/bin/Syphon.framework" : "Contents/Frameworks"
+}
+macos.release = {
+    "res://addons/godot-syphon/bin/Syphon.framework" : "Contents/Frameworks"
+}

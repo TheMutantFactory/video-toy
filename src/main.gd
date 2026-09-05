@@ -459,6 +459,41 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL sdf / morph")
+	# clock: internal beats drive AudioReact, the timeline quantises and waits for the bar, scenes lock
+	var ok_ck := true
+	Clock.start_internal(120.0)
+	ok_ck = ok_ck and Clock.running and AudioReact.active() and AudioReact.beat_env >= 0.99
+	st.finish_crossfade()
+	st.timeline = Timeline.new()
+	st._clock = 200.0
+	st.toggle_record()
+	MidiMap.last_source = "midi"
+	st._on_midi_param("glow", 1.0)
+	st._clock = 203.3
+	st.toggle_record()                                        # 3.3 s -> 2 bars = 4.0 s at 120 bpm
+	ok_ck = ok_ck and is_equal_approx(st.timeline.length, 4.0)
+	st.toggle_play()
+	ok_ck = ok_ck and st._play_pending and not st.timeline.playing
+	Clock.advance(Clock.until_next_bar() - 0.005)          # just before the bar: the tick starts the loop
+	st._tick_clock()
+	ok_ck = ok_ck and not st._play_pending and st.timeline.playing
+	st.toggle_play()
+	Scenes.current = "plasma"
+	Clock.lock_scenes = true
+	Clock.bpm = 150.0
+	st._tick_clock()
+	ok_ck = ok_ck and is_equal_approx(Scenes.speed, 1.25)
+	Clock.lock_scenes = false
+	Scenes.current = ""
+	Clock.toggle_internal()
+	ok_ck = ok_ck and not Clock.running
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Timeline.PATH))
+	ok_ck = ok_ck and (ClassDB.class_exists("SyphonOutput") or OS.get_name() != "macOS")
+	if ok_ck:
+		print("PASS clock drives beats, quantises the loop, waits for the bar, locks scenes; Syphon addon present")
+	else:
+		fails += 1
+		printerr("FAIL clock / syphon")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -958,6 +993,14 @@ func _capture_all(dir: String) -> void:
 		await RenderingServer.frame_post_draw
 		if current_name == "stage":
 			print("PERF ", name, ": ", current.perf_breakdown())
+		if name == "stage" and current.syphon_available():
+			# Syphon: publish, then read our own server back through a client texture
+			current.set_syphon(true)
+			var client = ClassDB.instantiate("SyphonTexture")
+			client.server_name = "Video Toy"
+			await get_tree().create_timer(1.0).timeout
+			print("SYPHON server 'Video Toy' read back: ", client.get_size(), " on=", current.syphon_on)
+			current.set_syphon(false)
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(dir.path_join(name + ".png"))
 		print("captured ", name)

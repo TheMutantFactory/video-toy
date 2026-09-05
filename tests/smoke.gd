@@ -570,6 +570,35 @@ func _init() -> void:
 	_check("morph shader loads", msh is Shader and msh.get_code().contains("sdf_b") and msh.get_code().contains("outline"))
 	_check("morph and outline verbs are on Shift+M / Shift+J", Verbs.by_key(KEY_M, true) == "morph" and Verbs.by_key(KEY_J, true) == "outline")
 
+	# clock: MIDI ticks -> bpm and beats; internal clock advances; bar maths
+	var ck = load("res://src/clock.gd").new()
+	var cbeats := [0]
+	var cbars := [0]
+	ck.beat.connect(func(_i): cbeats[0] += 1)
+	ck.bar.connect(func(_i): cbars[0] += 1)
+	var us := 1000000
+	var tick_us := int(60.0e6 / (125.0 * 24))                 # 125 bpm
+	for i in 24 * 8:                                          # 8 beats = 2 bars
+		ck.feed_tick(us)
+		us += tick_us
+	_check("midi clock estimates bpm from tick spacing", absf(ck.bpm - 125.0) < 0.5 and ck.running and ck.source == "midi")
+	_check("24 ticks per beat, 4 beats per bar", cbeats[0] == 8 and cbars[0] == 2 and ck.beat_in_bar() == 3)
+	ck.stop()
+	_check("stop halts", not ck.running)
+	var ck2 = load("res://src/clock.gd").new()
+	var b2 := [0]
+	ck2.beat.connect(func(_i): b2[0] += 1)
+	ck2.start_internal(120.0)
+	var crossed := 0
+	for i in 100:                                             # 1 s at 120 bpm = 2 beats after the initial one
+		crossed += ck2.advance(0.01)
+	_check("internal clock crosses beats on time", crossed == 2 and b2[0] == 3 and absf(ck2.phase) < 0.05)
+	_check("bar maths", is_equal_approx(ck2.bar_seconds(), 2.0) and is_equal_approx(ck2.quantise_to_bars(3.2), 4.0) and is_equal_approx(ck2.quantise_to_bars(0.3), 2.0))
+	ck2.toggle_internal()
+	_check("toggle_internal stops and turns off", not ck2.running and ck2.source == "off" and ck2.describe() == "off")
+	ck.free()
+	ck2.free()
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 
