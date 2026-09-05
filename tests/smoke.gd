@@ -105,6 +105,9 @@ func _init() -> void:
 	_check("fx shader has kaleidoscope and chroma stages",
 		sh.get_code().contains("kaleido_segments") and sh.get_code().contains("key_color"))
 	_check("fx shader has a CRT stage", sh.get_code().contains("uniform float crt"))
+	_check("fx shader has keyers and slit-scan", sh.get_code().contains("key_mode") and sh.get_code().contains("slit_tex") and sh.get_code().contains("prev_tex"))
+	_check("history atlas slots tile a 6x6 grid", fx.slot_rect(0, Vector2(1920, 1080)) == Rect2(0, 0, 320, 180)
+		and fx.slot_rect(7, Vector2(1920, 1080)) == Rect2(320, 180, 320, 180) and fx.slot_rect(35, Vector2(1920, 1080)).end == Vector2(1920, 1080))
 	_check("fx kaleido steps start at off", fx.KALEIDO_STEPS[0] == 0 and fx.KALEIDO_STEPS.has(6))
 
 	# virtual monitor geometry (no rendering needed)

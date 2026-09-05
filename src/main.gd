@@ -155,6 +155,27 @@ func _selftest() -> void:
 	var snap3: Dictionary = st.snapshot()
 	ok_layers = ok_layers and snap3["layers"][1]["blend"] == 2 and is_equal_approx(snap3["layers"][1]["opacity"], 0.5)
 	st.clear_actors()
+	# keyers and slit-scan: modes cycle, history atlas exists, preset round-trip
+	var ok_fx: bool = st._fx.KEY_MODES.size() == 5 and st._fx.SLIT_MODES.size() == 4 and st._fx._hist.size() == 2
+	st._fx.cycle_key()
+	st._fx.cycle_key()
+	st._fx.key_threshold = 0.6
+	st._fx.cycle_slit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var snap4: Dictionary = st.snapshot()
+	ok_fx = ok_fx and snap4["fx"]["key"] == 2 and snap4["fx"]["slit"] == 1 and is_equal_approx(float(snap4["fx"]["key_threshold"]), 0.6)
+	st._fx.set_state(0, false, false)
+	st.restore(snap4, 0.0)
+	ok_fx = ok_fx and st._fx.key_mode == 2 and st._fx.slit_mode == 1 and st._fx.describe().contains("luma") and st._fx.describe().contains("slit rows")
+	st.restore({"fx": {"chroma": true}}, 0.0)
+	ok_fx = ok_fx and st._fx.key_mode == 1
+	st._fx.set_state(0, false, false)
+	if ok_fx:
+		print("PASS keyers + slit-scan modes, history atlas, presets (old chroma key migrates)")
+	else:
+		fails += 1
+		printerr("FAIL keyers / slit-scan")
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -224,7 +245,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -470,6 +491,30 @@ func _capture_all(dir: String) -> void:
 				current.end_stroke()
 				await get_tree().create_timer(1.5).timeout
 				current.draw_mode = false
+			"keyers":
+				# Edge key over the plasma backdrop: outlines of bouncing icons.
+				current.clear_actors()
+				current.set_active_layer(0)
+				for i in Toolbox.slots.size():
+					if not Toolbox.has_verb(i, "bounce"):
+						Toolbox.toggle_verb(i, "bounce")
+				for i in 12:
+					Toolbox.select(i % 5)
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current.set_fx(0, false, false, 0, false, 0, 4, 0)
+				await get_tree().create_timer(1.0).timeout
+			"slitscan":
+				# Rows mode: time runs down the picture, bouncing icons smear.
+				current.clear_actors()
+				current.set_active_layer(0)
+				for i in Toolbox.slots.size():
+					if not Toolbox.has_verb(i, "bounce"):
+						Toolbox.toggle_verb(i, "bounce")
+				for i in 10:
+					Toolbox.select(i % 5)
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current.set_fx(0, false, false, 0, false, 0, 0, 1)
+				await get_tree().create_timer(2.5).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

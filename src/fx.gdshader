@@ -11,7 +11,11 @@ shader_type canvas_item;
 //   kaleido_segments  0 = off, else mirrored wedges around the centre
 //   kaleido_drift     radians/second the wedge pattern rotates
 //   pixel_size        0 = off, else block size in screen pixels
-//   chroma            key out `key_color` (± key_tolerance) and show the backdrop
+//   key_mode          0 off, 1 chroma (key_color), 2 luma (dark), 3 difference
+//                     (vs the previous frame: static parts keyed), 4 edge
+//                     (non-edges keyed); keyed pixels show the backdrop
+//   slit_mode         0 off, 1 rows, 2 columns, 3 radial: sample from the
+//                     history atlas (slit_tex, slit_cols x slit_rows slots)
 //   backdrop_tex      dropped image; when !has_backdrop a palette plasma is drawn
 //   quantize / dither snap to the nearest palette colour, optional 4x4 Bayer
 //   palette[]         the active Palettes ring + background, palette_count entries
@@ -21,7 +25,13 @@ uniform float crt = 0.0;
 uniform int kaleido_segments = 0;
 uniform float kaleido_drift = 0.12;
 uniform float pixel_size = 0.0;
-uniform bool chroma = false;
+uniform int key_mode = 0;
+uniform float key_threshold = 0.35;
+uniform sampler2D prev_tex : filter_linear, repeat_disable;
+uniform int slit_mode = 0;
+uniform sampler2D slit_tex : filter_linear, repeat_disable;
+uniform int slit_cols = 6;
+uniform int slit_rows = 6;
 uniform vec4 key_color : source_color = vec4(0.0, 1.0, 0.0, 1.0);
 uniform float key_tolerance = 0.18;
 uniform float key_softness = 0.10;
@@ -74,6 +84,24 @@ vec3 plasma(vec2 uv, float t) {
 	return ring_color(v * 0.125 + t * 0.03);
 }
 
+// Slit-scan: which history slot a uv reads from, and where that slot lives.
+vec3 sample_source(vec2 uv) {
+	if (slit_mode == 0) return texture(screen_tex, uv).rgb;
+	float t;
+	if (slit_mode == 1) t = uv.y;
+	else if (slit_mode == 2) t = uv.x;
+	else t = clamp(length((uv - 0.5) * vec2(1.78, 1.0)) * 1.1, 0.0, 0.999);
+	int slots = slit_cols * slit_rows;
+	int slot = clamp(int(t * float(slots)), 0, slots - 1);
+	vec2 cell = vec2(float(slot % slit_cols), float(slot / slit_cols));
+	vec2 suv = (cell + uv) / vec2(float(slit_cols), float(slit_rows));
+	return texture(slit_tex, suv).rgb;
+}
+
+float lum_at(vec2 uv) {
+	return dot(sample_source(clamp(uv, vec2(0.0), vec2(1.0))), vec3(0.30, 0.59, 0.11));
+}
+
 // Everything between the CRT lens and the CRT display: takes a screen-pixel
 // position, returns the processed colour there.
 vec3 chain(vec2 frag, vec2 screen_px) {
@@ -93,11 +121,30 @@ vec3 chain(vec2 frag, vec2 screen_px) {
 		frag = (floor(frag / pixel_size) + 0.5) * pixel_size;
 	}
 	vec2 uv = frag / screen_px;
-	vec3 c = texture(screen_tex, uv).rgb;
+	vec3 c = sample_source(uv);
 
-	if (chroma) {
-		float dist = distance(c, key_color.rgb);
-		float k = 1.0 - smoothstep(key_tolerance, key_tolerance + key_softness, dist);
+	if (key_mode > 0) {
+		float k = 0.0;
+		if (key_mode == 1) {
+			float dist = distance(c, key_color.rgb);
+			k = 1.0 - smoothstep(key_tolerance, key_tolerance + key_softness, dist);
+		} else if (key_mode == 2) {
+			float l = dot(c, vec3(0.30, 0.59, 0.11));
+			k = 1.0 - smoothstep(key_threshold, key_threshold + key_softness, l);
+		} else if (key_mode == 3) {
+			vec4 p = texture(prev_tex, uv);
+			vec3 prev = mix(key_color.rgb, p.rgb, p.a);
+			k = 1.0 - smoothstep(key_threshold * 0.5, key_threshold * 0.5 + key_softness, distance(c, prev));
+		} else {
+			vec2 px = 1.5 / screen_px;
+			float tl = lum_at(uv + vec2(-px.x, -px.y)), t = lum_at(uv + vec2(0.0, -px.y)), tr = lum_at(uv + vec2(px.x, -px.y));
+			float l = lum_at(uv + vec2(-px.x, 0.0)), r = lum_at(uv + vec2(px.x, 0.0));
+			float bl = lum_at(uv + vec2(-px.x, px.y)), b = lum_at(uv + vec2(0.0, px.y)), br = lum_at(uv + vec2(px.x, px.y));
+			float gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
+			float gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
+			float edge = length(vec2(gx, gy));
+			k = 1.0 - smoothstep(key_threshold * 0.6, key_threshold * 0.6 + key_softness, edge);
+		}
 		vec3 back = has_backdrop ? texture(backdrop_tex, uv).rgb : plasma(uv, TIME);
 		c = mix(c, back, k);
 	}

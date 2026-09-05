@@ -35,8 +35,10 @@ Space        spawn somewhere          [ ]    feedback zoom
 1-9          select slot              , .    feedback twist
 Q W E R T Y U I   toggle verbs        - =    feedback fade
 X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
-                                      G      chroma key: drop an image on the
-                                             window for the backdrop, plasma otherwise
+                                      G      key: off / chroma / luma / diff / edge
+                                             (Shift+G threshold); keyed pixels show the
+                                             backdrop — dropped image, webcam, or plasma
+                                      Shift+K slit-scan: off / rows / columns / radial
                                       K      pixelate size (off/4/8/12/20/32)
                                       L      palette quantise
                                       J      dither (with quantise)
@@ -94,6 +96,18 @@ and Shift+`[` `]` set its blend and opacity; both are learnable and saved in pre
 **Draw mode** (Shift+D): drag a path and the selected icon rides it — resampled, closed if the
 ends meet, one rider per ~110 px looping at 170 px/s. Riders keep spin, pulse, rainbow and
 sparkle; right-click a path to remove it. Paths live in the active layer.
+
+## Keyers and slit-scan
+
+**G** cycles the keyer: *chroma* keys the palette background; *luma* keys dark pixels;
+*diff* keys whatever did not move since the last frame, so only motion shows; *edge* keeps
+Sobel outlines. Keyed pixels show the backdrop (Shift+drop an image, the webcam, or the
+palette plasma). Shift+G steps the threshold; mode and threshold are learnable and preset-saved.
+
+**Shift+K** cycles slit-scan: the last 36 pre-effects frames (every 2nd frame, about 1.2 s)
+live in a ping-pong atlas, and the picture is reassembled with time running down the rows,
+across the columns, or outward from the centre. It sits inside the chain, so kaleidoscope,
+quantise and the CRT still apply on top.
 
 ## Presets
 

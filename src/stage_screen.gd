@@ -145,7 +145,8 @@ var _fx_kaleido_btn: Button
 var _fx_crt_btn: Button
 var _fx_glow_btn: Button
 var _fx_scene_btn: Button
-var _fx_chroma: CheckButton
+var _fx_key_btn: Button
+var _fx_slit_btn: Button
 var _fx_quant: CheckButton
 var _fx_dither: CheckButton
 var _hotbar
@@ -220,6 +221,7 @@ func _ready() -> void:
 
 	_fx = FxScript.new()
 	_composite.add_child(_fx)
+	_fx.set_source(_worldmix.get_texture(), Palettes.bg(palette_index))
 
 	_display = TextureRect.new()
 	_display.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -436,8 +438,9 @@ func set_webcam_mode(i: int) -> void:
 	_webcam_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS if on else SubViewport.UPDATE_DISABLED
 	_webcam_sprite.visible = webcam_mode() == "layer"
 	_fx.set_live_backdrop(_webcam_vp.get_texture() if webcam_mode() == "backdrop" else null)
-	if webcam_mode() == "backdrop" and not _fx.chroma:
-		_fx.toggle_chroma()
+	if webcam_mode() == "backdrop" and _fx.key_mode == 0:
+		_fx.key_mode = 1
+		_fx._push()
 	_refresh_fx()
 
 
@@ -602,7 +605,8 @@ func snapshot() -> Dictionary:
 		"palette": palette_index,
 		"feedback": {"on": feedback, "zoom": fb_zoom, "rot": fb_rot, "fade": fb_fade},
 		"fx": {"pixel": _fx.pixel_step, "kaleido": _fx.kaleido_step, "crt": _fx.crt_level,
-			"chroma": _fx.chroma, "quantize": _fx.quantize, "dither": _fx.dither},
+			"key": _fx.key_mode, "key_threshold": _fx.key_threshold, "slit": _fx.slit_mode,
+			"quantize": _fx.quantize, "dither": _fx.dither},
 		"glow": _glow.level,
 		"monitor": {"on": _monitor.visible, "size": _monitor.size_step, "x": _monitor.position.x, "y": _monitor.position.y},
 		"webcam": _webcam_mode,
@@ -640,7 +644,12 @@ func restore(d: Dictionary, fade := 1.0) -> void:
 	_fx.pixel_step = clampi(int(fx.get("pixel", _fx.pixel_step)), 0, _fx.PIXEL_STEPS.size() - 1)
 	_fx.kaleido_step = clampi(int(fx.get("kaleido", _fx.kaleido_step)), 0, _fx.KALEIDO_STEPS.size() - 1)
 	_fx.crt_level = clampi(int(fx.get("crt", _fx.crt_level)), 0, 2)
-	_fx.chroma = bool(fx.get("chroma", _fx.chroma))
+	if fx.has("key"):
+		_fx.key_mode = clampi(int(fx["key"]), 0, _fx.KEY_MODES.size() - 1)
+	elif fx.has("chroma"):
+		_fx.key_mode = 1 if bool(fx["chroma"]) else 0
+	_fx.key_threshold = clampf(float(fx.get("key_threshold", _fx.key_threshold)), 0.0, 1.0)
+	_fx.slit_mode = clampi(int(fx.get("slit", _fx.slit_mode)), 0, _fx.SLIT_MODES.size() - 1)
 	_fx.quantize = bool(fx.get("quantize", _fx.quantize))
 	_fx.dither = bool(fx.get("dither", _fx.dither))
 	_fx._push()
@@ -724,6 +733,18 @@ func midi_params() -> Array:
 			_fx.crt_level = _step(v, 3)
 			_fx._push()
 			_refresh_fx()},
+		{"id": "key_mode", "label": "Key mode", "set": func(v):
+			_fx.key_mode = _step(v, _fx.KEY_MODES.size())
+			_fx._push()
+			_refresh_fx()},
+		{"id": "key_threshold", "label": "Key threshold", "set": func(v):
+			_fx.key_threshold = v
+			_fx._push()
+			_refresh_fx()},
+		{"id": "slit", "label": "Slit-scan mode", "set": func(v):
+			_fx.slit_mode = _step(v, _fx.SLIT_MODES.size())
+			_fx._push()
+			_refresh_fx()},
 		{"id": "monitor", "label": "Monitor size", "set": func(v):
 			_monitor.size_step = _step(v, _monitor.SIZES.size())
 			_monitor._apply_scale()},
@@ -773,8 +794,11 @@ func midi_actions() -> Array:
 		{"id": "next_palette", "label": "Next palette", "do": func():
 			palette_index = (palette_index + 1) % Palettes.count()
 			_apply_palette()},
-		{"id": "chroma", "label": "Chroma key on/off", "do": func():
-			_fx.toggle_chroma()
+		{"id": "chroma", "label": "Next key mode", "do": func():
+			_fx.cycle_key()
+			_refresh_fx()},
+		{"id": "slit", "label": "Next slit-scan mode", "do": func():
+			_fx.cycle_slit()
 			_refresh_fx()},
 		{"id": "quantise", "label": "Palette quantise on/off", "do": func():
 			_fx.toggle_quantize()
@@ -897,13 +921,16 @@ func _build_hud() -> void:
 		_fx.cycle_kaleido()
 		_refresh_fx())
 	_verb_panel.add_child(_fx_kaleido_btn)
-	_fx_chroma = CheckButton.new()
-	_fx_chroma.text = "G  Chroma key"
-	_fx_chroma.tooltip_text = "Keys out the palette background. Drop an image on the window for the backdrop; plasma otherwise."
-	_fx_chroma.toggled.connect(func(_on):
-		_fx.toggle_chroma()
+	_fx_key_btn = UI.button("", func():
+		_fx.cycle_key()
 		_refresh_fx())
-	_verb_panel.add_child(_fx_chroma)
+	_fx_key_btn.tooltip_text = "chroma keys the palette background; luma keys darks; diff keys what didn't move; edge keeps outlines. Keyed pixels show the backdrop (drop an image, webcam, or plasma)."
+	_verb_panel.add_child(_fx_key_btn)
+	_fx_slit_btn = UI.button("", func():
+		_fx.cycle_slit()
+		_refresh_fx())
+	_fx_slit_btn.tooltip_text = "time runs down the rows, across the columns, or out from the centre"
+	_verb_panel.add_child(_fx_slit_btn)
 	_fx_pixel_btn = UI.button("", func():
 		_fx.cycle_pixelate()
 		_refresh_fx())
@@ -945,7 +972,7 @@ func _build_hud() -> void:
 		+ "1-9          select slot\nQ..I         toggle verbs\nX            recolor slot\n"
 		+ "P            next palette\nF            feedback on/off\n[ ]          feedback zoom\n"
 		+ ", .          feedback twist\n- =          feedback fade\nO            kaleidoscope\n"
-		+ "G            chroma key (drop image = backdrop)\nK            pixelate size\n"
+		+ "G            key: chroma/luma/diff/edge (Shift: threshold)\nK            pixelate size · Shift+K slit-scan\n"
 		+ "L            palette quantise\nJ            dither\nV            CRT off/soft/heavy\n"
 		+ "M            monitor in the scene\nN            monitor size (drag to move)\n"
 		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
@@ -992,7 +1019,8 @@ func _refresh_verbs() -> void:
 
 func _refresh_fx() -> void:
 	_fx_kaleido_btn.text = "O  Kaleidoscope: %s" % ("off" if _fx.kaleido_step == 0 else "%d" % _fx.kaleido_segments())
-	_fx_chroma.set_pressed_no_signal(_fx.chroma)
+	_fx_key_btn.text = "G  Key: %s" % _fx.KEY_MODES[_fx.key_mode] + ("" if _fx.key_mode < 2 else "  (thr %.2f)" % _fx.key_threshold)
+	_fx_slit_btn.text = "⇧K  Slit-scan: %s" % _fx.SLIT_MODES[_fx.slit_mode]
 	_fx_crt_btn.text = "V  CRT: %s" % ["off", "soft", "heavy"][_fx.crt_level]
 	_fx_glow_btn.text = "D  Glow: %s" % _glow.describe()
 	_fx_pixel_btn.text = "K  Pixelate: %s" % ("off" if _fx.pixel_step == 0 else "%d px" % _fx.pixel_size())
@@ -1011,8 +1039,8 @@ func set_monitor(on: bool, size_step := -1) -> void:
 
 
 ## Used by --capture.
-func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false, crt := 0) -> void:
-	_fx.set_state(pixel, quant, dith, kaleido, chroma, crt)
+func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false, crt := 0, key := -1, slit := 0) -> void:
+	_fx.set_state(pixel, quant, dith, kaleido, chroma, crt, key, slit)
 	_refresh_fx()
 
 
@@ -1035,8 +1063,9 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 			if Input.is_key_pressed(KEY_SHIFT):
 				# Shift+drop: chroma-key backdrop
 				if _fx.set_backdrop_from_file(f):
-					if not _fx.chroma:
-						_fx.toggle_chroma()
+					if _fx.key_mode == 0:
+						_fx.key_mode = 1
+						_fx._push()
 					_refresh_fx()
 			else:
 				add_raster(f)
@@ -1087,6 +1116,7 @@ func _meter() -> String:
 func _apply_palette() -> void:
 	_bg.color = Palettes.bg(palette_index)
 	_fx.set_palette(palette_index)
+	_fx.set_source(_worldmix.get_texture(), Palettes.bg(palette_index))
 	_monitor.accent = Palettes.color(palette_index, 0)
 	_monitor.queue_redraw()
 	_scene_layer.set_palette(palette_index)
@@ -1340,10 +1370,17 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			_fx.cycle_kaleido()
 			_refresh_fx()
 		KEY_G:
-			_fx.toggle_chroma()
+			if ev.shift_pressed:
+				_fx.key_threshold = fmod(_fx.key_threshold + 0.1, 0.95)
+				_fx._push()
+			else:
+				_fx.cycle_key()
 			_refresh_fx()
 		KEY_K:
-			_fx.cycle_pixelate()
+			if ev.shift_pressed:
+				_fx.cycle_slit()
+			else:
+				_fx.cycle_pixelate()
 			_refresh_fx()
 		KEY_L:
 			_fx.toggle_quantize()
