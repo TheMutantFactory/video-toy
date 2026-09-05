@@ -77,7 +77,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor"]
 	for name in shots:
 		match name:
 			"menu":
@@ -114,6 +114,13 @@ func _capture_all(dir: String) -> void:
 				current._apply_palette()
 				current.set_fx(0, false, false, 0, false, 2)
 				await get_tree().create_timer(0.8).timeout
+			"monitor":
+				current.palette_index = 0
+				current._apply_palette()
+				current.set_fx(0, false, false)
+				current._set_feedback(false)
+				current.set_monitor(true, 2)
+				await get_tree().create_timer(2.0).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

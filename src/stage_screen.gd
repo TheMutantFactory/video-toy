@@ -6,13 +6,19 @@ extends Control
 ## Keys: 1-9 slot · Q W E R T Y U I verbs · click spawn · right-click remove
 ## · Space random spawn · P palette · F feedback · [ ] zoom · , . rotate
 ## · - = fade · O kaleidoscope · G chroma key (drop an image for the backdrop)
-## · K pixelate · L palette quantise · J dither · V CRT · C clear · H help · Esc menu
+## · K pixelate · L palette quantise · J dither · V CRT · M monitor · N monitor size
+## · drag the monitor to move it · C clear · H help · Esc menu
+##
+## Render graph:  world (actors + monitor) ─┬─> screen ──┐
+##                                          └─> acc A/B ─┘ (feedback ping-pong)
+##                composite = bg + screen + fx  ──> display (stage) and monitor (world)
 
 signal navigate(name: String)
 
 const HotbarScript = preload("res://src/hotbar.gd")
 const ActorScript = preload("res://src/actor.gd")
 const FxScript = preload("res://src/fx.gd")
+const MonitorScript = preload("res://src/monitor.gd")
 const WORLD := Vector2i(1920, 1080)
 
 var palette_index := 0
@@ -29,6 +35,11 @@ var _acc_prev: Array = []               # their "previous frame" sprites
 var _acc_live: Array = []               # their "live world" sprites
 var _flip := 0
 var _screen: TextureRect
+var _composite: SubViewport
+var _display: TextureRect
+var _monitor: Node2D
+var _drag_offset := Vector2.ZERO
+var _dragging := false
 var _hud: Label
 var _help: PanelContainer
 var _verb_panel: VBoxContainer
@@ -46,13 +57,20 @@ var _fx
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-	# Background lives on the screen, not in the world, so the world texture is
+	# The final picture (bg + world/feedback + fx) renders into _composite so it
+	# can be shown twice: on the stage, and on the monitor inside the world.
+	_composite = SubViewport.new()
+	_composite.size = WORLD
+	_composite.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_composite.disable_3d = true
+	add_child(_composite)
+	# Background lives here, not in the world, so the world texture is
 	# transparent except for actors — that is what lets feedback trails decay.
 	_bg = ColorRect.new()
-	_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_bg.size = Vector2(WORLD)
 	_bg.color = Palettes.bg(palette_index)
 	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_bg)
+	_composite.add_child(_bg)
 
 	_world = SubViewport.new()
 	_world.size = WORLD
@@ -84,15 +102,27 @@ func _ready() -> void:
 	_acc_prev[1].texture = _acc[0].get_texture()
 
 	_screen = TextureRect.new()
-	_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_screen.size = Vector2(WORLD)
 	_screen.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_screen.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_screen.texture = _world.get_texture()
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_screen)
+	_composite.add_child(_screen)
 
 	_fx = FxScript.new()
-	add_child(_fx)
+	_composite.add_child(_fx)
+
+	_display = TextureRect.new()
+	_display.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_display.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_display.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_display.texture = _composite.get_texture()
+	_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_display)
+
+	_monitor = MonitorScript.new()
+	_monitor.setup(_composite.get_texture(), Vector2(WORLD) * 0.5)
+	_monitor.visible = false
+	_world.add_child(_monitor)
 
 	_build_hud()
 	Toolbox.selection_changed.connect(func(_i): _refresh_verbs())
@@ -180,6 +210,7 @@ func _build_hud() -> void:
 		+ ", .          feedback twist\n- =          feedback fade\nO            kaleidoscope\n"
 		+ "G            chroma key (drop image = backdrop)\nK            pixelate size\n"
 		+ "L            palette quantise\nJ            dither\nV            CRT off/soft/heavy\n"
+		+ "M            monitor in the scene\nN            monitor size (drag to move)\n"
 		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
@@ -224,6 +255,14 @@ func _refresh_fx() -> void:
 	_update_hud()
 
 
+func set_monitor(on: bool, size_step := -1) -> void:
+	_monitor.visible = on
+	if size_step >= 0:
+		_monitor.size_step = size_step
+		_monitor._apply_scale()
+	_update_hud()
+
+
 ## Used by --capture.
 func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false, crt := 0) -> void:
 	_fx.set_state(pixel, quant, dith, kaleido, chroma, crt)
@@ -243,16 +282,19 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 func _update_hud() -> void:
 	var cur := Toolbox.current()
 	var name := str(cur.get("term", "—")) if not cur.is_empty() else "empty toolbox — press Find Icons"
-	_hud.text = "slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   actors: %d" % [
+	_hud.text = "slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   monitor: %s   ·   actors: %d" % [
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
-		_fx.describe(), _actors.get_child_count()]
+		_fx.describe(), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
+		_actors.get_child_count()]
 
 
 # ---------------- palette / feedback ----------------
 func _apply_palette() -> void:
 	_bg.color = Palettes.bg(palette_index)
 	_fx.set_palette(palette_index)
+	_monitor.accent = Palettes.color(palette_index, 0)
+	_monitor.queue_redraw()
 	_hotbar.palette_index = palette_index
 	_hotbar.refresh()
 	for a in _actors.get_children():
@@ -297,7 +339,7 @@ func _process(_delta: float) -> void:
 # ---------------- spawning ----------------
 func _world_pos(local: Vector2) -> Vector2:
 	# Map the on-screen rect (keep-aspect centred) back to world pixels.
-	var rect := _screen.get_rect()
+	var rect := _display.get_rect()
 	var scale := minf(rect.size.x / WORLD.x, rect.size.y / WORLD.y)
 	var drawn := Vector2(WORLD) * scale
 	var origin := rect.position + (rect.size - drawn) * 0.5
@@ -337,12 +379,21 @@ func _remove_nearest(world_pos: Vector2) -> void:
 
 
 func _gui_input(ev: InputEvent) -> void:
-	if ev is InputEventMouseButton and ev.pressed:
+	if ev is InputEventMouseButton:
 		var wp := _world_pos(ev.position)
 		if ev.button_index == MOUSE_BUTTON_LEFT:
-			spawn_at(wp)
-		elif ev.button_index == MOUSE_BUTTON_RIGHT:
+			if ev.pressed:
+				if _monitor.visible and _monitor.contains(wp):
+					_dragging = true
+					_drag_offset = _monitor.position - wp
+				else:
+					spawn_at(wp)
+			else:
+				_dragging = false
+		elif ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
 			_remove_nearest(wp)
+	elif ev is InputEventMouseMotion and _dragging:
+		_monitor.position = _world_pos(ev.position) + _drag_offset
 
 
 func _unhandled_key_input(ev: InputEvent) -> void:
@@ -368,6 +419,10 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_BRACKETRIGHT: fb_zoom = minf(1.20, fb_zoom + 0.01)
 		KEY_COMMA: fb_rot -= 0.01
 		KEY_PERIOD: fb_rot += 0.01
+		KEY_M: set_monitor(not _monitor.visible)
+		KEY_N:
+			_monitor.cycle_size()
+			_update_hud()
 		KEY_V:
 			_fx.cycle_crt()
 			_refresh_fx()

@@ -3,7 +3,8 @@
 A Godot 4.7 toy for streams, VODs and Knobcon: search [The Noun Project](https://thenounproject.com)
 for icons, drop them into a Minecraft-style hotbar, give them **verbs** (wander, orbit, spin,
 bounce, pulse, sparkle, rainbow, swarm), pick a **palette**, turn on **video feedback**, and post-process with **kaleidoscope**, **chroma key**,
-**pixelate**, **palette quantise** and a **CRT** pass.
+**pixelate**, **palette quantise** and a **CRT** pass. Press **M** for a monitor inside the scene
+that shows the scene, and watch it recurse.
 
 ```bash
 ./run.sh            # play
@@ -38,6 +39,8 @@ X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
                                       L      palette quantise
                                       J      dither (with quantise)
                                       V      CRT off / soft / heavy
+                                      M      monitor inside the scene (recursion)
+                                      N      monitor size; drag it to move
                                       C      clear stage
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
@@ -62,6 +65,7 @@ src/start_screen.gd         modes
 src/search_screen.gd        Noun Project search → inspect → add
 src/stage_screen.gd         play: SubViewport world + ping-pong feedback
 src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma key, quantise, dither
+src/monitor.gd              the TV inside the world that shows the final composite
 src/actor.gd                one icon on stage; verbs read live from Toolbox
 src/hotbar.gd               the 9-slot bar
 src/toolbox.gd   (autoload) slots + verbs, user://toolbox.json

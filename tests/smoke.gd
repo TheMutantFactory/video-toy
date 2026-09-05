@@ -107,6 +107,18 @@ func _init() -> void:
 	_check("fx shader has a CRT stage", sh.get_code().contains("uniform float crt"))
 	_check("fx kaleido steps start at off", fx.KALEIDO_STEPS[0] == 0 and fx.KALEIDO_STEPS.has(6))
 
+	# virtual monitor geometry (no rendering needed)
+	var mon = load("res://src/monitor.gd").new()
+	var img := Image.create(400, 200, false, Image.FORMAT_RGBA8)
+	mon.setup(ImageTexture.create_from_image(img), Vector2(1000, 500))
+	mon.size_step = 1                                  # 0.4 -> 160x80 screen
+	mon._apply_scale()
+	_check("monitor hit-test inside", mon.contains(Vector2(1000, 500)) and mon.contains(Vector2(1075, 535)))
+	_check("monitor hit-test outside", not mon.contains(Vector2(1200, 500)) and not mon.contains(Vector2(1000, 600)))
+	mon.cycle_size()
+	_check("monitor size cycles", mon.scale_factor() == 0.6)
+	mon.free()
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 
