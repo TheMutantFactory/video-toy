@@ -6,7 +6,7 @@ extends Control
 ## Keys: 1-9 slot · Q W E R T Y U I verbs · click spawn · right-click remove
 ## · Space random spawn · P palette · F feedback · [ ] zoom · , . rotate
 ## · - = fade · O kaleidoscope · G chroma key (drop an image for the backdrop)
-## · K pixelate · L palette quantise · J dither · C clear · H help · Esc menu
+## · K pixelate · L palette quantise · J dither · V CRT · C clear · H help · Esc menu
 
 signal navigate(name: String)
 
@@ -35,6 +35,7 @@ var _verb_panel: VBoxContainer
 var _verb_checks := {}
 var _fx_pixel_btn: Button
 var _fx_kaleido_btn: Button
+var _fx_crt_btn: Button
 var _fx_chroma: CheckButton
 var _fx_quant: CheckButton
 var _fx_dither: CheckButton
@@ -159,6 +160,10 @@ func _build_hud() -> void:
 		_fx.toggle_dither()
 		_refresh_fx())
 	_verb_panel.add_child(_fx_dither)
+	_fx_crt_btn = UI.button("", func():
+		_fx.cycle_crt()
+		_refresh_fx())
+	_verb_panel.add_child(_fx_crt_btn)
 	_verb_panel.add_child(UI.vspace(6))
 	_verb_panel.add_child(UI.button("Recolor slot (X)", func(): _recolor()))
 	_verb_panel.add_child(UI.button("Remove slot (Del)", func(): Toolbox.remove(Toolbox.selected)))
@@ -174,7 +179,8 @@ func _build_hud() -> void:
 		+ "P            next palette\nF            feedback on/off\n[ ]          feedback zoom\n"
 		+ ", .          feedback twist\n- =          feedback fade\nO            kaleidoscope\n"
 		+ "G            chroma key (drop image = backdrop)\nK            pixelate size\n"
-		+ "L            palette quantise\nJ            dither\nC            clear stage\n"
+		+ "L            palette quantise\nJ            dither\nV            CRT off/soft/heavy\n"
+		+ "C            clear stage\n"
 		+ "H            hide this\nEsc          menu / attribution", 16)
 	_help.add_child(hl)
 	add_child(_help)
@@ -210,6 +216,7 @@ func _refresh_verbs() -> void:
 func _refresh_fx() -> void:
 	_fx_kaleido_btn.text = "O  Kaleidoscope: %s" % ("off" if _fx.kaleido_step == 0 else "%d" % _fx.kaleido_segments())
 	_fx_chroma.set_pressed_no_signal(_fx.chroma)
+	_fx_crt_btn.text = "V  CRT: %s" % ["off", "soft", "heavy"][_fx.crt_level]
 	_fx_pixel_btn.text = "K  Pixelate: %s" % ("off" if _fx.pixel_step == 0 else "%d px" % _fx.pixel_size())
 	_fx_quant.set_pressed_no_signal(_fx.quantize)
 	_fx_dither.set_pressed_no_signal(_fx.dither)
@@ -218,8 +225,8 @@ func _refresh_fx() -> void:
 
 
 ## Used by --capture.
-func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false) -> void:
-	_fx.set_state(pixel, quant, dith, kaleido, chroma)
+func set_fx(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma := false, crt := 0) -> void:
+	_fx.set_state(pixel, quant, dith, kaleido, chroma, crt)
 	_refresh_fx()
 
 
@@ -361,6 +368,9 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		KEY_BRACKETRIGHT: fb_zoom = minf(1.20, fb_zoom + 0.01)
 		KEY_COMMA: fb_rot -= 0.01
 		KEY_PERIOD: fb_rot += 0.01
+		KEY_V:
+			_fx.cycle_crt()
+			_refresh_fx()
 		KEY_O:
 			_fx.cycle_kaleido()
 			_refresh_fx()

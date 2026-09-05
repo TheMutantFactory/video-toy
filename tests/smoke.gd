@@ -104,6 +104,7 @@ func _init() -> void:
 	_check("fx pixel steps start at off", fx.PIXEL_STEPS[0] == 0 and fx.PIXEL_STEPS.size() >= 4)
 	_check("fx shader has kaleidoscope and chroma stages",
 		sh.get_code().contains("kaleido_segments") and sh.get_code().contains("key_color"))
+	_check("fx shader has a CRT stage", sh.get_code().contains("uniform float crt"))
 	_check("fx kaleido steps start at off", fx.KALEIDO_STEPS[0] == 0 and fx.KALEIDO_STEPS.has(6))
 
 	print("\n%d/%d checks passed" % [_n - _fails, _n])

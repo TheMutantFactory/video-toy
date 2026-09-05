@@ -2,9 +2,12 @@ shader_type canvas_item;
 // Post-process for the stage. Drawn as a full-screen ColorRect above the world
 // and below the HUD, sampling whatever was rendered underneath it.
 //
-// Order: kaleidoscope (remap uv) -> pixelate (snap uv) -> sample -> chroma key
-// (swap keyed pixels for the backdrop) -> palette quantise (+dither).
+// Order: CRT curvature (remap uv, outermost) -> kaleidoscope (remap uv) ->
+// pixelate (snap uv) -> sample -> chroma key (swap keyed pixels for the
+// backdrop) -> palette quantise (+dither) -> CRT display (aberration, scanlines,
+// mask, vignette). The CRT samples the inner chain three times, one per channel.
 //
+//   crt               0 = off, 1 = soft, 2 = heavy (scales every CRT term)
 //   kaleido_segments  0 = off, else mirrored wedges around the centre
 //   kaleido_drift     radians/second the wedge pattern rotates
 //   pixel_size        0 = off, else block size in screen pixels
@@ -14,6 +17,7 @@ shader_type canvas_item;
 //   palette[]         the active Palettes ring + background, palette_count entries
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_nearest, repeat_disable;
+uniform float crt = 0.0;
 uniform int kaleido_segments = 0;
 uniform float kaleido_drift = 0.12;
 uniform float pixel_size = 0.0;
@@ -70,10 +74,9 @@ vec3 plasma(vec2 uv, float t) {
 	return ring_color(v * 0.125 + t * 0.03);
 }
 
-void fragment() {
-	vec2 screen_px = 1.0 / SCREEN_PIXEL_SIZE;
-	vec2 frag = SCREEN_UV * screen_px;
-
+// Everything between the CRT lens and the CRT display: takes a screen-pixel
+// position, returns the processed colour there.
+vec3 chain(vec2 frag, vec2 screen_px) {
 	if (kaleido_segments > 0) {
 		vec2 centre = screen_px * 0.5;
 		vec2 d = frag - centre;
@@ -108,5 +111,51 @@ void fragment() {
 		}
 		c = nearest_palette(clamp(c, 0.0, 1.0));
 	}
-	COLOR = vec4(c, 1.0);
+	return c;
+}
+
+void fragment() {
+	vec2 screen_px = 1.0 / SCREEN_PIXEL_SIZE;
+	vec2 frag = SCREEN_UV * screen_px;
+
+	if (crt <= 0.0) {
+		COLOR = vec4(chain(frag, screen_px), 1.0);
+	} else {
+		// --- lens: barrel curvature around the centre, in normalised coords
+		vec2 cc = SCREEN_UV - 0.5;
+		float d2 = dot(cc, cc);
+		float curvature = 0.10 * crt;
+		vec2 uv = SCREEN_UV + cc * d2 * curvature * 2.0;
+		// rounded-rectangle tube edge: black outside, soft falloff inside
+		vec2 edge = abs(uv - 0.5) * 2.0;                       // 0 centre .. 1 edge
+		vec2 corner = max(edge - (1.0 - 0.06 * crt), 0.0);
+		float outside = length(corner) / (0.06 * crt + 1e-4);
+		float tube = 1.0 - smoothstep(0.85, 1.0, outside);
+		bool off_screen = uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0;
+
+		// --- chromatic aberration: sample the chain per channel, offset radially
+		vec2 dir = cc * (0.0025 * crt);
+		vec2 f = uv * screen_px;
+		vec2 fr = clamp(f + dir * screen_px, vec2(0.0), screen_px - 1.0);
+		vec2 fb = clamp(f - dir * screen_px, vec2(0.0), screen_px - 1.0);
+		vec3 c;
+		c.r = chain(fr, screen_px).r;
+		c.g = chain(clamp(f, vec2(0.0), screen_px - 1.0), screen_px).g;
+		c.b = chain(fb, screen_px).b;
+
+		// --- scanlines (3 px period) and aperture mask (RGB stripes)
+		float scan = 0.5 + 0.5 * cos(f.y * TAU / 3.0);
+		c *= 1.0 - (0.18 * crt) * scan;
+		int col = int(mod(f.x, 3.0));
+		vec3 mask = vec3(col == 0 ? 1.0 : 0.0, col == 1 ? 1.0 : 0.0, col == 2 ? 1.0 : 0.0);
+		c *= mix(vec3(1.0), mask * 1.6 + 0.4, 0.12 * crt);
+
+		// --- rolling bar, flicker, vignette
+		float bar = smoothstep(0.0, 0.08, 1.0 - abs(fract(uv.y - TIME * 0.08) * 2.0 - 1.0));
+		c += bar * 0.025 * crt;
+		c *= 1.0 + 0.012 * crt * sin(TIME * 110.0);
+		c *= 1.0 - (0.35 * crt) * d2 * 2.0;
+		c *= off_screen ? 0.0 : tube;
+		COLOR = vec4(c, 1.0);
+	}
 }

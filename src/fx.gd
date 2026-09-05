@@ -8,6 +8,7 @@ const BACKDROP_PATH := "user://backdrop.png"
 
 var pixel_step := 0
 var kaleido_step := 0
+var crt_level := 0                          # 0 off, 1 soft, 2 heavy
 var chroma := false
 var quantize := false
 var dither := false
@@ -27,7 +28,12 @@ func _ready() -> void:
 
 
 func is_active() -> bool:
-	return pixel_step > 0 or quantize or kaleido_step > 0 or chroma
+	return pixel_step > 0 or quantize or kaleido_step > 0 or chroma or crt_level > 0
+
+
+func cycle_crt() -> void:
+	crt_level = (crt_level + 1) % 3
+	_push()
 
 
 func kaleido_segments() -> int:
@@ -89,7 +95,8 @@ func toggle_dither() -> void:
 	_push()
 
 
-func set_state(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma_on := false) -> void:
+func set_state(pixel: int, quant: bool, dith: bool, kaleido := 0, chroma_on := false, crt := 0) -> void:
+	crt_level = clampi(crt, 0, 2)
 	pixel_step = maxi(PIXEL_STEPS.find(pixel), 0)
 	kaleido_step = maxi(KALEIDO_STEPS.find(kaleido), 0)
 	chroma = chroma_on
@@ -114,6 +121,8 @@ func describe() -> String:
 	if not is_active():
 		return "off"
 	var parts: Array = []
+	if crt_level > 0:
+		parts.append("crt " + ("soft" if crt_level == 1 else "heavy"))
 	if kaleido_step > 0:
 		parts.append("kaleido %d" % kaleido_segments())
 	if pixel_step > 0:
@@ -126,6 +135,7 @@ func describe() -> String:
 
 
 func _push() -> void:
+	_mat.set_shader_parameter("crt", float(crt_level))
 	_mat.set_shader_parameter("kaleido_segments", kaleido_segments())
 	_mat.set_shader_parameter("chroma", chroma)
 	_mat.set_shader_parameter("has_backdrop", backdrop != null)

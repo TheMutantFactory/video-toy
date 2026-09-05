@@ -77,7 +77,7 @@ func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	if Toolbox.slots.is_empty():
 		DemoPack.load_into(Toolbox, Ledger)
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt"]
 	for name in shots:
 		match name:
 			"menu":
@@ -109,6 +109,11 @@ func _capture_all(dir: String) -> void:
 			"chroma":
 				current.set_fx(0, false, false, 0, true)
 				await get_tree().create_timer(0.5).timeout
+			"crt":
+				current.palette_index = 2          # VHS
+				current._apply_palette()
+				current.set_fx(0, false, false, 0, false, 2)
+				await get_tree().create_timer(0.8).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout
