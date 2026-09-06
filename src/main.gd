@@ -641,6 +641,50 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# feedback routing: layers out of the loop draw over it, the delay tap reads the ring,
+	# in-loop params reach the warp shader, it all snapshots, and panic clears it
+	var ok_fr := true
+	st.clear_actors()
+	st.panic()
+	ok_fr = ok_fr and st.loop_mask() == 7 and not st._overlay.visible and st.routing_describe() == ""
+	st.set_loop(1, false)
+	ok_fr = ok_fr and st.loop_mask() == 5 and st._overlay.visible and st._overvp.render_target_update_mode == SubViewport.UPDATE_ALWAYS
+	ok_fr = ok_fr and int(st._layer_mix.material.get_shader_parameter("loop_mask")) == 5 and bool(st._over_mix.material.get_shader_parameter("overlay_pass"))
+	st._set_feedback(true)
+	st.set_fb_delay(6)
+	st.fb_blur = 0.4
+	st.fb_hue = 0.02
+	st.fb_displace = 0.5
+	st.set_disp_source(2)
+	for i in 3:
+		await get_tree().process_frame
+	var mcur: ShaderMaterial = st._acc_mats[1 - st._flip]
+	ok_fr = ok_fr and is_equal_approx(float(mcur.get_shader_parameter("blur")), 0.4) and is_equal_approx(float(mcur.get_shader_parameter("hue")), 0.02) and bool(mcur.get_shader_parameter("disp_on"))
+	var prev_tex: Texture2D = st._acc_prev[1 - st._flip].texture
+	var ring_texs: Array = st._ring.map(func(rv): return rv.get_texture())
+	ok_fr = ok_fr and ring_texs.has(prev_tex) and st._ring[st._ring_head].render_target_update_mode == SubViewport.UPDATE_ONCE
+	ok_fr = ok_fr and st.routing_describe().contains("delay 6") and st.routing_describe().contains("blur 0.40") and st.routing_describe().contains("displace 0.50 by layer 2") and st.routing_describe().contains("loop: layers 1, 3")
+	var snap_fr: Dictionary = st.snapshot()
+	ok_fr = ok_fr and snap_fr["feedback"]["delay"] == 6 and snap_fr["feedback"]["loop"] == 5 and is_equal_approx(float(snap_fr["feedback"]["blur"]), 0.4)
+	st.panic()
+	ok_fr = ok_fr and st.fb_delay == 0 and st.fb_blur == 0.0 and st.loop_mask() == 7 and not st._overlay.visible
+	st.restore(snap_fr, 0.0)
+	ok_fr = ok_fr and st.fb_delay == 6 and st.loop_mask() == 5 and st.fb_disp_src == 2 and is_equal_approx(st.fb_hue, 0.02)
+	st.set_fb_delay(0)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_fr = ok_fr and st._acc_prev[1 - st._flip].texture == st._acc[st._flip].get_texture()
+	st.toggle_routing_panel()
+	ok_fr = ok_fr and st._routing_panel.visible and st._routing_widgets["delay"].value == 0.0 and not st._routing_widgets["loop1"].button_pressed
+	st._routing_widgets["loop1"].button_pressed = true
+	ok_fr = ok_fr and st.loop_mask() == 7
+	st.toggle_routing_panel()
+	st.panic()
+	if ok_fr:
+		print("PASS feedback routing: loop mask + overlay pass, delay ring tap, in-loop blur / hue / displacement, snapshot, panic, panel")
+	else:
+		fails += 1
+		printerr("FAIL feedback routing (%s)" % st.routing_describe())
 	# lock and mutate: locked sections survive surprise and evolve; the amount sets the count
 	var ok_lk := true
 	var locks_before: Array = st.locks.duplicate()
@@ -1205,7 +1249,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1711,6 +1755,28 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"routing":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				current.clear_actors()
+				current.set_active_layer(0)
+				Toolbox.select(0)
+				for i in 4:
+					current.spawn_at(Vector2(500 + i * 300, 400))
+				current.set_active_layer(2)
+				Toolbox.select(1)
+				current.spawn_at(Vector2(960, 800))                  # layer 3, kept out of the loop: crisp over the trails
+				current.set_active_layer(0)
+				current.set_loop(2, false)
+				current.set_fb_delay(6)
+				current.fb_hue = 0.03
+				current.fb_blur = 0.3
+				current._set_feedback(true)
+				current.toggle_routing_panel()
+				await get_tree().create_timer(3.0).timeout
 			"locks":
 				menu.close()
 				if current_name != "stage":

@@ -248,6 +248,18 @@ verbs, effects and presets, and the help key; click or Space advances, Esc skips
 comes back unless Settings → Tour or Esc menu → **Take the tour** asks for it. Captures and
 self-tests never see it.
 
+## Feedback routing
+
+**Ctrl+F** opens the loop's routing. Each layer has an **in the loop** switch: a layer taken out
+of the loop is composited *over* the feedback instead of feeding it, so a crisp title can ride
+on top of the trails, or the drawing layer can stay clean while everything else smears. The
+**frame delay** reads the loop from up to 23 frames back (a half-resolution history ring, so a
+delayed loop also softens — a video-delay look), and every pass through the loop can **blur or
+sharpen**, **drift the hue**, **push the saturation**, and be **displaced** by a texture: the
+picture itself, layer 2, layer 3 or the webcam — draw into layer 3 and warp the loop with it.
+All of it snapshots and crossfades, panic clears it, the HUD names what is on, and the delay,
+blur, hue and displacement are params with the layer switches and the source as actions.
+
 ## Lock and mutate
 
 **Ctrl+L** opens the locks panel: pin **palette, verbs, feedback, fx, glow, scene, layers** or

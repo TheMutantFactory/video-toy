@@ -13,6 +13,18 @@ uniform float warp_speed = 1.0;
 uniform vec2 drift = vec2(0.0);  // px per frame, pushed in every pass
 uniform vec2 stretch = vec2(1.0);
 uniform vec2 centre = vec2(960.0, 540.0);
+// inside the loop, per pass:
+uniform float blur = 0.0;        // -1 sharpen .. 1 blur
+uniform float hue = 0.0;         // hue rotation, radians per pass
+uniform float sat = 1.0;         // saturation multiplier per pass
+uniform float displace = 0.0;    // 0 .. 1, by disp_tex's colour
+uniform bool disp_on = false;
+uniform sampler2D disp_tex : filter_linear, repeat_disable;
+vec3 hue_rotate(vec3 c, float a) {
+	const vec3 k = vec3(0.57735);
+	float cs = cos(a);
+	return c * cs + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - cs);
+}
 void vertex() {
 	vec2 p = VERTEX;
 	vec2 d = (p - centre) * stretch + centre - p;
@@ -24,7 +36,24 @@ void vertex() {
 	VERTEX = p + d + w * warp * 30.0 + drift;
 }
 void fragment() {
-	COLOR = texture(TEXTURE, UV) * COLOR;
+	vec2 uv = UV;
+	if (disp_on) {
+		vec4 d = texture(disp_tex, UV);
+		uv += (d.rg - 0.5) * d.a * displace * 0.08;
+	}
+	vec4 c = texture(TEXTURE, uv);
+	if (abs(blur) > 0.001) {
+		vec2 px = TEXTURE_PIXEL_SIZE * (1.0 + 2.0 * abs(blur));
+		vec4 avg = (texture(TEXTURE, uv + vec2(px.x, 0.0)) + texture(TEXTURE, uv - vec2(px.x, 0.0))
+			+ texture(TEXTURE, uv + vec2(0.0, px.y)) + texture(TEXTURE, uv - vec2(0.0, px.y))) * 0.25;
+		c = blur > 0.0 ? mix(c, avg, blur) : clamp(c + (c - avg) * (-blur) * 1.5, 0.0, 1.0);
+	}
+	if (abs(hue) > 0.0001 || abs(sat - 1.0) > 0.0001) {
+		vec3 rgb = hue_rotate(c.rgb, hue);
+		float l = dot(rgb, vec3(0.299, 0.587, 0.114));
+		c.rgb = clamp(mix(vec3(l), rgb, sat), 0.0, 1.0);
+	}
+	COLOR = c * COLOR;
 }
 """
 

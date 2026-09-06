@@ -4,7 +4,7 @@ class_name StateLerp
 
 ## Paths of continuous fields in a snapshot (section, key).
 const CONTINUOUS := {
-	"feedback": ["zoom", "rot", "fade"],
+	"feedback": ["zoom", "rot", "fade", "blur", "hue", "sat", "displace"],
 	"warp": ["amount", "speed", "dx", "dy", "sx", "sy"],
 	"scene": ["speed", "scale", "bias"],
 	"camera": ["orbit", "dolly", "roll", "height"],

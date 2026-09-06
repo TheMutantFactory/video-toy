@@ -86,6 +86,8 @@ uniform int mode1 = 0;      // 0 mix, 1 add, 2 sub, 3 mul
 uniform int mode2 = 0;
 uniform float opacity1 = 1.0;
 uniform float opacity2 = 1.0;
+uniform int loop_mask = 7;         // bit i: layer i re-enters the feedback loop
+uniform bool overlay_pass = false; // true: only the layers NOT in the loop (drawn over the feedback)
 
 vec4 blend(vec4 dst, vec4 src, int mode) {
 	vec3 c;
@@ -106,20 +108,27 @@ vec3 ring_color(float t) {
 }
 
 void fragment() {
-	vec4 dst = texture(world_tex, UV);
-	if (rd_on) {
+	bool in0 = ((loop_mask & 1) != 0) != overlay_pass;
+	bool in1 = ((loop_mask & 2) != 0) != overlay_pass;
+	bool in2 = ((loop_mask & 4) != 0) != overlay_pass;
+	vec4 dst = in0 ? texture(world_tex, UV) : vec4(0.0);
+	if (rd_on && in0) {
 		// reaction-diffusion painted UNDER the world: V through the palette
 		float v = texture(rd_tex, UV).g;
 		float a = smoothstep(0.08, 0.35, v);
 		vec4 rd = vec4(ring_color(v * 1.6 + 0.15), a);
 		dst = vec4(mix(rd.rgb, dst.rgb, dst.a), dst.a + rd.a * (1.0 - dst.a));
 	}
-	vec4 s1 = texture(layer1, UV);
-	s1.a *= opacity1;
-	dst = blend(dst, s1, mode1);
-	vec4 s2 = texture(layer2, UV);
-	s2.a *= opacity2;
-	dst = blend(dst, s2, mode2);
+	if (in1) {
+		vec4 s1 = texture(layer1, UV);
+		s1.a *= opacity1;
+		dst = blend(dst, s1, mode1);
+	}
+	if (in2) {
+		vec4 s2 = texture(layer2, UV);
+		s2.a *= opacity2;
+		dst = blend(dst, s2, mode2);
+	}
 	COLOR = dst;
 }
 """
@@ -183,6 +192,22 @@ var _fade_tween: Tween
 var _scene_layer: Node2D
 var _acc_mats: Array = []               # warp ShaderMaterials, one per accumulator
 var fb_warp := 0.0
+var fb_delay := 0                          # frames of delay in the loop (0 = last frame), up to RING - 1
+var fb_blur := 0.0                         # -1 sharpen .. 1 blur, inside the loop
+var fb_hue := 0.0                          # hue drift per pass, radians
+var fb_sat := 1.0                          # saturation per pass
+var fb_displace := 0.0                     # displacement amount by fb_disp_src
+var fb_disp_src := 0                       # DISP_SOURCES index
+const DISP_SOURCES := ["off", "self", "layer 2", "layer 3", "webcam"]
+const RING := 24
+var _ring: Array = []                      # half-res SubViewports: the loop's history for the delay tap
+var _ring_rects: Array = []
+var _ring_head := 0
+var _overvp: SubViewport                   # the layers kept OUT of the loop, drawn over the feedback
+var _over_mix: ColorRect
+var _overlay: TextureRect
+var _routing_panel: PanelContainer
+var _routing_widgets: Dictionary = {}
 var fb_warp_speed := 1.0
 var fb_drift := Vector2.ZERO
 var fb_stretch := Vector2.ONE
@@ -360,6 +385,20 @@ func _ready() -> void:
 		_acc_live.append(live)
 	_acc_prev[0].texture = _acc[1].get_texture()
 	_acc_prev[1].texture = _acc[0].get_texture()
+	for i in RING:                               # the delay tap's history, half resolution
+		var rv := SubViewport.new()
+		rv.size = WORLD / 2
+		rv.disable_3d = true
+		rv.transparent_bg = true
+		rv.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		add_child(rv)
+		var rr := TextureRect.new()
+		rr.size = Vector2(WORLD / 2)
+		rr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rv.add_child(rr)
+		_ring.append(rv)
+		_ring_rects.append(rr)
 
 	_screen = TextureRect.new()
 	_screen.size = Vector2(WORLD)
@@ -367,6 +406,13 @@ func _ready() -> void:
 	_screen.texture = _worldmix.get_texture()
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_composite.add_child(_screen)
+	_overlay = TextureRect.new()                 # layers kept out of the loop ride over the feedback
+	_overlay.size = Vector2(WORLD)
+	_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_overlay.texture = _overvp.get_texture()
+	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.visible = false
+	_composite.add_child(_overlay)
 
 	_glow = GlowScript.new()                     # bloom before fx, so CRT sees it
 	_composite.add_child(_glow)
@@ -1318,6 +1364,9 @@ func _update_hud() -> void:
 		line2 += "   ·   osc out → " + MidiOut.describe()
 	if not MidiMap.mods.is_empty():
 		line2 += "   ·   mods: %d" % MidiMap.mods.size()
+	var rd_s := routing_describe()
+	if rd_s != "":
+		line2 += "   ·   loop " + rd_s
 	var lk := Locks.describe(locks, mutate_amount)
 	if lk != "":
 		line2 += "   ·   " + lk
@@ -1387,7 +1436,166 @@ func _set_feedback(on: bool) -> void:
 		_screen.texture = _worldmix.get_texture()
 		for vp in _acc:
 			vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		for rv in _ring:
+			rv.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_update_hud()
+
+
+# ---------------- feedback routing ----------------
+func set_fb_delay(n: int) -> void:
+	fb_delay = clampi(n, 0, RING - 1)
+	_refresh_routing_panel()
+	_update_hud()
+
+
+func set_loop(layer: int, on: bool) -> void:
+	if layer < 0 or layer >= _layers.size():
+		return
+	_layers[layer]["loop"] = on
+	_apply_layers()
+	_refresh_routing_panel()
+	_update_hud()
+
+
+func loop_mask() -> int:
+	var m := 0
+	for i in _layers.size():
+		if bool(_layers[i].get("loop", true)):
+			m |= 1 << i
+	return m
+
+
+func set_disp_source(i: int) -> void:
+	fb_disp_src = posmod(i, DISP_SOURCES.size())
+	_refresh_routing_panel()
+	_update_hud()
+
+
+## The texture the loop is displaced by, or null.
+func _disp_texture() -> Texture2D:
+	match fb_disp_src:
+		1: return _worldmix.get_texture()
+		2: return _layers[1]["vp"].get_texture()
+		3: return _layers[2]["vp"].get_texture()
+		4: return _webcam._sprite.texture if _webcam and _webcam._sprite else null
+	return null
+
+
+func routing_describe() -> String:
+	var parts: Array = []
+	if fb_delay > 0:
+		parts.append("delay %d" % fb_delay)
+	if absf(fb_blur) > 0.001:
+		parts.append(("blur %.2f" % fb_blur) if fb_blur > 0.0 else ("sharpen %.2f" % -fb_blur))
+	if absf(fb_hue) > 0.0001:
+		parts.append("hue %+.3f" % fb_hue)
+	if absf(fb_sat - 1.0) > 0.001:
+		parts.append("sat %.2f" % fb_sat)
+	if fb_disp_src > 0 and fb_displace > 0.0:
+		parts.append("displace %.2f by %s" % [fb_displace, DISP_SOURCES[fb_disp_src]])
+	if loop_mask() != 7:
+		var names: Array = []
+		for i in _layers.size():
+			if bool(_layers[i].get("loop", true)):
+				names.append(str(i + 1))
+		parts.append("loop: layers " + (", ".join(names) if not names.is_empty() else "none"))
+	return " · ".join(parts)
+
+
+func toggle_routing_panel() -> void:
+	if _routing_panel == null:
+		_routing_panel = PanelContainer.new()
+		_routing_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		_routing_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_routing_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 6)
+		_routing_panel.add_child(col)
+		col.add_child(UI.label("Feedback routing", 26, UI.ACCENT))
+		col.add_child(UI.label("Which layers re-enter the loop, how many frames back the loop reads, and what happens to the picture on every pass.", 15, UI.DIM))
+		var lrow := HBoxContainer.new()
+		lrow.add_theme_constant_override("separation", 14)
+		lrow.add_child(UI.label("In the loop:", 18))
+		for i in LAYER_COUNT:
+			var cb := CheckButton.new()
+			cb.text = "layer %d" % (i + 1)
+			cb.toggled.connect(func(on: bool): set_loop(i, on))
+			lrow.add_child(cb)
+			_routing_widgets["loop%d" % i] = cb
+		col.add_child(lrow)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 12)
+		grid.add_theme_constant_override("v_separation", 6)
+		col.add_child(grid)
+		for spec in [["delay", "frame delay", 0.0, float(RING - 1), 1.0, func(v: float): set_fb_delay(int(v))],
+				["blur", "sharpen ← → blur", -1.0, 1.0, 0.05, func(v: float):
+					fb_blur = v
+					_update_hud()],
+				["hue", "hue drift per pass", -0.1, 0.1, 0.005, func(v: float):
+					fb_hue = v
+					_update_hud()],
+				["sat", "saturation per pass", 0.9, 1.1, 0.005, func(v: float):
+					fb_sat = v
+					_update_hud()],
+				["displace", "displacement", 0.0, 1.0, 0.05, func(v: float):
+					fb_displace = v
+					_update_hud()]]:
+			grid.add_child(UI.label(spec[1], 17))
+			var sl := HSlider.new()
+			sl.min_value = spec[2]
+			sl.max_value = spec[3]
+			sl.step = spec[4]
+			sl.custom_minimum_size = Vector2(300, 30)
+			sl.value_changed.connect(spec[5])
+			grid.add_child(sl)
+			var vl := UI.label("", 15, UI.DIM)
+			vl.custom_minimum_size.x = 80
+			grid.add_child(vl)
+			_routing_widgets[spec[0]] = sl
+			_routing_widgets[spec[0] + "_lbl"] = vl
+		var srow := HBoxContainer.new()
+		srow.add_theme_constant_override("separation", 8)
+		srow.add_child(UI.label("Displace by:", 17))
+		var ob := OptionButton.new()
+		for n in DISP_SOURCES:
+			ob.add_item(n)
+		ob.item_selected.connect(set_disp_source)
+		srow.add_child(ob)
+		_routing_widgets["src"] = ob
+		srow.add_child(UI.hspace(12))
+		srow.add_child(UI.button("Reset", func():
+			set_fb_delay(0)
+			fb_blur = 0.0
+			fb_hue = 0.0
+			fb_sat = 1.0
+			fb_displace = 0.0
+			set_disp_source(0)
+			for i in LAYER_COUNT:
+				_layers[i]["loop"] = true
+			_apply_layers()
+			_refresh_routing_panel()
+			_update_hud(), 100))
+		srow.add_child(UI.button("Close (Ctrl+F)", toggle_routing_panel, 150))
+		col.add_child(srow)
+		add_child(_routing_panel)
+	else:
+		_routing_panel.visible = not _routing_panel.visible
+	if _routing_panel.visible:
+		move_child(_routing_panel, -1)
+		_refresh_routing_panel()
+
+
+func _refresh_routing_panel() -> void:
+	if _routing_panel == null or not _routing_panel.visible:
+		return
+	for i in LAYER_COUNT:
+		_routing_widgets["loop%d" % i].set_pressed_no_signal(bool(_layers[i].get("loop", true)))
+	var vals := {"delay": float(fb_delay), "blur": fb_blur, "hue": fb_hue, "sat": fb_sat, "displace": fb_displace}
+	for k in vals:
+		_routing_widgets[k].set_value_no_signal(vals[k])
+		_routing_widgets[k + "_lbl"].text = ("%d" % int(vals[k])) if k == "delay" else ("%.3f" % vals[k])
+	_routing_widgets["src"].selected = fb_disp_src
 
 
 var _prof := {}
@@ -1506,6 +1714,22 @@ func _process(_delta: float) -> void:
 		m.set_shader_parameter("warp_speed", fb_warp_speed)
 		m.set_shader_parameter("drift", fb_drift)
 		m.set_shader_parameter("stretch", fb_stretch)
+		m.set_shader_parameter("blur", fb_blur)
+		m.set_shader_parameter("hue", fb_hue)
+		m.set_shader_parameter("sat", fb_sat)
+		var dt := _disp_texture() if fb_displace > 0.0 else null
+		m.set_shader_parameter("disp_on", dt != null)
+		m.set_shader_parameter("displace", fb_displace)
+		if dt:
+			m.set_shader_parameter("disp_tex", dt)
+		if fb_delay > 0:
+			# the history ring: this frame's head copies last frame's output; the loop reads N back
+			_ring_head = (_ring_head + 1) % RING
+			_ring_rects[_ring_head].texture = _acc[1 - cur].get_texture()
+			_ring[_ring_head].render_target_update_mode = SubViewport.UPDATE_ONCE
+			prev.texture = _ring[posmod(_ring_head - fb_delay, RING)].get_texture()
+		else:
+			prev.texture = _acc[1 - cur].get_texture()
 		_acc[1 - cur].render_target_update_mode = SubViewport.UPDATE_DISABLED
 		_acc[cur].render_target_update_mode = SubViewport.UPDATE_ONCE
 		_screen.texture = _acc[cur].get_texture()

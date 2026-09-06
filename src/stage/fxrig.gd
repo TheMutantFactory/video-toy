@@ -255,6 +255,14 @@ func panic() -> void:
 	s.fb_warp = 0.0
 	s.fb_drift = Vector2.ZERO
 	s.fb_stretch = Vector2.ONE
+	s.fb_delay = 0
+	s.fb_blur = 0.0
+	s.fb_hue = 0.0
+	s.fb_sat = 1.0
+	s.fb_displace = 0.0
+	s.fb_disp_src = 0
+	for i in s._layers.size():
+		s._layers[i]["loop"] = true
 	s._fx.set_state(0, false, false, 0, false, 0, 0, 0)
 	s._glow.set_level(1)
 	s._ascii.set_mode(0)

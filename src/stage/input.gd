@@ -198,6 +198,9 @@ func key(ev: InputEvent) -> void:
 	if ev.ctrl_pressed and k == KEY_L:
 		s.toggle_locks_panel()
 		return
+	if ev.ctrl_pressed and k == KEY_F:
+		s.toggle_routing_panel()
+		return
 	if ev.ctrl_pressed and k == KEY_M:
 		s.set_mutate_amount(Locks.next_amount(s.mutate_amount))
 		return

@@ -16,7 +16,8 @@ func snapshot() -> Dictionary:
 		verbs[str(sl["id"])] = {"verbs": sl.get("verbs", []).duplicate(), "color_index": int(sl.get("color_index", 0))}
 	return {
 		"palette": s.palette_index,
-		"feedback": {"on": s.feedback, "zoom": s.fb_zoom, "rot": s.fb_rot, "fade": s.fb_fade},
+		"feedback": {"on": s.feedback, "zoom": s.fb_zoom, "rot": s.fb_rot, "fade": s.fb_fade,
+			"delay": s.fb_delay, "blur": s.fb_blur, "hue": s.fb_hue, "sat": s.fb_sat, "displace": s.fb_displace, "disp_src": s.fb_disp_src, "loop": s.loop_mask()},
 		"fx": {"pixel": s._fx.pixel_step, "kaleido": s._fx.kaleido_step, "crt": s._fx.crt_level,
 			"key": s._fx.key_mode, "key_threshold": s._fx.key_threshold, "slit": s._fx.slit_mode,
 			"quantize": s._fx.quantize, "dither": s._fx.dither},
@@ -90,6 +91,16 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 	s.fb_zoom = float(fb.get("zoom", s.fb_zoom))
 	s.fb_rot = float(fb.get("rot", s.fb_rot))
 	s.fb_fade = float(fb.get("fade", s.fb_fade))
+	s.fb_delay = clampi(int(fb.get("delay", s.fb_delay)), 0, s.RING - 1)
+	s.fb_blur = clampf(float(fb.get("blur", s.fb_blur)), -1.0, 1.0)
+	s.fb_hue = clampf(float(fb.get("hue", s.fb_hue)), -0.2, 0.2)
+	s.fb_sat = clampf(float(fb.get("sat", s.fb_sat)), 0.8, 1.2)
+	s.fb_displace = clampf(float(fb.get("displace", s.fb_displace)), 0.0, 1.0)
+	s.fb_disp_src = posmod(int(fb.get("disp_src", s.fb_disp_src)), s.DISP_SOURCES.size())
+	if fb.has("loop"):
+		var mask := int(fb["loop"])
+		for i in s._layers.size():
+			s._layers[i]["loop"] = (mask & (1 << i)) != 0
 	var fb_on := bool(fb.get("on", s.feedback))
 	if fb_on != s.feedback:
 		s._set_feedback(fb_on)

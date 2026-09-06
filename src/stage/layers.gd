@@ -14,7 +14,7 @@ func _init(stage: Stage) -> void:
 func build() -> void:
 	var rides0 := Node2D.new()
 	s._world.add_child(rides0)
-	s._layers = [{"vp": null, "actors": s._actors, "rides": rides0, "blend": 0, "opacity": 1.0}]
+	s._layers = [{"vp": null, "actors": s._actors, "rides": rides0, "blend": 0, "opacity": 1.0, "loop": true}]
 	for i in range(1, s.LAYER_COUNT):
 		var vp := SubViewport.new()
 		vp.size = s.WORLD
@@ -26,7 +26,7 @@ func build() -> void:
 		vp.add_child(actors)
 		var rides := Node2D.new()
 		vp.add_child(rides)
-		s._layers.append({"vp": vp, "actors": actors, "rides": rides, "blend": 1 if i == 1 else 0, "opacity": 1.0})
+		s._layers.append({"vp": vp, "actors": actors, "rides": rides, "blend": 1 if i == 1 else 0, "opacity": 1.0, "loop": true})
 	# one full-screen pass composites layers 2 and 3 over the world, into
 	# _worldmix - which is what the screen, the feedback and the monitor see
 	s._worldmix = SubViewport.new()
@@ -48,6 +48,25 @@ func build() -> void:
 	mat.set_shader_parameter("layer2", s._layers[2]["vp"].get_texture())
 	s._layer_mix.material = mat
 	s._worldmix.add_child(s._layer_mix)
+	# the same composite once more for the layers kept OUT of the loop (drawn over the feedback)
+	s._overvp = SubViewport.new()
+	s._overvp.size = s.WORLD
+	s._overvp.transparent_bg = true
+	s._overvp.disable_3d = true
+	s._overvp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	s.add_child(s._overvp)
+	s._over_mix = ColorRect.new()
+	s._over_mix.size = Vector2(s.WORLD)
+	s._over_mix.color = Color.WHITE
+	s._over_mix.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var omat := ShaderMaterial.new()
+	omat.shader = sh
+	omat.set_shader_parameter("world_tex", s._world.get_texture())
+	omat.set_shader_parameter("layer1", s._layers[1]["vp"].get_texture())
+	omat.set_shader_parameter("layer2", s._layers[2]["vp"].get_texture())
+	omat.set_shader_parameter("overlay_pass", true)
+	s._over_mix.material = omat
+	s._overvp.add_child(s._over_mix)
 	s._stroke_line = Line2D.new()
 	s._stroke_line.width = 4.0
 	s._stroke_line.z_index = 2
@@ -56,10 +75,16 @@ func build() -> void:
 
 
 func apply() -> void:
-	var m: ShaderMaterial = s._layer_mix.material
-	for i in [1, 2]:
-		m.set_shader_parameter("mode%d" % i, int(s._layers[i]["blend"]))
-		m.set_shader_parameter("opacity%d" % i, float(s._layers[i]["opacity"]))
+	var mask: int = s.loop_mask()
+	for m in [s._layer_mix.material, s._over_mix.material]:
+		for i in [1, 2]:
+			m.set_shader_parameter("mode%d" % i, int(s._layers[i]["blend"]))
+			m.set_shader_parameter("opacity%d" % i, float(s._layers[i]["opacity"]))
+		m.set_shader_parameter("loop_mask", mask)
+	var some_out := mask != 7
+	if s._overlay:
+		s._overlay.visible = some_out
+	s._overvp.render_target_update_mode = SubViewport.UPDATE_ALWAYS if some_out else SubViewport.UPDATE_DISABLED
 
 
 func layer_actors() -> Node2D:

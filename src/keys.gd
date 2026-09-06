@@ -38,6 +38,7 @@ static func groups() -> Array:
 			["[ ]  , .  - =", "feedback zoom · twist · fade"],
 			["arrows", "feedback drift · PgUp/PgDn warp · Home resets"],
 			["Tab / Shift+Tab", "next / previous scene · ` scene off"],
+			["Ctrl+F", "feedback routing: layers in the loop, frame delay, blur / sharpen, hue drift, displacement"],
 			["M", "monitor inside the scene (recursion)"],
 			["N", "monitor size · drag it to move"],
 		]},

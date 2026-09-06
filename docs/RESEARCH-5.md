@@ -37,9 +37,10 @@ description of this toy. The gaps are where to go next.
 2. **Lock and mutate** — built: Ctrl+L panel with eight section locks that Surprise and evolve
    respect, Ctrl+M / a param for the amount (one nearby nudge to six wild changes), persisted,
    in the HUD, as actions.
-3. **Feedback routing**: per-layer "re-enters the loop" switches, a frame-delay tap (1..N
-   frames), blur / sharpen and colour drift inside the loop, displacement by the scene or
-   webcam.
+3. **Feedback routing** — built: per-layer in / out of the loop (out = composited over it), a
+   frame-delay tap up to 23 frames through a half-res history ring, blur / sharpen, hue and
+   saturation drift and displacement (self / layer 2 / layer 3 / webcam) inside the warp pass;
+   Ctrl+F panel, params and actions, snapshot + crossfade, panic.
 4. **Loop-maker export**: canvas presets (16:9, 9:16, 1:1), an exact-length seamless render
    from the timeline loop, mp4 when ffmpeg is on the machine, a "record the last 20 s" from
    the autosave.

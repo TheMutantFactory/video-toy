@@ -30,6 +30,10 @@ func midi_params() -> Array:
 		{"id": "fb_zoom", "label": "Feedback zoom", "set": func(v): s.fb_zoom = lerpf(0.90, 1.20, v)},
 		{"id": "gravity", "label": "Gravity (Physics icons)", "set": func(v): s.set_gravity(v * 2.0)},
 		{"id": "mutate_amount", "label": "Mutation amount (nearby .. everything)", "set": func(v): s.set_mutate_amount(v)},
+		{"id": "fb_delay", "label": "Loop frame delay", "set": func(v): s.set_fb_delay(int(round(v * (s.RING - 1))))},
+		{"id": "fb_blur", "label": "Loop sharpen .. blur", "set": func(v): s.fb_blur = lerpf(-1.0, 1.0, v)},
+		{"id": "fb_hue", "label": "Loop hue drift", "set": func(v): s.fb_hue = lerpf(-0.1, 0.1, v)},
+		{"id": "fb_displace", "label": "Loop displacement", "set": func(v): s.fb_displace = v},
 		{"id": "fb_twist", "label": "Feedback twist", "set": func(v): s.fb_rot = lerpf(-0.15, 0.15, v)},
 		{"id": "fb_fade", "label": "Feedback fade", "set": func(v): s.fb_fade = lerpf(0.5, 0.995, v)},
 		{"id": "pixelate", "label": "Pixelate size", "set": func(v):
@@ -182,6 +186,9 @@ func midi_actions() -> Array:
 	for sec in Locks.SECTIONS:
 		out.append({"id": "lock_" + sec, "label": "Lock %s (Surprise / evolve keep it)" % sec, "do": func(): s.toggle_lock(sec)})
 	out.append({"id": "locks_clear", "label": "Clear all locks", "do": func(): s.set_locks([])})
+	for li in s.LAYER_COUNT:
+		out.append({"id": "loop_layer_%d" % (li + 1), "label": "Layer %d in / out of the loop" % (li + 1), "do": func(): s.set_loop(li, not bool(s._layers[li].get("loop", true)))})
+	out.append({"id": "disp_source", "label": "Next displacement source", "do": func(): s.set_disp_source(s.fb_disp_src + 1)})
 	out.append({"id": "play_sound", "label": "Play the selected slot's sound", "do": func(): s.play_slot_sound()})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": s.toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": s.cycle_quality_lock})
