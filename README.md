@@ -202,6 +202,15 @@ the beat in the bar.
 - **Pinata**: click an icon that has Sparkle on and it bursts into confetti of itself; the
   learnable *pinata* action does it to a random one.
 
+## Undo and Surprise me
+
+**Ctrl+Z** undoes the last spawn, remove, clear, mosaic, drawn path or pinata — a stack of
+twelve live states, contents only, so the look you dialled in afterwards stays. **Ctrl+Shift+Z**
+redoes. **Ctrl+R** (or **Surprise me** on the start screen and in the Esc menu) builds a random
+look from a known-good base: panic, a random palette, usually a scene, eight icons if the stage
+is empty, six evolve mutations, feedback more often than not. It is one undo step, so the guest
+who pressed it can take it back. Undo, redo and surprise are learnable actions.
+
 ## Physics and sounds
 
 The **Physics** verb (**Ctrl+P**) turns the icon into a rigid body with its own outline

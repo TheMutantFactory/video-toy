@@ -42,6 +42,7 @@ const StageFxrigScript = preload("res://src/stage/fxrig.gd")
 const StageWorld3dScript = preload("res://src/stage/world3d.gd")
 const StageLayersScript = preload("res://src/stage/layers.gd")
 const StageInputScript = preload("res://src/stage/input.gd")
+const StageHistoryScript = preload("res://src/stage/history.gd")
 const ActorScript = preload("res://src/actor.gd")
 const FxScript = preload("res://src/fx.gd")
 const MonitorScript = preload("res://src/monitor.gd")
@@ -135,6 +136,7 @@ var _fxrig
 var _m_world3d
 var _m_layers                              # src/stage/layers.gd
 var _m_input                               # src/stage/input.gd
+var _history                               # src/stage/history.gd (undo / redo)
 var palette_index := 0
 var feedback := false
 var fb_zoom := 1.04
@@ -276,6 +278,7 @@ func _ready() -> void:
 	# the stage is the coordinator; each module holds one concern and reaches back through `s`
 	_m_layers = StageLayersScript.new(self)
 	_m_input = StageInputScript.new(self)
+	_history = StageHistoryScript.new(self)
 	_modes = StageModesScript.new(self)
 	_state = StageStateScript.new(self)
 	_controls = StageControlsScript.new(self)
@@ -481,7 +484,21 @@ func set_layer_opacity(v: float) -> void:
 
 
 func clear_actors() -> void:
+	_history.push("clear")
 	_m_layers.clear_actors()
+
+
+func undo() -> bool:
+	return _history.undo()
+
+
+func redo() -> bool:
+	return _history.redo()
+
+
+## A random look from a known-good base (Ctrl+R, the start screen, an action).
+func surprise(mutations := 6) -> String:
+	return _modes.surprise(mutations)
 
 
 func layer_describe() -> String:
@@ -497,7 +514,7 @@ func extend_stroke(world_pos: Vector2) -> void:
 
 
 func end_stroke() -> int:
-	return _m_layers.end_stroke()
+	return _history.batch("path", _m_layers.end_stroke)
 
 
 # ---------------- particle field ----------------
@@ -570,6 +587,10 @@ func next_shape() -> String:
 
 
 func spawn_solid(world_pos := Vector2(-1, -1)) -> void:
+	_history.batch("solid", func(): _spawn_solid(world_pos))
+
+
+func _spawn_solid(world_pos := Vector2(-1, -1)) -> void:
 	_m_world3d.spawn_solid(world_pos)
 
 
@@ -582,6 +603,10 @@ func cycle_formation() -> void:
 
 
 func spawn_formation(n := 200) -> void:
+	_history.batch("formation", func(): _spawn_formation(n))
+
+
+func _spawn_formation(n := 200) -> void:
 	_m_world3d.spawn_formation(n)
 
 
@@ -618,6 +643,10 @@ func set_scene_knobs(speed: float, scale: float, bias: float) -> void:
 ## ordinary actors, so verbs can explode the picture (Bounce) and reform it
 ## (Orbit around home).
 func spawn_mosaic() -> int:
+	return _history.batch("mosaic", _spawn_mosaic)
+
+
+func _spawn_mosaic() -> int:
 	return _media.spawn_mosaic()
 
 
@@ -679,6 +708,10 @@ func advance_words() -> void:
 
 
 func pinata_at(world_pos: Vector2, radius := 90.0) -> bool:
+	return bool(_history.batch("pinata", func(): return _pinata_at(world_pos, radius)))
+
+
+func _pinata_at(world_pos: Vector2, radius := 90.0) -> bool:
 	var best: Node2D = null
 	var bd := radius
 	for a in all_actors():
@@ -1204,6 +1237,18 @@ func restore_live(st: Dictionary) -> int:
 	if st.is_empty():
 		return 0
 	restore(st, 0.0)
+	return restore_contents(st)
+
+
+## Only the things on stage (undo keeps the look you dialled in afterwards).
+func restore_contents(st: Dictionary) -> int:
+	_history.muted += 1
+	var n := _restore_contents(st)
+	_history.muted -= 1
+	return n
+
+
+func _restore_contents(st: Dictionary) -> int:
 	clear_actors()
 	for sol in _solids.get_children():
 		sol.queue_free()
@@ -1304,6 +1349,7 @@ func spawn_slot_at(slot_index: int, layer_index: int, world_pos: Vector2) -> voi
 	if slot_index < 0 or slot_index >= Toolbox.slots.size():
 		return
 	var slot: Dictionary = Toolbox.slots[slot_index]
+	_history.push("spawn")
 	var a := Node2D.new()
 	a.set_script(ActorScript)
 	a.setup(slot, world_pos, palette_index, Rect2(Vector2.ZERO, Vector2(WORLD)))

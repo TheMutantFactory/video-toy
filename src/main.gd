@@ -119,10 +119,15 @@ func show_screen(name: String) -> void:
 	if name == "attribution":
 		menu.show_attribution()
 		return
-	if name == "help":
+	if name == "help" or name == "undo" or name == "surprise":
 		if current_name != "stage":
 			show_screen("stage")
-		current.open_help()
+		if name == "help":
+			current.open_help()
+		elif name == "undo":
+			current.undo()
+		else:
+			current.surprise()
 		return
 	if name == "panic" or name == "blackout":
 		if current_name != "stage":
@@ -633,6 +638,56 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# undo / redo over spawns, removes and clears (contents only); surprise is a full step
+	var ok_u := true
+	st.clear_actors()
+	await get_tree().process_frame
+	st._history.clear()
+	Toolbox.select(0)
+	st.spawn_at(Vector2(400, 400))
+	st.spawn_at(Vector2(500, 400))
+	await get_tree().process_frame
+	ok_u = ok_u and st.all_actors().size() == 2 and st._history.depth() == 2 and st._history.labels() == ["spawn", "spawn"]
+	st.undo()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_u = ok_u and st.all_actors().size() == 1 and st._history.depth() == 1
+	st.redo()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_u = ok_u and st.all_actors().size() == 2 and st._history.depth() == 2
+	st._remove_nearest(Vector2(500, 400))
+	await get_tree().process_frame
+	ok_u = ok_u and st.all_actors().size() == 1 and st._history.labels()[-1] == "remove"
+	st.undo()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_u = ok_u and st.all_actors().size() == 2
+	st.clear_actors()
+	await get_tree().process_frame
+	ok_u = ok_u and st.all_actors().is_empty()
+	st.undo()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_u = ok_u and st.all_actors().size() == 2
+	var pal0: int = st.palette_index
+	var pre_hash: int = st.snapshot().hash()
+	var note: String = st.surprise()
+	await get_tree().process_frame
+	ok_u = ok_u and note.begins_with("surprise:") and note.length() > 12 and not st.all_actors().is_empty() and st._history.labels()[-1] == "surprise"
+	st.undo()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_u = ok_u and st.palette_index == pal0 and st.snapshot().hash() == pre_hash and st.all_actors().size() == 2
+	st._history.clear()
+	ok_u = ok_u and not st.undo() and st._steal_note == "nothing to undo"
+	st.clear_actors()
+	st.panic()
+	if ok_u:
+		print("PASS undo / redo over spawn, remove and clear; surprise changes the look and undo restores it exactly")
+	else:
+		fails += 1
+		printerr("FAIL undo / surprise")
 	# the key table: a few keys through the real dispatcher (plain, Shift, Ctrl, digits)
 	var ok_keys := true
 	var send := func(code: int, shift := false, ctrl := false):

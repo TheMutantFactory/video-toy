@@ -29,6 +29,7 @@ static func groups() -> Array:
 			[DROPS, "raster slot (Shift: chroma backdrop) / icon / font for words / word list / video slot / import rig"],
 			["drop .wav .mp3 .ogg on a slot", "its sound: spawn, beat (with Sparkle), pinata, collisions"],
 			["drag a Physics icon", "throw it"],
+			["Ctrl+Z", "undo the last spawn / remove / clear / mosaic / path / pinata · Ctrl+Shift+Z redo"],
 		]},
 		{"title": "Verbs (toggle on the selected slot)", "tab": "Verbs", "rows": verbs},
 		{"title": "Feedback and scenes", "tab": "Feedback", "rows": [
@@ -61,6 +62,7 @@ static func groups() -> Array:
 			["Shift+S", "mosaic: the slot's picture rebuilt from the toolbox icons"],
 			["Shift+E", "evolve: a mutation every 8 beats · Enter keeps · Shift+Enter discards"],
 			["Shift+A", "attract mode (automatic after 60 s idle; any input ends it)"],
+			["Ctrl+R", "surprise me: a random look from a known-good base (undo takes it back)"],
 			["Shift+R  Shift+P", "record controller gestures · loop them"],
 			["Shift+N", "particle field (right-click scatters)"],
 			["Ctrl+G", "gravity on / off for Physics icons"],

@@ -64,6 +64,8 @@ The night-before and day-of checklist for Knobcon, a stream or a party. The keys
 - **Ctrl+P** on a slot makes its icons physical: they drop, pile and can be thrown; **Ctrl+G**
   kills gravity for a floating pile. A `.wav` dropped on a slot tile is that slot's drum; spawn,
   beat (with Sparkle), pinata and collisions play it.
+- **Ctrl+R** is "surprise me" — the thing to hand a guest — and **Ctrl+Z** takes it, or any
+  stray spawn / clear, back.
 - Let guests play: **Shift+2** hides player 2's cursor when nobody is on the keypad / gamepad.
   A Sparkle icon clicked is a pinata.
 - **Shift+V** saves a screenshot of the picture with the credits strip burned in

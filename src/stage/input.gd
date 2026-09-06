@@ -72,6 +72,7 @@ func remove_nearest(p: Vector2) -> void:
 			best_d = d
 			best = sol
 	if best and best_d < 160.0:
+		s._history.push("remove")
 		best.queue_free()
 	else:
 		for a in s.all_actors():                        # nothing near: scatter the flocks
@@ -161,6 +162,15 @@ func key(ev: InputEvent) -> void:
 		return
 	if ev.ctrl_pressed and k == KEY_S:
 		s.play_slot_sound()
+		return
+	if ev.ctrl_pressed and k == KEY_Z:
+		if ev.shift_pressed:
+			s.redo()
+		else:
+			s.undo()
+		return
+	if ev.ctrl_pressed and k == KEY_R:
+		s.surprise()
 		return
 	var verb := Verbs.by_key(k, ev.shift_pressed, ev.ctrl_pressed)
 	if verb != "" and not Toolbox.current().is_empty():
@@ -281,9 +291,10 @@ func _evolve_vote(keep: bool) -> void:
 
 
 func _clear_all() -> void:
-	s.clear_actors()
-	for a in s._solids.get_children() + s._formations.get_children():
-		a.queue_free()
+	s._history.batch("clear", func():
+		s.clear_actors()
+		for a in s._solids.get_children() + s._formations.get_children():
+			a.queue_free())
 
 
 func _credits_toggle() -> void:

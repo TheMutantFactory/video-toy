@@ -52,6 +52,15 @@ func _ready() -> void:
 	demo_row.add_child(UI.hspace())
 	demo_row.add_child(UI.label("five built-in shapes, no API key needed", 18, UI.DIM))
 	col.add_child(demo_row)
+	var sur_row := HBoxContainer.new()
+	sur_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	sur_row.add_child(UI.button("Surprise me", func():
+		if Toolbox.slots.is_empty():
+			DemoPack.load_into(Toolbox, Ledger)
+		navigate.emit("surprise"), 320))
+	sur_row.add_child(UI.hspace())
+	sur_row.add_child(UI.label("a random look from a known-good base — what a guest presses first", 18, UI.DIM))
+	col.add_child(sur_row)
 
 	var wrow := HBoxContainer.new()
 	wrow.alignment = BoxContainer.ALIGNMENT_CENTER

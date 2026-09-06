@@ -73,6 +73,9 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/render_clip   Render a 20 s clip (offline)
   /vt/action/panic   PANIC: known-good look
   /vt/action/gravity_toggle   Gravity on / off
+  /vt/action/undo   Undo
+  /vt/action/redo   Redo
+  /vt/action/surprise   Surprise me
   /vt/action/play_sound   Play the selected slot's sound
   /vt/action/blackout   Blackout on/off
   /vt/action/quality   Quality lock: cycle

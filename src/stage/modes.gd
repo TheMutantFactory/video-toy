@@ -69,6 +69,32 @@ func mutate() -> String:
 			return "camera orbit %.2f roll %.2f" % [s.cam_orbit, s.cam_roll]
 
 
+## A random look from a known-good base: panic, a palette, usually a scene,
+## icons on stage if there are none, then `mutations` evolve mutations.
+func surprise(mutations := 6) -> String:
+	s._history.push("surprise", true)
+	s._history.muted += 1
+	s.panic()
+	s.palette_index = randi() % Palettes.count()
+	s._apply_palette()
+	var ids: Array = Scenes.ids()
+	if not ids.is_empty() and randf() < 0.7:
+		s.set_scene(str(ids[randi() % ids.size()]), 0.5)
+	if s.all_actors().is_empty() and not Toolbox.slots.is_empty():
+		for i in 8:
+			s.spawn_slot_at(randi() % Toolbox.slots.size(), 0, Vector2(randf_range(240, s.WORLD.x - 240), randf_range(160, s.WORLD.y - 160)))
+	var log: Array = []
+	for i in mutations:
+		log.append(mutate())
+	if randf() < 0.6 and not s.feedback:
+		s._set_feedback(true)
+		log.append("feedback on")
+	s._history.muted -= 1
+	s._steal_note = "surprise: " + ", ".join(log)
+	s._update_hud()
+	return s._steal_note
+
+
 func set_evolve(on: bool) -> void:
 	s.evolve = on
 	s._evolve_timer = 0.0
