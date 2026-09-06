@@ -322,7 +322,16 @@ main.tscn / src/main.gd     screen router, --selftest, --capture
 src/menu_overlay.gd         ☰ / Esc menu + paginated Attribution
 src/start_screen.gd         modes
 src/search_screen.gd        Noun Project search → inspect → add
-src/stage_screen.gd         play: SubViewport world + ping-pong feedback
+src/stage_screen.gd         play: the coordinator — render graph, layers, drawing, input, keys, HUD;
+                            one-line delegations to the modules below (class_name Stage)
+src/stage/fxrig.gd          particle field, reaction-diffusion, quality ladder, panic, blackout
+src/stage/state.gd          snapshots, presets and banks, the crossfade of everything, morph
+src/stage/controls.gd       the param / action tables, control dispatch, timeline, clock ticks
+src/stage/media.gd          webcam, video slots, live and cycling words, mosaic, file drops, Syphon
+src/stage/modes.gd          evolve and attract
+src/stage/players.gd        player 2
+src/stage/credits.gd        credits ticker, roll, burned-in screenshots
+src/stage/world3d.gd        3D solids, formations, camera
 src/glow.gd + glow.gdshader bloom pass before fx
 src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma key, quantise, dither
 src/presets.gd              eight banks x twelve stage snapshots, user://presets.json
