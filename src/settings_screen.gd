@@ -87,6 +87,11 @@ func _ready() -> void:
 	hud.selected = maxi(0, HUD.find(str(Settings.get_value("hud"))))
 	hud.item_selected.connect(func(i: int): Settings.set_value("hud", HUD[i]))
 	_row(g, "HUD at start", hud, "H cycles full / compact / hidden on stage")
+	var safe := CheckButton.new()
+	safe.text = "no MIDI, OSC, camera or microphone at launch"
+	safe.button_pressed = bool(Settings.get_value("safe_mode"))
+	safe.toggled.connect(func(on: bool): Settings.set_value("safe_mode", on))
+	_row(g, "Safe mode", safe, ("ON NOW — " if Safe.active() else "") + "for a machine that misbehaves; also `--safe` on the command line (./run.sh safe). Next launch.")
 
 	# ---------------- clock
 	_section(col, "Clock")
@@ -186,6 +191,7 @@ func _ready() -> void:
 		Settings.reset()
 		navigate.emit("settings"), 170))
 	foot.add_child(UI.button("Open data folder", func(): OS.shell_open(ProjectSettings.globalize_path("user://")), 190))
+	foot.add_child(UI.button("Open logs", func(): OS.shell_open(ProjectSettings.globalize_path(CrashLog.DIR)), 130))
 	var ver := UI.label("%s   ·   %s" % [Build.describe(), ProjectSettings.globalize_path(Settings.PATH)], 14, UI.DIM)
 	ver.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	foot.add_child(ver)

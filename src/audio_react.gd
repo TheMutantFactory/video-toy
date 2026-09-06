@@ -93,7 +93,7 @@ func driver_missing() -> bool:
 
 ## The microphone needs the project setting AND a live driver.
 func mic_available() -> bool:
-	return bool(ProjectSettings.get_setting("audio/driver/enable_input", false)) and not driver_missing()
+	return bool(ProjectSettings.get_setting("audio/driver/enable_input", false)) and not driver_missing() and not Safe.active()
 
 
 func set_source(s: String) -> void:

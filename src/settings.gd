@@ -17,6 +17,7 @@ const DEFAULTS := {
 	"lock_scenes": false,
 	"diff_mean": 0.035,            # ./run.sh check thresholds
 	"diff_block": 0.45,
+	"safe_mode": false,            # no MIDI / OSC / camera / mic at launch (also --safe)
 }
 
 static var _cache: Dictionary = {}     # path -> Dictionary

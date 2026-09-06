@@ -26,7 +26,7 @@ var _built := false
 
 
 func _ready() -> void:
-	if "monitoring_feeds" in CameraServer:
+	if "monitoring_feeds" in CameraServer and not Safe.active():   # this is what asks macOS for the camera
 		CameraServer.monitoring_feeds = true
 	_sprite = Sprite2D.new()
 	add_child(_sprite)
@@ -34,6 +34,9 @@ func _ready() -> void:
 
 
 func start() -> void:
+	if Safe.active():
+		status = "safe mode: camera off"
+		return
 	if CameraServer.get_feed_count() == 0:
 		status = "no camera"
 		return

@@ -892,6 +892,25 @@ func _init() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(twav))
 	_check("key card names gravity and slot sounds", Keys.markdown().contains("Ctrl+G") and Keys.markdown().contains("Ctrl+P") and Keys.markdown().contains("drop .wav"))
 
+	# safe mode decision is pure; crash logs: rotation naming, error extraction, report
+	_check("safe mode from the flag or the setting", Safe.from(PackedStringArray(["--safe"]), false) and Safe.from(PackedStringArray(), true) and not Safe.from(PackedStringArray(["--selftest"]), false))
+	var ld := "user://_smoke_logs"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(ld))
+	for nm in ["godot.log", "godot2026-09-06T01.22.18.log", "godot2026-09-06T01.44.01.log", "notes.txt"]:
+		var lgf := FileAccess.open(ld.path_join(nm), FileAccess.WRITE)
+		lgf.store_string("Godot Engine v4.7\nhello\nERROR: something broke\n   at: foo\nSCRIPT ERROR: Invalid call\nERROR: something broke\nbye\n")
+		lgf.close()
+	var lfs := CrashLog.files(ld)
+	_check("previous run's log is the newest timestamped file, not godot.log", lfs.size() == 2 and CrashLog.previous(ld).ends_with("godot2026-09-06T01.44.01.log") and CrashLog.current(ld).ends_with("godot.log"))
+	var errs := CrashLog.errors(FileAccess.get_file_as_string(CrashLog.previous(ld)))
+	_check("error lines are extracted, deduplicated in sequence", errs == ["ERROR: something broke", "SCRIPT ERROR: Invalid call", "ERROR: something broke"])
+	var rep := CrashLog.report(CrashLog.previous(ld))
+	_check("report names the file, counts errors and ends with the tail", rep.contains("3 error lines") and rep.contains("tail:") and rep.ends_with("bye") and CrashLog.report("") == "no log from the last run")
+	_check("this run is being logged to user://logs/godot.log", FileAccess.file_exists(CrashLog.current()))
+	for nm in ["godot.log", "godot2026-09-06T01.22.18.log", "godot2026-09-06T01.44.01.log", "notes.txt"]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(ld.path_join(nm)))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ld))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

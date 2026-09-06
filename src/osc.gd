@@ -26,6 +26,9 @@ func _ready() -> void:
 
 func start() -> void:
 	stop()
+	if Safe.active():
+		last_text = "safe mode: OSC off"
+		return
 	listening = _udp.bind(port, "0.0.0.0") == OK
 	if not listening:
 		push_warning("OSC: could not bind UDP port %d" % port)

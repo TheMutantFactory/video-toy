@@ -22,12 +22,14 @@ var _cleanup_birthday: Array = []
 
 
 var restore_offer := {}                      # {age, state} when the last run did not exit cleanly
+var crashed := false                         # the running flag was still there at launch
 
 
 func _ready() -> void:
 	get_window().title = "Video Toy"
 	restore_offer = {}
-	if Autosave.crashed_last_time() and not Autosave.read().is_empty():
+	crashed = Autosave.crashed_last_time()
+	if crashed and not Autosave.read().is_empty():
 		restore_offer = {"age": Autosave.age_seconds(), "state": Autosave.read()}
 	Autosave.mark_running()
 	get_tree().auto_accept_quit = false
@@ -38,6 +40,10 @@ func _ready() -> void:
 	var cap := args.find("--capture")
 	var ti := args.find("--templates")
 	var ki := args.find("--keycard")
+	if args.has("--safecheck"):
+		print("SAFECHECK active=%s midi_inputs=%d osc_listening=%s mic=%s webcam=%s log=%s" % [Safe.active(), MidiMap.inputs().size(), Osc.listening, AudioReact.mic_available(), "off" if Safe.active() else "on", FileAccess.file_exists(CrashLog.current())])
+		quit_clean()
+		return
 	var ci := args.find("--clip")
 	if ci >= 0 and ci + 1 < args.size():
 		_clip(float(args[ci + 1]))

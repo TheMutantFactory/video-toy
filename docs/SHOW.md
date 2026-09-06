@@ -73,7 +73,15 @@ The night-before and day-of checklist for Knobcon, a stream or a party. The keys
 
 The live state (every icon and solid on stage plus the whole look) is autosaved every 30 s. On
 relaunch the start screen offers **Restore last session** — take it, then **F1** if the look was
-the problem. The toolbox, presets and bindings are on disk regardless.
+the problem. The toolbox, presets and bindings are on disk regardless. The same row has
+**Crash log** (the previous run's error lines, inline), **Open log** and **Copy log** — paste
+it into an issue.
+
+## If the machine misbehaves
+
+`open -a "Video Toy" --args --safe` (or Settings → **Safe mode**, next launch): no MIDI, no OSC,
+no camera, no microphone. The keyboard, presets, the test groove and the internal clock still
+run the whole show; the HUD says SAFE so you remember to turn it back off.
 
 ## After
 

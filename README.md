@@ -397,6 +397,19 @@ launches with `--write-movie`, restores the autosave, hides the HUD, plays the t
 there is one, and writes an AVI (MJPEG + WAV) at a fixed 60 fps to `user://clips/` — offline, so
 it never drops frames. Convert with `ffmpeg -i clip.avi -c:v libx264 -crf 18 clip.mp4`.
 
+## Safe mode and crash logs
+
+`./run.sh safe` (or `open -a "Video Toy" --args --safe`, or Settings → **Safe mode**) launches
+with **no MIDI, OSC, camera or microphone**: the MIDI ports stay closed, the OSC socket is never
+bound, the camera server is never asked to monitor (which is what makes macOS ask for the
+camera), and the mic source is unavailable. The HUD and the start screen say SAFE. For the
+machine that misbehaves an hour before the show.
+
+Godot writes a log per run to `user://logs/` (ten kept, rotated by timestamp). When the last
+run did not exit cleanly, the start screen's restore row gains **Crash log** (the previous run's
+error lines and tail, inline), **Open log** and **Copy log**; Settings has **Open logs**.
+`./run.sh test` ends with a `--safe --safecheck` launch that proves all four inputs stay off.
+
 ## Rig files
 
 The Esc menu has **Export rig**, which zips the toolbox and every asset it points at, the

@@ -1176,7 +1176,7 @@ func _update_hud() -> void:
 		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + ("   ·   BLACKOUT" if blackout else "") + ("   ·   TICKER" if ticker_on else "") + ("   ·   CREDITS" if _roll.visible else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
-	var line2 := "midi: " + (_midi_last if _midi_last != "" else "—")
+	var line2 := ("SAFE (no MIDI / OSC / camera / mic)   ·   " if Safe.active() else "") + "midi: " + (_midi_last if _midi_last != "" else "—")
 	line2 += "   ·   audio: " + ((("%s  %s" % [AudioReact.source if AudioReact.source != "file" else AudioReact.file_name, _meter()])) if AudioReact.active() else "off (A)")
 	if AudioReact.driver_missing():
 		line2 += "   ·   no audio device: mic/file unavailable"

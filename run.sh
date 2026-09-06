@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ./run.sh [play] [low|medium|high|full]   play (optionally lock the quality level)
-# ./run.sh test       headless smoke tests (no network, no quota)
+# ./run.sh test       headless smoke tests + self-test + a --safe launch check (no network, no quota)
+# ./run.sh safe       play with no MIDI, OSC, camera or microphone (--safe)
 # ./run.sh capture    screenshot every screen into out/
 # ./run.sh import     (re)import assets headlessly
 # ./run.sh templates  write TouchOSC / Launchpad / APC mini templates into docs/controllers
@@ -39,10 +40,14 @@ audio_override() {
 
 case "${1:-play}" in
   play)    audio_override; exec "$G" --path . -- ${2:+--quality "$2"} ;;
+  safe)    audio_override; exec "$G" --path . -- --safe ;;
   test)    "$G" --headless --path . --import >/dev/null 2>&1 || true
            # perl alarm = portable timeout: a script that errors before quit() would hang forever
            perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -s tests/smoke.gd \
-             && perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -- --selftest ;;
+             && perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -- --selftest \
+             && { out="$(perl -e 'alarm 60; exec @ARGV' "$G" --headless --path . -- --safe --safecheck 2>&1)"
+                  echo "$out" | grep "^SAFECHECK"
+                  echo "$out" | grep -q "SAFECHECK active=true midi_inputs=0 osc_listening=false mic=false webcam=off log=true" || { echo "FAIL safe mode" >&2; exit 1; }; } ;;
   capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ${2:+--only "$2"} ;;
   import)  exec "$G" --headless --path . --import ;;
   templates) exec "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;

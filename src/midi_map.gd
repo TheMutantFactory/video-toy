@@ -42,16 +42,18 @@ var _last_value := {}              # message key -> last raw 0..1 (edge detectio
 
 
 func _ready() -> void:
-	if DisplayServer.get_name() != "headless":      # CoreMIDI has no server to talk to headless
+	if DisplayServer.get_name() != "headless" and not Safe.active():      # CoreMIDI has no server headless
 		OS.open_midi_inputs()
 	load_from_disk()
 
 
 func inputs() -> PackedStringArray:
-	return OS.get_connected_midi_inputs()
+	return PackedStringArray() if Safe.active() else OS.get_connected_midi_inputs()
 
 
 func rescan() -> void:
+	if Safe.active():
+		return
 	OS.close_midi_inputs()
 	OS.open_midi_inputs()
 

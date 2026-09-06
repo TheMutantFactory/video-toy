@@ -72,21 +72,41 @@ func _ready() -> void:
 	col.add_child(wrow)
 
 	var main := get_parent()
-	if main and "restore_offer" in main and not main.restore_offer.is_empty():
+	var offer: bool = main and "restore_offer" in main and not main.restore_offer.is_empty()
+	var crashed: bool = main and "crashed" in main and main.crashed
+	if offer or crashed:
 		var rrow := HBoxContainer.new()
 		rrow.alignment = BoxContainer.ALIGNMENT_CENTER
 		rrow.add_theme_constant_override("separation", 8)
-		rrow.add_child(UI.button("Restore last session", func(): main.restore_autosave(), 320))
-		rrow.add_child(UI.hspace())
-		rrow.add_child(UI.label("the last run did not exit cleanly — autosave from %s" % Autosave.describe_age(int(main.restore_offer["age"])), 18, UI.ACCENT))
+		if offer:
+			rrow.add_child(UI.button("Restore last session", func(): main.restore_autosave(), 320))
+			rrow.add_child(UI.hspace())
+			rrow.add_child(UI.label("the last run did not exit cleanly — autosave from %s" % Autosave.describe_age(int(main.restore_offer["age"])), 18, UI.ACCENT))
+		else:
+			rrow.add_child(UI.label("the last run did not exit cleanly (nothing to restore)", 18, UI.ACCENT))
+		var prev := CrashLog.previous()
+		var box := UI.label("", 14, UI.DIM)
+		box.visible = false
+		box.custom_minimum_size = Vector2(1100, 0)
+		box.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if prev != "":
+			rrow.add_child(UI.hspace())
+			rrow.add_child(UI.button("Crash log", func():
+				box.text = CrashLog.report(prev)
+				box.visible = not box.visible, 140))
+			rrow.add_child(UI.button("Open log", func(): OS.shell_open(ProjectSettings.globalize_path(prev)), 120))
+			rrow.add_child(UI.button("Copy log", func(): DisplayServer.clipboard_set(FileAccess.get_file_as_string(prev)), 120))
 		col.add_child(rrow)
+		col.add_child(box)
 
-	col.add_child(UI.vspace(30))
+	col.add_child(UI.vspace(12 if (offer or crashed) else 30))
 	var status := "%d icon%s in the toolbox" % [Toolbox.slots.size(), "" if Toolbox.slots.size() == 1 else "s"]
 	if NounApi.has_creds():
 		status += "  ·  API key found"
 	else:
 		status += "  ·  no API key yet (Settings)"
+	if Safe.active():
+		status += "  ·  " + Safe.describe()
 	var st := UI.label(status, 18, UI.DIM)
 	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(st)
