@@ -142,6 +142,11 @@ func _ready() -> void:
 	for w in [cf, cfps, cpre, cseam]:
 		crow.add_child(w)
 	_row(g, "Clip export", crow, "format (a centre crop; Ctrl+E shows the guide on stage) · fps · pre-roll before the clip · seam cross-dissolved for a seamless loop. " + ("ffmpeg found: mp4s are made" if ClipExport.has_ffmpeg() else "no ffmpeg found: the AVI and a script for the mp4 are left instead (brew install ffmpeg)"))
+	var bo := CheckButton.new()
+	bo.text = "beauty outlet: when the quality ladder sheds load, add glow and longer trails back"
+	bo.button_pressed = bool(Settings.get_value("beauty_outlet"))
+	bo.toggled.connect(func(on: bool): Settings.set_value("beauty_outlet", on))
+	_row(g, "Beauty outlet", bo, "live; the spectacle survives a step down (docs/RESEARCH-6.md)")
 	_row(g, "Safe mode", safe, ("ON NOW — " if Safe.active() else "") + "for a machine that misbehaves; also `--safe` on the command line (./run.sh safe). Next launch.")
 
 	# ---------------- clock

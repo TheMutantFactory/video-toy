@@ -881,6 +881,44 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL feedback routing (%s)" % st.routing_describe())
+	# the gnarl regulator: the probe runs while it is on, steps push fade the right way,
+	# it snapshots, panic turns it off; the beauty outlet adds glow and trails on a step down
+	var ok_gn := true
+	st.panic()
+	st._set_feedback(true)
+	st.fb_fade = 0.9
+	st.fb_warp = 0.2
+	st.gnarl_target = 0.2
+	st.gnarl_speed = 1.0
+	st.set_gnarl(true)
+	ok_gn = ok_gn and st.gnarl_on and st._probe.render_target_update_mode == SubViewport.UPDATE_ALWAYS and st.feedback
+	for i in 8:
+		await get_tree().process_frame
+	st._gnarl_apply(0.9)                                        # too busy for a 0.2 target
+	ok_gn = ok_gn and st.fb_fade < 0.9
+	st.gnarl_target = 0.9
+	var fade_lo: float = st.fb_fade
+	st._gnarl_apply(0.1)                                        # too tame for a 0.9 target
+	ok_gn = ok_gn and st.fb_fade > fade_lo and st.fb_warp > 0.2
+	ok_gn = ok_gn and st.routing_describe().contains("gnarl") and st.snapshot()["gnarl"]["on"] and is_equal_approx(float(st.snapshot()["gnarl"]["target"]), 0.9)
+	st.panic()
+	ok_gn = ok_gn and not st.gnarl_on and st._probe.render_target_update_mode == SubViewport.UPDATE_DISABLED
+	var beauty_keep = Settings.get_value("beauty_outlet")
+	Settings.set_value("beauty_outlet", true)
+	st._glow.set_level(0)
+	st.fb_fade = 0.9
+	st.apply_quality(2)
+	ok_gn = ok_gn and st._glow.level == 1 and st.fb_fade > 0.9 and st._quality_applied == 2
+	st.apply_quality(0)
+	ok_gn = ok_gn and st._glow.level == 0 and is_equal_approx(st.fb_fade, 0.9)
+	Settings.set_value("beauty_outlet", beauty_keep)
+	st.apply_quality(st.quality.effective())
+	st.panic()
+	if ok_gn:
+		print("PASS gnarl regulator: probe, pushes both ways, snapshot, panic; beauty outlet adds glow and trails on a step down and takes them back")
+	else:
+		fails += 1
+		printerr("FAIL gnarl (fade %.3f warp %.2f glow %d)" % [st.fb_fade, st.fb_warp, st._glow.level])
 	# lock and mutate: locked sections survive surprise and evolve; the amount sets the count
 	var ok_lk := true
 	var locks_before: Array = st.locks.duplicate()
@@ -1460,7 +1498,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox", "gnarl"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1966,6 +2004,19 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"gnarl":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				if current.all_actors().size() < 6:
+					current.demo_spawn()
+				current.gnarl_target = 0.35
+				current.set_gnarl(true)
+				current.fb_warp = 0.3
+				current.toggle_routing_panel()
+				await get_tree().create_timer(3.0).timeout
 			"twistbox":
 				menu.close()
 				if current_name != "stage":

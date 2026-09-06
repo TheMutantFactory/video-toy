@@ -23,6 +23,7 @@ const DEFAULTS := {
 	"osc_out_host": "127.0.0.1",
 	"osc_out_port": 9001,
 	"tour_seen": false,            # the first-run captions have been shown
+	"beauty_outlet": true,         # when the quality ladder sheds load, add glow and trails back
 	"audio_shape": {},             # per-band attack / decay / sustain / release / gate / smooth
 	"clock_follow_audio": false,   # the internal clock follows the tempo tracked from audio
 	"clip_format": "16:9",         # 16:9 | 9:16 | 1:1 (a centre crop of the picture)

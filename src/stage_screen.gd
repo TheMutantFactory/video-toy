@@ -211,6 +211,13 @@ const JAG_SIDES := [3, 4, 6, 8]
 var particles_flux := 0.0                  # fluxdots: re-birth rate on the source's bright pixels
 var flux_src := 0                          # FLUX_SOURCES index
 const FLUX_SOURCES := ["off", "self", "layer 2", "layer 3", "webcam"]
+var gnarl_on := false                      # the regulator holds complexity near gnarl_target
+var gnarl_target := 0.5
+var gnarl_speed := 0.5
+var gnarl_bias := 0.5                      # 0 vary warp (order) .. 1 vary cleanup (noise)
+var gnarl_value := 0.0                     # the last measured complexity
+var _probe: SubViewport                    # the composite at 96x54, read back for the regulator
+var _gnarl_prev: Image
 var fb_cleanup := 0.0                      # cellular cleanup per pass, 0 .. 1
 var fb_cleanup_rule := 0                   # CLEANUP_RULES index
 const CLEANUP_RULES := ["majority", "life", "erode"]
@@ -443,6 +450,18 @@ func _ready() -> void:
 
 	_ascii = AsciiScript.new()                   # last pass: the picture as glyphs
 	_composite.add_child(_ascii)
+
+	_probe = SubViewport.new()                     # the regulator's eye: the composite, tiny
+	_probe.size = Gnarl.PROBE
+	_probe.disable_3d = true
+	_probe.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	add_child(_probe)
+	var probe_rect := TextureRect.new()
+	probe_rect.size = Vector2(Gnarl.PROBE)
+	probe_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	probe_rect.texture = _composite.get_texture()
+	probe_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_probe.add_child(probe_rect)
 
 	_display = TextureRect.new()
 	_display.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1606,6 +1625,40 @@ func loop_mask() -> int:
 	return m
 
 
+# ---------------- the gnarl regulator ----------------
+func set_gnarl(on: bool) -> void:
+	gnarl_on = on
+	_probe.render_target_update_mode = SubViewport.UPDATE_ALWAYS if on else SubViewport.UPDATE_DISABLED
+	_gnarl_prev = null
+	if on and not feedback:
+		_set_feedback(true)                          # the regulator steers the loop; it needs one
+	_steal_note = ("gnarl on: holding complexity near %.2f" % gnarl_target) if on else "gnarl off"
+	_refresh_routing_panel()
+	_update_hud()
+
+
+func _tick_gnarl() -> void:
+	if not gnarl_on or Engine.get_process_frames() % 6 != 0 or DisplayServer.get_name() == "headless":
+		return                                       # headless has nothing to read back
+	var img: Image = _probe.get_texture().get_image()
+	if img == null or img.is_empty():
+		return
+	var m := Gnarl.measure(img, _gnarl_prev)
+	_gnarl_prev = img
+	gnarl_value = float(m["complexity"])
+	_gnarl_apply(gnarl_value)
+
+
+## One regulator step for a measured complexity (the self-test calls it directly).
+func _gnarl_apply(complexity: float) -> void:
+	var d := Gnarl.adjust(complexity, gnarl_target, gnarl_speed)
+	var out := Gnarl.apply(fb_fade, fb_warp, fb_cleanup, d, gnarl_bias)
+	fb_fade = out["fade"]
+	fb_warp = out["warp"]
+	fb_cleanup = out["cleanup"]
+	_refresh_routing_panel()
+
+
 func set_jag_mode(i: int) -> void:
 	fb_jag_mode = posmod(i, JAG_MODES.size())
 	_refresh_routing_panel()
@@ -1669,6 +1722,8 @@ func routing_describe() -> String:
 		parts.append("sat %.2f" % fb_sat)
 	if fb_cleanup > 0.001:
 		parts.append("cleanup %.2f %s" % [fb_cleanup, CLEANUP_RULES[fb_cleanup_rule]])
+	if gnarl_on:
+		parts.append("gnarl %.2f → %.2f" % [gnarl_value, gnarl_target])
 	if fb_jag > 0.001:
 		parts.append("jag %.2f %s×%d" % [fb_jag, JAG_MODES[fb_jag_mode], fb_jag_sides])
 	if fb_zones > 0.001:
@@ -1754,6 +1809,33 @@ func toggle_routing_panel() -> void:
 			grid.add_child(vl)
 			_routing_widgets[spec[0]] = sl
 			_routing_widgets[spec[0] + "_lbl"] = vl
+		var grow := HBoxContainer.new()
+		grow.add_theme_constant_override("separation", 8)
+		var gcb := CheckButton.new()
+		gcb.text = "gnarl regulator"
+		gcb.tooltip_text = "holds the picture's complexity near the target by nudging fade, warp and cleanup (Ctrl+N)"
+		gcb.toggled.connect(set_gnarl)
+		grow.add_child(gcb)
+		_routing_widgets["gnarl_on"] = gcb
+		for spec in [["gnarl_target", "target", func(v: float):
+					gnarl_target = v
+					_update_hud()],
+				["gnarl_speed", "speed", func(v: float): gnarl_speed = v],
+				["gnarl_bias", "order ↔ noise", func(v: float): gnarl_bias = v]]:
+			grow.add_child(UI.label(spec[1], 15, UI.DIM))
+			var gs := HSlider.new()
+			gs.min_value = 0.0
+			gs.max_value = 1.0
+			gs.step = 0.05
+			gs.custom_minimum_size = Vector2(110, 26)
+			gs.value_changed.connect(spec[2])
+			grow.add_child(gs)
+			_routing_widgets[spec[0]] = gs
+		var gl := UI.label("", 15, UI.ACCENT)
+		gl.custom_minimum_size.x = 150
+		grow.add_child(gl)
+		_routing_widgets["gnarl_lbl"] = gl
+		col.add_child(grow)
 		var jrow := HBoxContainer.new()
 		jrow.add_theme_constant_override("separation", 8)
 		jrow.add_child(UI.label("Trail shape:", 17))
@@ -1802,6 +1884,7 @@ func toggle_routing_panel() -> void:
 			fb_jag = 0.0
 			fb_zones = 0.0
 			particles_flux = 0.0
+			set_gnarl(false)
 			set_flux_source(0)
 			set_jag_mode(0)
 			set_cleanup_rule(0)
@@ -1833,6 +1916,11 @@ func _refresh_routing_panel() -> void:
 		_routing_widgets[k + "_lbl"].text = ("%d" % int(vals[k])) if k in ["delay", "zone_spread"] else ("%.3f" % vals[k])
 	_routing_widgets["src"].selected = fb_disp_src
 	_routing_widgets["rule"].selected = fb_cleanup_rule
+	_routing_widgets["gnarl_on"].set_pressed_no_signal(gnarl_on)
+	_routing_widgets["gnarl_target"].set_value_no_signal(gnarl_target)
+	_routing_widgets["gnarl_speed"].set_value_no_signal(gnarl_speed)
+	_routing_widgets["gnarl_bias"].set_value_no_signal(gnarl_bias)
+	_routing_widgets["gnarl_lbl"].text = ("now %.2f" % gnarl_value) if gnarl_on else ""
 	_routing_widgets["jag_mode"].selected = fb_jag_mode
 	_routing_widgets["jag_sides_btn"].text = "%d sides" % fb_jag_sides
 	_routing_widgets["flux_src"].selected = flux_src
@@ -1909,6 +1997,7 @@ func _tick_autosave(delta: float) -> void:
 func _process(_delta: float) -> void:
 	var t0 := Time.get_ticks_usec()
 	MidiOut.tick()
+	_tick_gnarl()
 	_tick_crossfade(_delta)
 	_tick_credits(_delta)
 	_tick_clock()

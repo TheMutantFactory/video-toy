@@ -229,7 +229,27 @@ func apply_quality(level: int) -> void:
 	s._fx.slit_stride = int(q["slit_stride"])
 	s._glow.set_taps(int(q["glow_taps"]))
 	s._world3d.msaa_3d = Viewport.MSAA_2X if q["msaa"] else Viewport.MSAA_DISABLED
+	_beauty_outlet(level)
 	s._update_hud()
+
+
+var _beauty := {"glow": 0, "fade": 0.0}       # what the outlet added, to take back
+
+
+## Beauty as a stability sink: when the ladder sheds geometry, give the
+## picture glow and longer trails back so the spectacle survives the step.
+func _beauty_outlet(level: int) -> void:
+	if not bool(Settings.get_value("beauty_outlet")):
+		return
+	var want_glow := 1 if level >= 2 else 0
+	var want_fade := 0.015 * level
+	var dg := want_glow - int(_beauty["glow"])
+	if dg != 0:
+		s._glow.set_level(clampi(s._glow.level + dg, 0, 2))
+	s.fb_fade = clampf(s.fb_fade + want_fade - float(_beauty["fade"]), 0.5, 0.995)
+	_beauty = {"glow": want_glow, "fade": want_fade}
+	if level > 0 and (dg != 0 or want_fade > 0.0):
+		s._steal_note += "   ·   beauty outlet: +glow, longer trails"
 
 
 func _tick_quality(delta: float) -> void:
@@ -273,6 +293,8 @@ func panic() -> void:
 	s.fb_zones = 0.0
 	s.particles_flux = 0.0
 	s.flux_src = 0
+	if s.gnarl_on:
+		s.set_gnarl(false)
 	for i in s._layers.size():
 		s._layers[i]["loop"] = true
 	s._fx.set_state(0, false, false, 0, false, 0, 0, 0)

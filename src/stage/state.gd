@@ -39,6 +39,7 @@ func snapshot() -> Dictionary:
 		"particles": {"on": s.particles_on, "flow": s.particles_flow, "attract": s.particles_attract, "flux": s.particles_flux, "flux_src": s.flux_src},
 		"rd": {"preset": s.rd_preset, "feed": s.rd_feed, "kill": s.rd_kill},
 		"physics": {"gravity": s.gravity},
+		"gnarl": {"on": s.gnarl_on, "target": s.gnarl_target, "speed": s.gnarl_speed, "bias": s.gnarl_bias},
 	}
 
 
@@ -156,6 +157,14 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 		var pon := bool(pt.get("on", s.particles_on))
 		if pon != s.particles_on:
 			s.set_particles(pon)
+	var gn: Dictionary = d.get("gnarl", {})
+	if not gn.is_empty():
+		s.gnarl_target = clampf(float(gn.get("target", s.gnarl_target)), 0.0, 1.0)
+		s.gnarl_speed = clampf(float(gn.get("speed", s.gnarl_speed)), 0.0, 1.0)
+		s.gnarl_bias = clampf(float(gn.get("bias", s.gnarl_bias)), 0.0, 1.0)
+		var gon := bool(gn.get("on", s.gnarl_on))
+		if gon != s.gnarl_on:
+			s.set_gnarl(gon)
 	var ph: Dictionary = d.get("physics", {})
 	if not ph.is_empty() and not is_equal_approx(float(ph.get("gravity", s.gravity)), s.gravity):
 		s.set_gravity(float(ph.get("gravity", s.gravity)))

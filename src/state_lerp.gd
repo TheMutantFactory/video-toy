@@ -13,6 +13,7 @@ const CONTINUOUS := {
 	"monitor": ["x", "y"],
 	"fx": ["key_threshold"],
 	"physics": ["gravity"],
+	"gnarl": ["target", "speed", "bias"],
 }
 
 

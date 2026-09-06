@@ -1122,6 +1122,22 @@ func _init() -> void:
 	var pshader: String = FileAccess.get_file_as_string("res://src/particles.gdshader")
 	_check("the particle shader can be born on a texture's bright pixels", pshader.contains("emit_from_tex") and pshader.contains("bright_spot") and pshader.contains("flux_rate"))
 
+	# the gnarl regulator's measure, push and apply are pure
+	var gn_flat := Image.create(32, 18, false, Image.FORMAT_RGBA8)
+	gn_flat.fill(Color(0.4, 0.4, 0.4, 1.0))
+	var gn_checker := Image.create(32, 18, false, Image.FORMAT_RGBA8)
+	for y in 18:
+		for x in 32:
+			gn_checker.set_pixel(x, y, Color.WHITE if (x + y) % 2 == 0 else Color.BLACK)
+	var gn_mf := Gnarl.measure(gn_flat)
+	var gn_mc := Gnarl.measure(gn_checker)
+	var gn_md := Gnarl.measure(gn_checker, gn_flat)
+	_check("gnarl: a gn_flat field measures no edges, a checkerboard saturates, a change adds to it", gn_mf["edge"] == 0.0 and gn_mf["complexity"] == 0.0 and gn_mc["edge"] == 1.0 and gn_mc["diff"] == 0.0 and gn_md["diff"] > 0.9 and gn_md["complexity"] > gn_mc["complexity"] and Gnarl.measure(null)["complexity"] == 0.0)
+	_check("gnarl: the push has the sign of the gap and scales with speed", Gnarl.adjust(0.2, 0.6, 1.0) > 0.0 and Gnarl.adjust(0.9, 0.6, 1.0) < 0.0 and Gnarl.adjust(0.9, 0.6, 0.5) == Gnarl.adjust(0.9, 0.6, 1.0) * 0.5 and Gnarl.adjust(0.6, 0.6, 1.0) == 0.0)
+	var gn_up := Gnarl.apply(0.9, 0.2, 0.5, 0.1, 0.0)
+	var gn_dn := Gnarl.apply(0.9, 0.2, 0.5, -0.1, 1.0)
+	_check("gnarl: more wants longer trails and (by bias) warp or less cleanup; clamped", gn_up["fade"] > 0.9 and gn_up["warp"] > 0.2 and gn_up["cleanup"] == 0.5 and gn_dn["fade"] < 0.9 and gn_dn["warp"] == 0.2 and gn_dn["cleanup"] > 0.5 and Gnarl.apply(0.99, 1.0, 0.0, 5.0, 0.5)["fade"] == 0.995 and Gnarl.apply(0.5, 0.0, 0.0, -5.0, 0.0)["fade"] == 0.5)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

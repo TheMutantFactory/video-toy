@@ -271,6 +271,19 @@ re-deals on the beat. All params or actions, all snapshotted, all cleared by pan
 All of it snapshots and crossfades, panic clears it, the HUD names what is on, and the delay,
 blur, hue and displacement are params with the layer switches and the source as actions.
 
+## The gnarl regulator and the beauty outlet
+
+**Ctrl+N** (the routing panel's gnarl row, an action) turns on a regulator that holds the
+picture near the edge of interestingness: a 96×54 probe of the composite is read back every
+six frames, its edge density and frame-to-frame change make a complexity score (the HUD shows
+`gnarl 0.62 → 0.50`), and the loop's fade, warp and cleanup are nudged toward the **target** at
+a **speed**, the **order ↔ noise** bias choosing whether warp or cleanup does the work. It turns
+feedback on if it has to, snapshots and crossfades, and panic switches it off.
+
+The **beauty outlet** (Settings → Show, on by default) is Rucker's "beauty as a stability
+sink": when the quality ladder sheds geometry, the picture gets a step of glow and longer trails
+back, taken away again on the way up, so a step down looks like a choice rather than a loss.
+
 ## Lock and mutate
 
 **Ctrl+L** opens the locks panel: pin **palette, verbs, feedback, fx, glow, scene, layers** or

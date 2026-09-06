@@ -36,6 +36,10 @@ func midi_params() -> Array:
 		{"id": "fb_displace", "label": "Loop displacement", "set": func(v): s.fb_displace = v},
 		{"id": "fb_cleanup", "label": "Loop cellular cleanup", "set": func(v): s.fb_cleanup = v},
 		{"id": "fb_jag", "label": "Jagged trails", "set": func(v): s.fb_jag = v},
+		{"id": "gnarl_target", "label": "Gnarl target (complexity)", "set": func(v):
+			s.gnarl_target = v
+			s._refresh_routing_panel()},
+		{"id": "gnarl_speed", "label": "Gnarl speed (homeostasis)", "set": func(v): s.gnarl_speed = v},
 		{"id": "fb_zones", "label": "Time zones", "set": func(v): s.fb_zones = v},
 		{"id": "particles_flux", "label": "Fluxdots (reborn on the bright)", "set": func(v):
 			s.particles_flux = v
@@ -204,6 +208,7 @@ func midi_actions() -> Array:
 	out.append({"id": "jag_sides", "label": "Next trail lattice (3 / 4 / 6 / 8 sides)", "do": s.cycle_jag_sides})
 	out.append({"id": "flux_source", "label": "Next fluxdot source", "do": func(): s.set_flux_source(s.flux_src + 1)})
 	out.append({"id": "cutup_redeal", "label": "Re-deal the cutup", "do": s._fx.redeal})
+	out.append({"id": "gnarl_toggle", "label": "Gnarl regulator on / off", "do": func(): s.set_gnarl(not s.gnarl_on)})
 	out.append({"id": "clip_format", "label": "Next clip format (16:9 / 9:16 / 1:1)", "do": func(): s.set_clip_format(ClipExport.next_format(s.clip_format()))})
 	out.append({"id": "render_loop", "label": "Render the loop (seamless)", "do": func(): s.get_parent().render_clip(20.0, true)})
 	out.append({"id": "clock_from_audio", "label": "Set the clock from the tracked tempo", "do": s.clock_from_audio})

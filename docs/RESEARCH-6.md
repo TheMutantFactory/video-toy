@@ -36,10 +36,11 @@ are the twist-box's missing stages, the regulator, and two philtres.
      zones are on.
    - **Fluxdots** — built: the particle shader is born on, and reborn at a rate onto, the
      bright pixels of the picture, layer 2, layer 3 or the webcam.
-2. **The Gnarl regulator**: read the composite back at 240×135 every few frames, measure edge
-   density and frame-to-frame difference, and steer fade / warp / cleanup toward a complexity
-   target (homeostasis speed, order / noise bias). The **beauty outlet** pairs with the quality
-   ladder: when it sheds load, raise glow and trails so the picture stays rich.
+2. **The Gnarl regulator** — built: a 96×54 probe of the composite read back every six frames,
+   edge density + frame difference → complexity, fade / warp / cleanup nudged toward a target at
+   a speed with an order ↔ noise bias (Ctrl+N, the routing panel, a param, an action, in the
+   snapshot). The **beauty outlet** — built: a quality step down adds glow and longer trails,
+   a step up takes them back (Settings → Show).
 3. **Two philtres**: **Poultry** — a quasicrystal tessellation as an fx pass with the toolbox
    icons as the glyph cells, pecking at neighbours on the beat (de Bruijn / Voronoi in a
    shader); **TonKnoT** — parametric torus knots as a new 3D solid, tube thickness and (p, q)
