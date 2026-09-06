@@ -185,6 +185,10 @@ var _rd_flip := 0
 var rd_preset := 0
 var rd_feed := 0.0545
 var rd_kill := 0.062
+var _videos := {}                       # slot path -> {vp, player}
+var _live_timer := 0.0
+var _cycle_timer := 0.0
+var _cycle_last_beat := 0.0
 var _syphon: Node
 var syphon_on := false
 var _play_pending := false
@@ -368,6 +372,8 @@ func _ready() -> void:
 	_refresh_fx()
 	get_window().files_dropped.connect(_on_files_dropped)
 	_build_midi()
+	_sync_videos()
+	Toolbox.changed.connect(_sync_videos)
 	var args := OS.get_cmdline_user_args()
 	var qi := args.find("--quality")
 	if qi >= 0 and qi + 1 < args.size():
@@ -1078,6 +1084,114 @@ func _input(ev: InputEvent) -> void:
 			set_attract(false)
 	if ev is InputEventJoypadButton and ev.pressed:
 		_p2_pad_button(ev.button_index)
+
+
+# ---------------- video slots ----------------
+## One looping VideoStreamPlayer in a viewport per video slot; IconMedia hands
+## the viewport texture to whoever asks for the slot's path.
+func _sync_videos() -> void:
+	var wanted := {}
+	for sl in Toolbox.slots:
+		if str(sl.get("kind", "")) == "video":
+			wanted[str(sl["svg_path"])] = true
+	for pth in _videos.keys():
+		if not wanted.has(pth):
+			IconMedia.unregister_live(pth)
+			_videos[pth]["vp"].queue_free()
+			_videos.erase(pth)
+	for pth in wanted:
+		if _videos.has(pth):
+			continue
+		var vp := SubViewport.new()
+		vp.size = Vector2i(480, 270)
+		vp.disable_3d = true
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		add_child(vp)
+		var player := VideoStreamPlayer.new()
+		player.size = Vector2(480, 270)
+		player.expand = true
+		player.loop = true
+		player.autoplay = true
+		var stream := VideoStreamTheora.new()
+		stream.file = pth
+		player.stream = stream
+		vp.add_child(player)
+		_videos[pth] = {"vp": vp, "player": player}
+		IconMedia.register_live(pth, vp.get_texture())
+	if not wanted.is_empty():
+		_hotbar.refresh()
+
+
+## Live words (clock, countdown) re-render when their text changes; cycling
+## word lists advance on the beat, or every 2 s without one.
+func _tick_words(delta: float) -> void:
+	_live_timer += delta
+	if _live_timer >= 0.5:
+		_live_timer = 0.0
+		var now := int(Time.get_unix_time_from_system())
+		for i in Toolbox.slots.size():
+			var sl: Dictionary = Toolbox.slots[i]
+			if not sl.has("live"):
+				continue
+			var text := LiveText.text_for(str(sl["live"]), int(sl.get("target", 0)), now)
+			if text == str(sl.get("shown", "")):
+				continue
+			var img := TextRaster.render(text)
+			var v := int(sl.get("version", 0)) + 1
+			var pth := "%s/%s_v%d.png" % [Toolbox.TEXT_DIR, sl["id"], v]
+			if img.save_png(ProjectSettings.globalize_path(pth)) != OK:
+				continue
+			var old := str(sl.get("svg_path", ""))
+			sl["shown"] = text
+			sl["version"] = v
+			Toolbox.set_slot_path(i, pth, v % 20 == 0)
+			if old != pth and old.begins_with(Toolbox.TEXT_DIR) and FileAccess.file_exists(old):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(old))    # the slot's previous render
+	var beat := AudioReact.active() and AudioReact.beat_env > _cycle_last_beat
+	_cycle_last_beat = AudioReact.beat_env
+	_cycle_timer += delta
+	var step := beat or (not AudioReact.active() and _cycle_timer >= 2.0)
+	if step:
+		_cycle_timer = 0.0
+		for i in Toolbox.slots.size():
+			var sl: Dictionary = Toolbox.slots[i]
+			if not sl.has("word_paths"):
+				continue
+			var paths: Array = sl["word_paths"]
+			var idx := (int(sl.get("word_index", 0)) + 1) % paths.size()
+			sl["word_index"] = idx
+			Toolbox.set_slot_path(i, str(paths[idx]))
+
+
+func advance_words() -> void:
+	_cycle_timer = 2.0
+	_tick_words(0.0)
+
+
+## Pinata: the nearest Sparkle icon under a point bursts and goes.
+func pinata_at(world_pos: Vector2, radius := 90.0) -> bool:
+	var best: Node2D = null
+	var bd := radius
+	for a in all_actors():
+		if a._dying or not Toolbox.has_verb(Toolbox.index_of(a.slot_id), "sparkle"):
+			continue
+		var d: float = (a.global_position if a.riding else a.position).distance_to(world_pos)
+		if d < bd:
+			bd = d
+			best = a
+	if best == null:
+		return false
+	best.pinata()
+	return true
+
+
+func pinata_random() -> void:
+	var c: Array = []
+	for a in all_actors():
+		if not a._dying and Toolbox.has_verb(Toolbox.index_of(a.slot_id), "sparkle"):
+			c.append(a)
+	if not c.is_empty():
+		c[randi() % c.size()].pinata()
 
 
 # ---------------- syphon ----------------
@@ -1812,6 +1926,8 @@ func midi_actions() -> Array:
 			_update_hud()},
 		{"id": "recolor", "label": "Recolor slot", "do": _recolor},
 	]
+	out.append({"id": "pinata", "label": "Pinata: burst a random Sparkle icon", "do": pinata_random})
+	out.append({"id": "next_word", "label": "Word lists: next word", "do": advance_words})
 	out.append({"id": "syphon", "label": "Syphon output on/off", "do": func(): set_syphon(not syphon_on)})
 	out.append({"id": "clock_internal", "label": "Internal clock on/off", "do": func():
 		Clock.toggle_internal()
@@ -2077,6 +2193,7 @@ func _build_hud() -> void:
 		+ "Shift+Esc    PANIC: known-good look · Shift+H blackout · Shift+F quality lock\n"
 		+ "Shift+V      screenshot + credits strip · Shift+L credits ticker · Shift+C credits roll\n"
 		+ "Shift+Z      Syphon output (picture, no HUD) · clock: ; panel or MIDI clock in\n"
+		+ "drop .svg/.ttf/.txt/.ogv   icon / font for words / word list / video slot\nclick Sparkle icon   pinata\n"
 		+ "F1-F12       recall preset · Shift+F saves · Shift+, . bank · Shift+- = prev/next preset · Shift+; fade\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
@@ -2170,6 +2287,35 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 			return
 		if ext in ["mp3", "ogg", "wav"]:
 			AudioReact.load_file(f)
+			_update_hud()
+			return
+		if ext == "svg":
+			var si := Toolbox.add_svg(f)
+			if si >= 0:
+				Ledger.record_local(Toolbox.slots[si])
+				_steal_note = "added SVG “%s” to slot %d" % [Toolbox.slots[si]["term"], si + 1]
+			_update_hud()
+			return
+		if ext in ["ttf", "otf"]:
+			_steal_note = ("font set: %s — new words use it" % f.get_file()) if TextRaster.set_font_file(f) else "could not load that font"
+			_update_hud()
+			return
+		if ext == "txt":
+			var lines := Array(FileAccess.get_file_as_string(f).split("\n"))
+			var wi := Toolbox.add_words(lines)
+			if wi >= 0:
+				Ledger.record_local(Toolbox.slots[wi])
+				_steal_note = "added words to slot %d%s" % [wi + 1, " (cycling on the beat)" if Toolbox.slots[wi].has("words") else ""]
+			else:
+				_steal_note = "could not add the word list (empty, or toolbox full)"
+			_update_hud()
+			return
+		if ext == "ogv":
+			var vi := Toolbox.add_video(f)
+			if vi >= 0:
+				Ledger.record_local(Toolbox.slots[vi])
+				_sync_videos()
+				_steal_note = "added video “%s” to slot %d" % [Toolbox.slots[vi]["term"], vi + 1]
 			_update_hud()
 			return
 
@@ -2267,6 +2413,7 @@ func _process(_delta: float) -> void:
 	_tick_crossfade(_delta)
 	_tick_credits(_delta)
 	_tick_clock()
+	_tick_words(_delta)
 	_tick_modes(_delta)
 	var t1 := Time.get_ticks_usec()
 	_tick_timeline(_delta)
@@ -2384,7 +2531,7 @@ func _gui_input(ev: InputEvent) -> void:
 					_drag_offset = _monitor.position - wp
 				elif draw_mode:
 					begin_stroke(wp)
-				else:
+				elif not pinata_at(wp):
 					spawn_at(wp)
 			else:
 				_dragging = false

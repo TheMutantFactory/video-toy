@@ -65,6 +65,8 @@ Shift+A      attract mode (automatic after 60 s idle; any input ends it)
                                       Z      webcam: off / layer behind everything / chroma backdrop
                                       S      steal a palette from the selected raster or the webcam
 drop an image on the window   →  a raster toolbox slot (Shift+drop → chroma backdrop)
+drop .svg / .ttf .otf / .txt / .ogv  →  icon slot / font for words / word list / video slot
+click a Sparkle icon          →  pinata: it bursts into confetti of itself
                                       C      clear stage
 Del          remove slot              H      hide HUD (clean capture)
 Esc / ☰      menu + attribution
@@ -200,6 +202,20 @@ timeline loop's length rounds to whole bars and playback waits for the next bar,
 scenes to BPM" ties the oscillator scenes' speed to the tempo. The HUD shows source, BPM and
 the beat in the bar.
 
+## Birthday extras
+
+- **Any SVG** dropped on Play is whitened like a Noun icon and tints with the palette.
+- **Any font**: drop a `.ttf` / `.otf` and every later word uses it.
+- **Emoji** work in words (the system emoji font; colour is kept, so they are untinted).
+- **Word lists**: drop a `.txt`; each line becomes a word slot while there is room, otherwise one
+  slot that **cycles** through the words on the beat (every 2 s without a beat source).
+- **Live words**: type `clock` for the time, or `countdown 23:59` for a countdown to the next
+  23:59 that ends in 🎉; they re-render every second.
+- **Video slots**: drop a Theora `.ogv` and it plays, looping, as an animated slot (convert with
+  `ffmpeg -i in.mp4 -c:v libtheora -q:v 7 -an out.ogv`).
+- **Pinata**: click an icon that has Sparkle on and it bursts into confetti of itself; the
+  learnable *pinata* action does it to a random one.
+
 ## Two-player
 
 A second person plays from the **numeric keypad** or a **gamepad**, with their own slot,
@@ -317,7 +333,8 @@ addons/godot-syphon         vendored Syphon GDExtension (MIT), macOS Forward+
 src/shot.gd                 screenshot + burned-in credits strip
 src/scenes.gd + scene_layer.gd + scenes/*.gdshader   scene table, crossfading layer, the shaders (common.gdshaderinc shared)
 src/feedback_mesh.gd        the warp mesh under feedback: subdivided quad + vertex-warp shader
-src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe)
+src/text_raster.gd          a word -> white-on-alpha Image via the TextServer glyph atlases (CPU, headless-safe); fonts + colour emoji
+src/live_text.gd            clock / countdown words
 src/boids.gd                flocking maths (2D and 3D) for the Flock verb
 src/attractors.gd           Lorenz, Rössler, Clifford, de Jong (pure functions)
 src/sdf.gd + morph.gdshader signed distance fields (8SSEDT) and the Morph / Outline shader

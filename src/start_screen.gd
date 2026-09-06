@@ -57,7 +57,7 @@ func _ready() -> void:
 	wrow.alignment = BoxContainer.ALIGNMENT_CENTER
 	wrow.add_theme_constant_override("separation", 8)
 	var word := LineEdit.new()
-	word.placeholder_text = "type a word…"
+	word.placeholder_text = "a word, an emoji, clock, countdown 23:59…"
 	word.custom_minimum_size = Vector2(320, 48)
 	wrow.add_child(word)
 	var add_word := func():
@@ -68,7 +68,7 @@ func _ready() -> void:
 	word.text_submitted.connect(func(_t): add_word.call())
 	wrow.add_child(UI.button("Add word", add_word, 140))
 	wrow.add_child(UI.hspace())
-	wrow.add_child(UI.label("a word becomes an icon: verbs, solids, extrusion", 18, UI.DIM))
+	wrow.add_child(UI.label("words are icons · emoji keep colour · drop .svg .ttf .txt .ogv on Play", 18, UI.DIM))
 	col.add_child(wrow)
 
 	col.add_child(UI.vspace(30))

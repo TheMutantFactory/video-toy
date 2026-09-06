@@ -16,6 +16,8 @@ const SDF_DIR := "user://icons/sdf"
 var _thumbs := {}                           # url -> ImageTexture
 var _svgs := {}                             # path -> ImageTexture
 var _sdfs := {}                             # path -> ImageTexture (distance field)
+var _live := {}                             # path -> Texture2D (video slots: the stage registers a viewport texture)
+var _placeholder: ImageTexture
 
 
 func get_thumbnail(url: String, cb: Callable) -> void:
@@ -53,8 +55,36 @@ func get_thumbnail(url: String, cb: Callable) -> void:
 		cb.call(null)
 
 
-## Icon (SVG -> white) or raster (PNG/JPG/... -> full colour, downscaled).
-func texture_for(path: String) -> ImageTexture:
+## A live texture (video slot) for a path; the stage registers these.
+func register_live(path: String, tex: Texture2D) -> void:
+	_live[path] = tex
+
+
+func unregister_live(path: String) -> void:
+	_live.erase(path)
+
+
+static func is_video(path: String) -> bool:
+	return path.get_extension().to_lower() == "ogv"
+
+
+## Forget a cached texture (a re-rendered live word).
+func invalidate(path: String) -> void:
+	_svgs.erase(path)
+	_sdfs.erase(path)
+
+
+## Icon (SVG -> white), raster (PNG/JPG/... -> full colour, downscaled), or a
+## video slot's live viewport texture (a grey card until the stage registers it).
+func texture_for(path: String) -> Texture2D:
+	if is_video(path):
+		if _live.has(path):
+			return _live[path]
+		if _placeholder == null:
+			var img := Image.create(480, 270, false, Image.FORMAT_RGBA8)
+			img.fill(Color(0.3, 0.3, 0.35, 1.0))
+			_placeholder = ImageTexture.create_from_image(img)
+		return _placeholder
 	if _svgs.has(path):
 		return _svgs[path]
 	var tex := load_raster(path, RASTER_MAX) if is_raster(path) else load_svg_white(path, SVG_SCALE)

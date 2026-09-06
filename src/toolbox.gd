@@ -11,6 +11,9 @@ signal selection_changed(index: int)
 const PATH := "user://toolbox.json"
 const RASTER_DIR := "user://raster"
 const TEXT_DIR := "user://text"
+const SVG_DIR := "user://svg"
+const VIDEO_DIR := "user://video"
+const CYCLE_MAX := 24
 const MAX_SLOTS := 9
 
 var slots: Array = []                      # Array of Dictionary
@@ -112,7 +115,9 @@ func add_raster(src_path: String) -> int:
 
 
 ## A word as a slot: rendered white-on-alpha like an icon, so it tints, gets
-## verbs, wraps solids and extrudes. Returns the slot index or -1.
+## verbs, wraps solids and extrudes. Emoji keep their colours (untinted).
+## "clock" and "countdown HH:MM" become live words the stage re-renders.
+## Returns the slot index or -1.
 func add_text(word: String) -> int:
 	word = word.strip_edges()
 	if word == "" or is_full():
@@ -121,17 +126,107 @@ func add_text(word: String) -> int:
 	var existing := index_of(id)
 	if existing >= 0:
 		return existing
-	var img := TextRaster.render(word)
+	var live := LiveText.parse(word)
+	var shown := word if live.is_empty() else LiveText.text_for(live["live"], int(live.get("target", 0)), int(Time.get_unix_time_from_system()))
+	var img := TextRaster.render(shown)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TEXT_DIR))
 	var dst := "%s/%s.png" % [TEXT_DIR, id]
 	if img.save_png(ProjectSettings.globalize_path(dst)) != OK:
 		return -1
 	var slot := {
-		"id": id, "kind": "text",
+		"id": id, "kind": "raster" if TextRaster.last_had_color else "text",
 		"term": word,
 		"svg_path": dst, "thumbnail_url": "",
 		"attribution": "“%s” — text" % word,
 		"license": "yours", "permalink": "",
+		"creator_name": "", "creator_permalink": "",
+		"verbs": [], "color_index": slots.size(),
+		"added_at": int(Time.get_unix_time_from_system()),
+	}
+	if not live.is_empty():
+		slot["live"] = live["live"]
+		slot["target"] = int(live.get("target", 0))
+		slot["version"] = 0
+	slots.append(slot)
+	selected = slots.size() - 1
+	save_to_disk()
+	changed.emit()
+	selection_changed.emit(selected)
+	return selected
+
+
+## A list of words: one slot each while there is room, otherwise a single slot
+## that cycles through them (the stage advances it on the beat).
+func add_words(lines: Array) -> int:
+	var words: Array = []
+	for l in lines:
+		var w := str(l).strip_edges()
+		if w != "":
+			words.append(w)
+	if words.is_empty() or is_full():
+		return -1
+	var free := MAX_SLOTS - slots.size()
+	if words.size() <= free:
+		var last := -1
+		for w in words:
+			last = add_text(w)
+		return last
+	words = words.slice(0, CYCLE_MAX)
+	var id := "words-%d" % absi("\n".join(words).hash())
+	var existing := index_of(id)
+	if existing >= 0:
+		return existing
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TEXT_DIR))
+	var paths: Array = []
+	for i in words.size():
+		var img := TextRaster.render(words[i])
+		var pth := "%s/%s_%d.png" % [TEXT_DIR, id, i]
+		if img.save_png(ProjectSettings.globalize_path(pth)) != OK:
+			return -1
+		paths.append(pth)
+	var slot := {
+		"id": id, "kind": "text",
+		"term": "%s… (%d words)" % [words[0], words.size()],
+		"svg_path": paths[0], "thumbnail_url": "",
+		"attribution": "word list (%d words) — text" % words.size(),
+		"license": "yours", "permalink": "",
+		"creator_name": "", "creator_permalink": "",
+		"verbs": [], "color_index": slots.size(),
+		"words": words, "word_paths": paths, "word_index": 0,
+		"added_at": int(Time.get_unix_time_from_system()),
+	}
+	slots.append(slot)
+	selected = slots.size() - 1
+	save_to_disk()
+	changed.emit()
+	selection_changed.emit(selected)
+	return selected
+
+
+## Any SVG file as an icon: copied and whitened like a Noun icon (tinted).
+func add_svg(src_path: String) -> int:
+	if is_full():
+		return -1
+	var id := "svg-%d" % absi(src_path.hash())
+	var existing := index_of(id)
+	if existing >= 0:
+		return existing
+	var bytes := FileAccess.get_file_as_bytes(src_path)
+	if bytes.is_empty():
+		return -1
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SVG_DIR))
+	var dst := "%s/%s.svg" % [SVG_DIR, id]
+	var f := FileAccess.open(dst, FileAccess.WRITE)
+	if f == null:
+		return -1
+	f.store_buffer(bytes)
+	f.close()
+	var slot := {
+		"id": id, "kind": "icon",
+		"term": src_path.get_file().get_basename(),
+		"svg_path": dst, "thumbnail_url": "",
+		"attribution": "%s — local SVG" % src_path.get_file(),
+		"license": "user-supplied", "permalink": "",
 		"creator_name": "", "creator_permalink": "",
 		"verbs": [], "color_index": slots.size(),
 		"added_at": int(Time.get_unix_time_from_system()),
@@ -144,8 +239,55 @@ func add_text(word: String) -> int:
 	return selected
 
 
+## A Theora .ogv as an animated slot; the stage plays it into a viewport.
+func add_video(src_path: String) -> int:
+	if is_full():
+		return -1
+	var id := "video-%d" % absi(src_path.hash())
+	var existing := index_of(id)
+	if existing >= 0:
+		return existing
+	var bytes := FileAccess.get_file_as_bytes(src_path)
+	if bytes.is_empty():
+		return -1
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(VIDEO_DIR))
+	var dst := "%s/%s.ogv" % [VIDEO_DIR, id]
+	var f := FileAccess.open(dst, FileAccess.WRITE)
+	if f == null:
+		return -1
+	f.store_buffer(bytes)
+	f.close()
+	var slot := {
+		"id": id, "kind": "video",
+		"term": src_path.get_file().get_basename(),
+		"svg_path": dst, "thumbnail_url": "",
+		"attribution": "%s — local video" % src_path.get_file(),
+		"license": "user-supplied", "permalink": "",
+		"creator_name": "", "creator_permalink": "",
+		"verbs": [], "color_index": slots.size(),
+		"added_at": int(Time.get_unix_time_from_system()),
+	}
+	slots.append(slot)
+	selected = slots.size() - 1
+	save_to_disk()
+	changed.emit()
+	selection_changed.emit(selected)
+	return selected
+
+
+## Point a slot at a new image (live words, cycling lists) without touching disk.
+func set_slot_path(index: int, path: String, persist := false) -> void:
+	if index < 0 or index >= slots.size():
+		return
+	slots[index]["svg_path"] = path
+	if persist:
+		save_to_disk()
+	changed.emit()
+
+
+## Untinted slots: photos, videos and colour emoji keep their own colours.
 static func is_raster_slot(slot: Dictionary) -> bool:
-	return str(slot.get("kind", "icon")) == "raster"
+	return str(slot.get("kind", "icon")) in ["raster", "video"]
 
 
 func remove(index: int) -> void:

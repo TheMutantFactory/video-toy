@@ -18,6 +18,7 @@ var menu: CanvasLayer
 
 
 var args := PackedStringArray()
+var _cleanup_birthday: Array = []
 
 
 func _ready() -> void:
@@ -506,6 +507,73 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL clock / syphon")
+	# birthday extras on the real stage: txt drop cycles, live clock re-renders, pinata bursts, video registers
+	var ok_bd := true
+	var _bd_trace: Array = []
+	var txt := ProjectSettings.globalize_path("user://_selftest_words.txt")
+	var tf := FileAccess.open(txt, FileAccess.WRITE)
+	for i in 12:
+		tf.store_line("W%d" % i)
+	tf.close()
+	var before_n := Toolbox.slots.size()
+	st._on_files_dropped(PackedStringArray([txt]))
+	var wi := Toolbox.slots.size() - 1
+	ok_bd = ok_bd and Toolbox.slots.size() == before_n + 1 and Toolbox.slots[wi].has("words")
+	_bd_trace.append("drop:%s" % ok_bd)
+	var p0: String = Toolbox.slots[wi]["svg_path"]
+	st.advance_words()
+	ok_bd = ok_bd and Toolbox.slots[wi]["svg_path"] != p0 and Toolbox.slots[wi]["word_index"] == 1
+	_bd_trace.append("cycle:%s" % ok_bd)
+	var ci2 := Toolbox.add_text("clock")
+	st._live_timer = 1.0
+	st._tick_words(0.0)
+	var live_path: String = Toolbox.slots[ci2]["svg_path"]
+	ok_bd = ok_bd and Toolbox.slots[ci2].get("version", 0) == 1 and live_path.contains("_v1") and FileAccess.file_exists(live_path)
+	_bd_trace.append("live:%s v=%s path=%s" % [ok_bd, Toolbox.slots[ci2].get("version", 0), live_path])
+	st.clear_actors()
+	if not Toolbox.has_verb(0, "sparkle"):
+		Toolbox.toggle_verb(0, "sparkle")
+	Toolbox.select(0)
+	st.spawn_at(Vector2(800, 400))
+	await get_tree().process_frame
+	var acts: Array = st.all_actors()
+	_bd_trace.append("pre: n=%d slot=%s sparkle=%s pos=%s sel=%d" % [acts.size(), acts[0].slot_id if acts.size() > 0 else "-", Toolbox.has_verb(0, "sparkle"), acts[0].position if acts.size() > 0 else Vector2.INF, Toolbox.selected])
+	var at: Vector2 = acts[0].position if acts.size() > 0 else Vector2(800, 400)
+	var hit1: bool = st.pinata_at(at + Vector2(20, 10))
+	var dying: bool = acts.size() > 0 and acts[0]._dying
+	var hit2: bool = st.pinata_at(at + Vector2(20, 10))
+	ok_bd = ok_bd and hit1 and dying and not hit2
+	_bd_trace.append("pinata:%s hit1=%s dying=%s hit2=%s" % [ok_bd, hit1, dying, hit2])
+	await get_tree().create_timer(1.5).timeout
+	ok_bd = ok_bd and st.all_actors().is_empty()
+	_bd_trace.append("gone:%s n=%d" % [ok_bd, st.all_actors().size()])
+	Toolbox.toggle_verb(0, "sparkle")
+	var vtmp := ProjectSettings.globalize_path("user://_selftest.ogv")
+	var vf2 := FileAccess.open(vtmp, FileAccess.WRITE)
+	vf2.store_string("x")
+	vf2.close()
+	var vi2 := Toolbox.add_video(vtmp)
+	st._sync_videos()
+	var vpath: String = Toolbox.slots[vi2]["svg_path"]
+	ok_bd = ok_bd and st._videos.has(vpath) and IconMedia.texture_for(vpath) is ViewportTexture
+	_bd_trace.append("video:%s" % ok_bd)
+	# clean up the slots and files this made
+	for idx in [vi2, ci2, wi]:
+		var sl: Dictionary = Toolbox.slots[idx]
+		for pth in [sl.get("svg_path", "")] + Array(sl.get("word_paths", [])):
+			if str(pth).begins_with("user://") and FileAccess.file_exists(str(pth)):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(str(pth)))
+		Ledger.remove(sl["id"])
+		Toolbox.remove(idx)
+	st._sync_videos()
+	ok_bd = ok_bd and not st._videos.has(vpath)
+	DirAccess.remove_absolute(txt)
+	DirAccess.remove_absolute(vtmp)
+	if ok_bd:
+		print("PASS birthday extras: word list cycles, live clock re-renders, pinata bursts, video slot registers and unregisters")
+	else:
+		fails += 1
+		printerr("FAIL birthday extras: ", _bd_trace)
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -575,7 +643,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday"]
 	for name in shots:
 		if only != "" and name != only and name != "stage":
 			continue
@@ -990,6 +1058,54 @@ func _capture_all(dir: String) -> void:
 					Toolbox.select(2)
 					current.spawn_at(Vector2(400 + i * 380, 820))
 				await get_tree().create_timer(0.8).timeout     # mid-morph
+			"birthday":
+				# A cycling word list, a cake emoji, a live clock, a dropped SVG,
+				# and a pinata bursting mid-shot.
+				current.clear_actors()
+				for i in Toolbox.slots.size():
+					for v in ["morph", "outline", "spin"]:
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+				var ctxt := ProjectSettings.globalize_path("user://_capture_words.txt")
+				var cf := FileAccess.open(ctxt, FileAccess.WRITE)
+				for w in ["HAPPY", "BIRTHDAY", "DANIEL", "MAKE", "NOISE", "KNOBCON", "PARTY", "TIME", "GO", "GO", "GO", "!!!"]:
+					cf.store_line(w)
+				cf.close()
+				current._on_files_dropped(PackedStringArray([ctxt]))
+				var w_i := Toolbox.slots.size() - 1
+				var cake_i := Toolbox.add_text("🎂")
+				var clock_i := Toolbox.add_text("clock")
+				var csvg := ProjectSettings.globalize_path("user://_capture_drop.svg")
+				DirAccess.copy_absolute(ProjectSettings.globalize_path("res://icon.svg"), csvg)
+				var svg_i := Toolbox.add_svg(csvg)
+				for idx in [w_i, cake_i, clock_i, svg_i]:
+					if not Toolbox.has_verb(idx, "bounce"):
+						Toolbox.toggle_verb(idx, "bounce")
+				for k in 3:
+					Toolbox.select(w_i)
+					current.spawn_at(Vector2(randf_range(400, 1500), randf_range(200, 900)))
+					Toolbox.select(cake_i)
+					current.spawn_at(Vector2(randf_range(400, 1500), randf_range(200, 900)))
+				Toolbox.select(clock_i)
+				current.spawn_at(Vector2(960, 540))
+				Toolbox.select(svg_i)
+				current.spawn_at(Vector2(1300, 300))
+				if not Toolbox.has_verb(0, "sparkle"):
+					Toolbox.toggle_verb(0, "sparkle")
+				Toolbox.select(0)
+				current.spawn_at(Vector2(500, 750))
+				await get_tree().create_timer(1.2).timeout
+				current.pinata_at(Vector2(500, 750))
+				await get_tree().create_timer(0.35).timeout
+				for idx in [svg_i, clock_i, cake_i, w_i]:
+					var sl: Dictionary = Toolbox.slots[idx]
+					for pth in [sl.get("svg_path", "")] + Array(sl.get("word_paths", [])):
+						if str(pth).begins_with("user://") and FileAccess.file_exists(str(pth)):
+							DirAccess.remove_absolute(ProjectSettings.globalize_path(str(pth)))
+					Ledger.remove(sl["id"])
+				DirAccess.remove_absolute(ctxt)
+				DirAccess.remove_absolute(csvg)
+				_cleanup_birthday = [svg_i, clock_i, cake_i, w_i]
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout
@@ -1017,6 +1133,11 @@ func _capture_all(dir: String) -> void:
 		img.save_png(dir.path_join(name + ".png"))
 		print("captured ", name)
 	AudioReact.set_source("off")
+	_cleanup_birthday.sort()
+	_cleanup_birthday.reverse()
+	for idx in _cleanup_birthday:
+		if idx < Toolbox.slots.size():
+			Toolbox.remove(idx)
 	var cap_slot := Toolbox.index_of("raster-%d" % absi(ProjectSettings.globalize_path("user://_capture_photo.png").hash()))
 	if cap_slot >= 0:
 		var cap_id: String = Toolbox.slots[cap_slot]["id"]

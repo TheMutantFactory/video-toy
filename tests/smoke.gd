@@ -673,6 +673,64 @@ func _init() -> void:
 	_check("osc action ignores a push button's release", got3["action"] == ["spawn"])
 	im.free()
 
+	# birthday extras: live text, emoji colour, svg / word-list / video slots, video placeholder
+	var now_unix := 1_700_000_000
+	var cd := LiveText.parse("countdown 23:59", now_unix)
+	var tgt := int(cd.get("target", 0))
+	_check("countdown parses to the next 23:59", cd.get("live") == "countdown" and tgt > now_unix and tgt - now_unix <= 86400
+		and Time.get_datetime_dict_from_unix_time(tgt)["hour"] == 23 and Time.get_datetime_dict_from_unix_time(tgt)["minute"] == 59)
+	_check("countdown text and clock text", LiveText.text_for("countdown", now_unix + 3725, now_unix) == "1:02:05" and LiveText.text_for("countdown", now_unix + 65, now_unix) == "1:05"
+		and LiveText.text_for("countdown", now_unix, now_unix + 5) == "🎉" and LiveText.parse("clock").get("live") == "clock" and LiveText.parse("hello").is_empty()
+		and LiveText.text_for("clock", 0, now_unix).length() == 8)
+	var em := TextRaster.render("🎂", 96)
+	_check("emoji renders in colour from the system emoji font", TextRaster.last_had_color and TextRaster.opaque_count(em) > 500)
+	var plain := TextRaster.render("Cake", 96)
+	_check("plain words stay white", not TextRaster.last_had_color and TextRaster.opaque_count(plain) > 100)
+	var xb = load("res://src/toolbox.gd").new()
+	xb.path = "user://_smoke_toolbox4.json"
+	xb.load_from_disk()
+	xb.clear()
+	var svg_src := ProjectSettings.globalize_path("user://_smoke_drop.svg")
+	var sf := FileAccess.open(svg_src, FileAccess.WRITE)
+	sf.store_string('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="8" fill="#000"/></svg>')
+	sf.close()
+	var si: int = xb.add_svg(svg_src)
+	_check("svg drop becomes a tinted icon slot copied into user://svg", si == 0 and xb.slots[0]["kind"] == "icon" and not xb.is_raster_slot(xb.slots[0]) and xb.slots[0]["svg_path"].begins_with("user://svg/") and FileAccess.file_exists(xb.slots[0]["svg_path"]))
+	var few: int = xb.add_words(["ONE", "TWO"])
+	_check("a short word list becomes one slot per word", few == 2 and xb.slots.size() == 3 and xb.slots[1]["term"] == "ONE")
+	var many: Array = []
+	for i in 12:
+		many.append("WORD%d" % i)
+	var ci: int = xb.add_words(many)
+	_check("a long word list becomes one cycling slot with pre-rendered images", ci == 3 and xb.slots[3].has("words") and xb.slots[3]["word_paths"].size() == 12 and FileAccess.file_exists(xb.slots[3]["word_paths"][11]))
+	xb.set_slot_path(3, xb.slots[3]["word_paths"][5])
+	_check("set_slot_path swaps the image", xb.slots[3]["svg_path"] == xb.slots[3]["word_paths"][5])
+	var cake: int = xb.add_text("🎂")
+	_check("an emoji word is an untinted slot", cake == 4 and xb.is_raster_slot(xb.slots[4]))
+	var live_i: int = xb.add_text("clock")
+	_check("clock is a live text slot", live_i == 5 and xb.slots[5].get("live") == "clock")
+	var vsrc := ProjectSettings.globalize_path("user://_smoke_drop.ogv")
+	var vf := FileAccess.open(vsrc, FileAccess.WRITE)
+	vf.store_string("not really theora")
+	vf.close()
+	var vi: int = xb.add_video(vsrc)
+	_check("video drop becomes an untinted video slot in user://video", vi == 6 and xb.slots[6]["kind"] == "video" and xb.is_raster_slot(xb.slots[6]) and xb.slots[6]["svg_path"].ends_with(".ogv"))
+	var media = load("res://src/icon_media.gd").new()
+	var ph = media.texture_for(xb.slots[6]["svg_path"])
+	var fake := ImageTexture.create_from_image(Image.create(4, 4, false, Image.FORMAT_RGBA8))
+	media.register_live(xb.slots[6]["svg_path"], fake)
+	_check("video slots get a placeholder until a live texture is registered", ph != null and ph.get_width() == 480 and media.texture_for(xb.slots[6]["svg_path"]) == fake and media.is_video("a.OGV"))
+	media.free()
+	for sl in xb.slots:
+		for pth in [sl.get("svg_path", "")] + Array(sl.get("word_paths", [])):
+			if str(pth).begins_with("user://") and FileAccess.file_exists(str(pth)):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(str(pth)))
+	xb.clear()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(xb.path))
+	DirAccess.remove_absolute(svg_src)
+	DirAccess.remove_absolute(vsrc)
+	xb.free()
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

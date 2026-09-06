@@ -21,6 +21,8 @@ var _map_from := Vector2.ZERO
 var _map_t := 1.0
 var _att_centre := Vector2.ZERO
 var _tex_orig: Texture2D                     # the plain icon texture
+var _tex_path := ""                          # which slot image the sprite shows
+var _dying := false
 var _sdf_mat: ShaderMaterial                 # set while morph / outline are on
 var _sdf_mult := 1.0                         # sprite scale factor when showing the SDF texture
 var _morph_target := ""                      # slot id being morphed to
@@ -60,6 +62,7 @@ func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
 	_sprite = Sprite2D.new()
 	_sprite.texture = IconMedia.texture_for(str(slot.get("svg_path", "")))
 	_tex_orig = _sprite.texture
+	_tex_path = str(slot.get("svg_path", ""))
 	_sprite.scale = Vector2.ONE * base_scale
 	_sprite.modulate = _base_color
 	add_child(_sprite)
@@ -117,9 +120,10 @@ func _verbs() -> Array:
 
 func _process(delta: float) -> void:
 	var verbs := _verbs()
-	if not is_inside_tree():
+	if not is_inside_tree() or _dying:
 		return
 	t += delta
+	_follow_slot_image()
 
 	position -= _orbit_off                     # orbit rides on top of the base motion
 	_orbit_off = Vector2.ZERO
@@ -237,6 +241,36 @@ func _process(delta: float) -> void:
 	if verbs.has("sparkle") and AudioReact.active() and AudioReact.beat_env > _last_beat:
 		_burst.restart()
 	_last_beat = AudioReact.beat_env
+
+
+## Live words and cycling lists change the slot's image; pick it up.
+func _follow_slot_image() -> void:
+	var i := Toolbox.index_of(slot_id)
+	if i < 0:
+		return
+	var pth := str(Toolbox.slots[i].get("svg_path", ""))
+	if pth == _tex_path:
+		return
+	_tex_path = pth
+	var tex := IconMedia.texture_for(pth)
+	if tex:
+		_tex_orig = tex
+		if _sdf_mat == null:
+			_sprite.texture = tex
+		for p in [_particles, _burst]:
+			p.texture = tex
+
+
+## Pinata: burst into confetti of yourself and go.
+func pinata() -> void:
+	if _dying:
+		return
+	_dying = true
+	_burst.amount = 60
+	_burst.restart()
+	_sprite.visible = false
+	_particles.emitting = false
+	get_tree().create_timer(1.3).timeout.connect(queue_free)
 
 
 # ---------------- morph / outline (signed distance fields) ----------------

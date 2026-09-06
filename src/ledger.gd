@@ -46,7 +46,8 @@ func record(meta: Dictionary) -> void:
 ## A local image: kept in the ledger so the attribution list is complete.
 func record_local(slot: Dictionary) -> void:
 	record({"id": slot.get("id", ""), "term": slot.get("term", ""), "attribution": slot.get("attribution", ""),
-		"license": slot.get("license", "user-supplied"), "source": "text" if slot.get("kind") == "text" else "local file",
+		"license": slot.get("license", "user-supplied"),
+		"source": {"text": "text", "video": "local video", "icon": "local SVG"}.get(str(slot.get("kind", "")), "local file"),
 		"creator": {"name": "you", "permalink": ""}})
 
 
