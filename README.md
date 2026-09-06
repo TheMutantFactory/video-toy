@@ -335,6 +335,8 @@ src/stage/modes.gd          evolve and attract
 src/stage/players.gd        player 2
 src/stage/credits.gd        credits ticker, roll, burned-in screenshots
 src/stage/world3d.gd        3D solids, formations, camera
+src/stage/layers.gd        three actor layers, blend / opacity compositing, draw mode strokes
+src/stage/input.gd          mouse (spawn, grab, drag, strokes) and the keyboard as a keycode -> [plain, Shift] table
 src/glow.gd + glow.gdshader bloom pass before fx
 src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma key, quantise, dither
 src/presets.gd              eight banks x twelve stage snapshots, user://presets.json
@@ -427,8 +429,9 @@ pixel-diff references stay local (`./run.sh check`); they need a GPU and a windo
 
 ## Reference captures
 
-`tests/reference/` holds PNGs of six deterministic shots (four screens and two seeded stage
-shots with pixelate + quantise, one with the CRT). `./run.sh check` re-captures them and
+`tests/reference/` holds PNGs of nine deterministic shots (five screens, the control panel and
+the help overlay over an empty stage, and two seeded stage shots with pixelate + quantise, one
+with the CRT). `./run.sh check` re-captures them and
 compares each at 240×135 — mean difference and worst 8×8 block — so a HUD digit passes and a
 broken shader fails; `./run.sh reference` re-records them after an intentional change.
 

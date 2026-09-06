@@ -633,6 +633,44 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# the key table: a few keys through the real dispatcher (plain, Shift, Ctrl, digits)
+	var ok_keys := true
+	var send := func(code: int, shift := false, ctrl := false):
+		var kev := InputEventKey.new()
+		kev.pressed = true
+		kev.keycode = code
+		kev.shift_pressed = shift
+		kev.ctrl_pressed = ctrl
+		st._unhandled_key_input(kev)
+	var fb0: bool = st.feedback
+	send.call(KEY_F)
+	ok_keys = ok_keys and st.feedback != fb0
+	send.call(KEY_F)
+	ok_keys = ok_keys and st.feedback == fb0
+	var g0: float = st.gravity
+	send.call(KEY_G, false, true)
+	ok_keys = ok_keys and st.gravity != g0
+	send.call(KEY_G, false, true)
+	ok_keys = ok_keys and st.gravity == g0
+	st.set_active_layer(1)
+	var op0: float = st._layers[1]["opacity"]
+	send.call(KEY_BRACKETLEFT, true)
+	ok_keys = ok_keys and st._layers[1]["opacity"] < op0
+	st.set_layer_opacity(op0)
+	st.set_active_layer(0)
+	send.call(KEY_3)
+	ok_keys = ok_keys and Toolbox.selected == 2
+	Toolbox.select(0)
+	var hm0: int = st.hud_mode
+	send.call(KEY_H)
+	ok_keys = ok_keys and st.hud_mode == (hm0 + 1) % 3
+	st.set_hud_mode(hm0)
+	ok_keys = ok_keys and st._m_input.table_keys().size() >= 40 and st._m_input.table_keys().has(KEY_TAB) and st._m_input.table_keys().has(KEY_H)
+	if ok_keys:
+		print("PASS key table dispatches plain, Shift and Ctrl keys and digits")
+	else:
+		fails += 1
+		printerr("FAIL key table")
 	# help overlay (tabs, search, Esc), HUD modes, settings-backed knobs, live OSC re-bind
 	var ok_help := true
 	st.open_help()
@@ -890,7 +928,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1396,6 +1434,29 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"ref_panel", "ref_help":
+				# Deterministic: an empty stage, HUD hidden, with the control panel
+				# (a throwaway binding file, one learned CC) or the help overlay.
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()                               # every effect off, whatever ran before
+				current.clear_actors()
+				current.p2_sleep()
+				current.set_hud_mode(2)
+				current._help.close()
+				if current._midi_panel.visible:
+					current.toggle_midi_panel()
+				if name == "ref_panel":
+					MidiMap.path = "user://_capture_midi.json"
+					MidiMap.bindings = {}
+					MidiMap.arm("fb_zoom")
+					MidiMap.feed(_cc(1, 21, 10))
+					current.toggle_midi_panel()
+				else:
+					current.open_help()
+				await get_tree().create_timer(0.5).timeout
 			"ref_stage", "ref_crt":
 				# Deterministic reference shots for tests/diff.gd: seeded RNG, fixed
 				# positions, no motion verbs, no feedback, HUD hidden.

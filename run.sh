@@ -84,12 +84,12 @@ case "${1:-play}" in
            echo "$out" ;;
   check)   # capture the reference shots, then compare them with tests/reference
            audio_override; mkdir -p out
-           "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,ref_stage,ref_crt >/dev/null 2>&1
+           "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,search,ref_stage,ref_crt,ref_panel,ref_help >/dev/null 2>&1
            exec "$G" --headless --path . -s tests/diff.gd ;;
   reference) # (re)record the reference shots from the current build
            audio_override; mkdir -p out tests/reference
-           "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,ref_stage,ref_crt >/dev/null 2>&1
-           for f in start settings menu attribution ref_stage ref_crt; do
+           "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,search,ref_stage,ref_crt,ref_panel,ref_help >/dev/null 2>&1
+           for f in start settings menu attribution search ref_stage ref_crt ref_panel ref_help; do
              cp "out/$f.png" "tests/reference/$f.png"
              sips -z 540 960 "tests/reference/$f.png" --out "tests/reference/$f.png" >/dev/null 2>&1 || true   # half size keeps the repo small; the diff compares at 240x135
            done

@@ -40,6 +40,8 @@ const StageCreditsScript = preload("res://src/stage/credits.gd")
 const StageMediaScript = preload("res://src/stage/media.gd")
 const StageFxrigScript = preload("res://src/stage/fxrig.gd")
 const StageWorld3dScript = preload("res://src/stage/world3d.gd")
+const StageLayersScript = preload("res://src/stage/layers.gd")
+const StageInputScript = preload("res://src/stage/input.gd")
 const ActorScript = preload("res://src/actor.gd")
 const FxScript = preload("res://src/fx.gd")
 const MonitorScript = preload("res://src/monitor.gd")
@@ -131,6 +133,8 @@ var _credits
 var _media
 var _fxrig
 var _m_world3d
+var _m_layers                              # src/stage/layers.gd
+var _m_input                               # src/stage/input.gd
 var palette_index := 0
 var feedback := false
 var fb_zoom := 1.04
@@ -270,6 +274,8 @@ var _fx
 
 func _ready() -> void:
 	# the stage is the coordinator; each module holds one concern and reaches back through `s`
+	_m_layers = StageLayersScript.new(self)
+	_m_input = StageInputScript.new(self)
 	_modes = StageModesScript.new(self)
 	_state = StageStateScript.new(self)
 	_controls = StageControlsScript.new(self)
@@ -434,157 +440,64 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Sounds.detach()
+	_m_input.teardown()
 	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
 		get_window().files_dropped.disconnect(_on_files_dropped)
 	_controls.teardown()
 	_fxrig.teardown()
 
 
-# ---------------- layers ----------------
+# ---------------- layers + draw mode (src/stage/layers.gd) ----------------
 func _build_layers() -> void:
-	var rides0 := Node2D.new()
-	_world.add_child(rides0)
-	_layers = [{"vp": null, "actors": _actors, "rides": rides0, "blend": 0, "opacity": 1.0}]
-	for i in range(1, LAYER_COUNT):
-		var vp := SubViewport.new()
-		vp.size = WORLD
-		vp.transparent_bg = true
-		vp.disable_3d = true
-		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-		add_child(vp)
-		var actors := Node2D.new()
-		vp.add_child(actors)
-		var rides := Node2D.new()
-		vp.add_child(rides)
-		_layers.append({"vp": vp, "actors": actors, "rides": rides, "blend": 1 if i == 1 else 0, "opacity": 1.0})
-	# one full-screen pass composites layers 2 and 3 over the world, into
-	# _worldmix - which is what the screen, the feedback and the monitor see
-	_worldmix = SubViewport.new()
-	_worldmix.size = WORLD
-	_worldmix.transparent_bg = true
-	_worldmix.disable_3d = true
-	_worldmix.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	add_child(_worldmix)
-	_layer_mix = ColorRect.new()
-	_layer_mix.size = Vector2(WORLD)
-	_layer_mix.color = Color.WHITE
-	_layer_mix.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sh := Shader.new()
-	sh.code = BLEND_SHADER
-	var mat := ShaderMaterial.new()
-	mat.shader = sh
-	mat.set_shader_parameter("world_tex", _world.get_texture())
-	mat.set_shader_parameter("layer1", _layers[1]["vp"].get_texture())
-	mat.set_shader_parameter("layer2", _layers[2]["vp"].get_texture())
-	_layer_mix.material = mat
-	_worldmix.add_child(_layer_mix)
-	_stroke_line = Line2D.new()
-	_stroke_line.width = 4.0
-	_stroke_line.z_index = 2
-	_world.add_child(_stroke_line)
-	_apply_layers()
+	_m_layers.build()
 
 
 func _apply_layers() -> void:
-	var m: ShaderMaterial = _layer_mix.material
-	for i in [1, 2]:
-		m.set_shader_parameter("mode%d" % i, int(_layers[i]["blend"]))
-		m.set_shader_parameter("opacity%d" % i, float(_layers[i]["opacity"]))
+	_m_layers.apply()
 
 
 func layer_actors() -> Node2D:
-	return _layers[active_layer]["actors"]
+	return _m_layers.layer_actors()
 
 
 func all_actors() -> Array:
-	var out: Array = []
-	for l in _layers:
-		out.append_array(l["actors"].get_children())
-		for r in l["rides"].get_children():
-			out.append_array(r.riders())
-	return out
+	return _m_layers.all_actors()
 
 
 func all_rides() -> Array:
-	var out: Array = []
-	for l in _layers:
-		out.append_array(l["rides"].get_children())
-	return out
+	return _m_layers.all_rides()
 
 
 func set_active_layer(i: int) -> void:
-	active_layer = posmod(i, LAYER_COUNT)
-	_update_hud()
+	_m_layers.set_active_layer(i)
 
 
 func cycle_blend() -> void:
-	var l: Dictionary = _layers[active_layer]
-	if l["vp"] == null:
-		_steal_note = "layer 1 is the base; blend modes are for layers 2 and 3"
-	else:
-		l["blend"] = (int(l["blend"]) + 1) % BLENDS.size()
-		_apply_layers()
-	_update_hud()
+	_m_layers.cycle_blend()
 
 
 func set_layer_opacity(v: float) -> void:
-	_layers[active_layer]["opacity"] = clampf(v, 0.0, 1.0)
-	_apply_layers()
-	_update_hud()
+	_m_layers.set_layer_opacity(v)
 
 
 func clear_actors() -> void:
-	for a in all_actors():
-		a.queue_free()
-	for r in all_rides():
-		r.queue_free()
+	_m_layers.clear_actors()
 
 
 func layer_describe() -> String:
-	var l: Dictionary = _layers[active_layer]
-	if l["vp"] == null:
-		return "1/%d base" % LAYER_COUNT
-	return "%d/%d %s %d%%" % [active_layer + 1, LAYER_COUNT, BLENDS[l["blend"]], roundi(float(l["opacity"]) * 100.0)]
+	return _m_layers.describe()
 
 
-# ---------------- draw mode ----------------
 func begin_stroke(world_pos: Vector2) -> void:
-	_stroke = PackedVector2Array([world_pos])
-	_stroke_start = world_pos
-	_stroke_line.default_color = Color(Palettes.color(palette_index, 0), 0.8)
-	_stroke_line.points = _stroke
+	_m_layers.begin_stroke(world_pos)
 
 
 func extend_stroke(world_pos: Vector2) -> void:
-	if _stroke.is_empty():
-		return
-	if _stroke[_stroke.size() - 1].distance_to(world_pos) >= 6.0:
-		_stroke.append(world_pos)
-		_stroke_line.points = _stroke
+	_m_layers.extend_stroke(world_pos)
 
 
-## Returns the number of riders made (0 = the stroke was just a click).
 func end_stroke() -> int:
-	var pts := _stroke
-	_stroke = PackedVector2Array()
-	_stroke_line.points = PackedVector2Array()
-	if pts.size() < 2 or RidePathScript.length_of(pts) < 60.0:
-		spawn_at(_stroke_start)
-		return 0
-	var slot := Toolbox.current()
-	if slot.is_empty():
-		return 0
-	var ride := Node2D.new()
-	ride.set_script(RidePathScript)
-	_layers[active_layer]["rides"].add_child(ride)
-	var n: int = ride.setup(pts, slot, Palettes.color(palette_index, 0), func(pos: Vector2) -> Node2D:
-		var a := Node2D.new()
-		a.set_script(ActorScript)
-		a.setup(slot, pos, palette_index, Rect2(Vector2.ZERO, Vector2(WORLD)))
-		return a)
-	_steal_note = "%d riders on a %d px path" % [n, RidePathScript.length_of(pts)]
-	_update_hud()
-	return n
+	return _m_layers.end_stroke()
 
 
 # ---------------- particle field ----------------
@@ -1379,12 +1292,7 @@ func _process(_delta: float) -> void:
 
 # ---------------- spawning ----------------
 func _world_pos(local: Vector2) -> Vector2:
-	# Map the on-screen rect (keep-aspect centred) back to world pixels.
-	var rect := _display.get_rect()
-	var scale := minf(rect.size.x / WORLD.x, rect.size.y / WORLD.y)
-	var drawn := Vector2(WORLD) * scale
-	var origin := rect.position + (rect.size - drawn) * 0.5
-	return (local - origin) / scale
+	return _m_input.world_pos(local)
 
 
 func spawn_at(world_pos: Vector2) -> void:
@@ -1412,18 +1320,8 @@ func demo_spawn() -> void:
 		spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
 
 
-## The physics icon under the cursor, for grabbing.
 func _physics_actor_at(world_pos: Vector2) -> Node2D:
-	var best: Node2D = null
-	var best_d := 1e9
-	for a in all_actors():
-		if a.body == null:
-			continue
-		var d: float = a.position.distance_to(world_pos)
-		if d < a.hit_radius() and d < best_d:
-			best_d = d
-			best = a
-	return best
+	return _m_input.physics_actor_at(world_pos)
 
 
 func set_gravity(g: float) -> void:
@@ -1442,300 +1340,13 @@ func play_slot_sound() -> bool:
 
 
 func _remove_nearest(world_pos: Vector2) -> void:
-	for r in all_rides():                          # a stroke under the cursor goes first
-		if r.near(world_pos):
-			r.queue_free()
-			return
-	var best: Node2D = null
-	var best_d := 1e9
-	for a in all_actors():
-		var d: float = a.global_position.distance_to(world_pos) if a.riding else a.position.distance_to(world_pos)
-		if d < best_d:
-			best_d = d
-			best = a
-	for sol in _solids.get_children():
-		var d: float = _camera.unproject_position(sol.position).distance_to(world_pos)
-		if d < best_d:
-			best_d = d
-			best = sol
-	if best and best_d < 160.0:
-		best.queue_free()
-	else:
-		for a in all_actors():                        # nothing near: scatter the flocks
-			a.scatter_from = world_pos
-		scatter_particles()
+	_m_input.remove_nearest(world_pos)
 
 
+## Mouse and keyboard live in src/stage/input.gd (the keyboard is a table).
 func _gui_input(ev: InputEvent) -> void:
-	if ev is InputEventMouseButton:
-		var wp := _world_pos(ev.position)
-		if ev.button_index == MOUSE_BUTTON_LEFT:
-			if ev.pressed:
-				var held := _physics_actor_at(wp)
-				if held:
-					_grab = held
-					_grab_prev = wp
-					_grab_vel = Vector2.ZERO
-					_grab_ms = Time.get_ticks_msec()
-					held.grab(true)
-				elif _monitor.visible and _monitor.contains(wp):
-					_dragging = true
-					_drag_offset = _monitor.position - wp
-				elif draw_mode:
-					begin_stroke(wp)
-				elif not pinata_at(wp):
-					spawn_at(wp)
-			else:
-				if _grab:
-					if is_instance_valid(_grab):
-						_grab.release(_grab_vel)
-					_grab = null
-				_dragging = false
-				if not _stroke.is_empty():
-					end_stroke()
-		elif ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
-			_remove_nearest(wp)
-	elif ev is InputEventMouseMotion and _grab:
-		if not is_instance_valid(_grab):
-			_grab = null
-			return
-		var wp := _world_pos(ev.position)
-		var now := Time.get_ticks_msec()
-		var dt := maxf(0.004, (now - _grab_ms) / 1000.0)
-		_grab_vel = _grab_vel.lerp((wp - _grab_prev) / dt, 0.5)
-		_grab_prev = wp
-		_grab_ms = now
-		_grab.grab_to(wp)
-	elif ev is InputEventMouseMotion and _dragging:
-		_monitor.position = _world_pos(ev.position) + _drag_offset
-	elif ev is InputEventMouseMotion and not _stroke.is_empty():
-		extend_stroke(_world_pos(ev.position))
+	_m_input.mouse(ev)
 
 
 func _unhandled_key_input(ev: InputEvent) -> void:
-	if not (ev is InputEventKey and ev.pressed):
-		return
-	var k: int = ev.keycode
-	if _p2_key(k):
-		return
-	if k == KEY_ESCAPE and not ev.shift_pressed and _help.visible:
-		_help.close()
-		get_viewport().set_input_as_handled()
-		return
-	if (k == KEY_SLASH and ev.shift_pressed) or k == KEY_QUESTION:
-		_help.toggle()
-		get_viewport().set_input_as_handled()
-		return
-	if k >= KEY_F1 and k <= KEY_F12:
-		var n := k - KEY_F1 + 1
-		if ev.shift_pressed:
-			save_preset(n)
-		else:
-			recall_preset(n)
-		return
-	if k == KEY_2 and ev.shift_pressed:
-		p2_sleep()
-		return
-	if k == KEY_ESCAPE and ev.shift_pressed:
-		panic()
-		return
-	if k >= KEY_1 and k <= KEY_9:
-		Toolbox.select(k - KEY_1)
-		return
-	match k:
-		KEY_TAB:
-			step_scene(-1 if ev.shift_pressed else 1)
-			get_viewport().set_input_as_handled()
-			return
-		KEY_QUOTELEFT:
-			set_scene("")
-			return
-		KEY_APOSTROPHE:
-			_ascii.cycle()
-			_steal_note = "ASCII " + _ascii.describe()
-			_update_hud()
-			return
-		KEY_UP:
-			if ev.shift_pressed: cam_dolly = maxf(3.0, cam_dolly - 0.5)
-			else: fb_drift.y -= 1.0
-		KEY_DOWN:
-			if ev.shift_pressed: cam_dolly = minf(14.0, cam_dolly + 0.5)
-			else: fb_drift.y += 1.0
-		KEY_LEFT:
-			if ev.shift_pressed: cam_orbit = clampf(cam_orbit - 0.1, -1.5, 1.5)
-			else: fb_drift.x -= 1.0
-		KEY_RIGHT:
-			if ev.shift_pressed: cam_orbit = clampf(cam_orbit + 0.1, -1.5, 1.5)
-			else: fb_drift.x += 1.0
-		KEY_PAGEUP:
-			if ev.shift_pressed: cam_roll += 0.1
-			else: fb_warp = minf(1.0, fb_warp + 0.05)
-		KEY_PAGEDOWN:
-			if ev.shift_pressed: cam_roll -= 0.1
-			else: fb_warp = maxf(0.0, fb_warp - 0.05)
-		KEY_HOME:
-			if ev.shift_pressed:
-				reset_camera()
-			else:
-				fb_warp = 0.0
-				fb_drift = Vector2.ZERO
-				fb_stretch = Vector2.ONE
-	if ev.ctrl_pressed and k == KEY_G:
-		set_gravity(0.0 if gravity > 0.0 else 1.0)
-		return
-	if ev.ctrl_pressed and k == KEY_S:
-		play_slot_sound()
-		return
-	var verb := Verbs.by_key(k, ev.shift_pressed, ev.ctrl_pressed)
-	if verb != "" and not Toolbox.current().is_empty():
-		Toolbox.toggle_verb(Toolbox.selected, verb)
-		return
-	match k:
-		KEY_SPACE:
-			if ev.shift_pressed:
-				spawn_formation()
-			else:
-				spawn_at(Vector2(randf_range(100, WORLD.x - 100), randf_range(100, WORLD.y - 100)))
-		KEY_X:
-			if ev.shift_pressed:
-				cycle_formation()
-			else:
-				_recolor()
-		KEY_DELETE, KEY_BACKSPACE: Toolbox.remove(Toolbox.selected)
-		KEY_F:
-			if ev.shift_pressed:
-				cycle_quality_lock()
-			else:
-				_set_feedback(not feedback)
-		KEY_BRACKETLEFT:
-			if ev.shift_pressed: set_layer_opacity(_layers[active_layer]["opacity"] - 0.1)
-			else: fb_zoom = maxf(0.90, fb_zoom - 0.01)
-		KEY_BRACKETRIGHT:
-			if ev.shift_pressed: set_layer_opacity(_layers[active_layer]["opacity"] + 0.1)
-			else: fb_zoom = minf(1.20, fb_zoom + 0.01)
-		KEY_COMMA:
-			if ev.shift_pressed: set_bank(bank - 1)
-			else: fb_rot -= 0.01
-		KEY_PERIOD:
-			if ev.shift_pressed: set_bank(bank + 1)
-			else: fb_rot += 0.01
-		KEY_B:
-			if ev.shift_pressed:
-				cycle_shape()
-			else:
-				spawn_solid(_world_pos(get_local_mouse_position()) if get_global_rect().has_point(get_global_mouse_position()) else Vector2(-1, -1))
-		KEY_SEMICOLON:
-			if ev.shift_pressed:
-				cycle_fade()
-			else:
-				toggle_midi_panel()
-		KEY_Z:
-			if ev.shift_pressed:
-				set_syphon(not syphon_on)
-			else:
-				cycle_webcam()
-		KEY_D:
-			if ev.shift_pressed:
-				draw_mode = not draw_mode
-				_steal_note = "draw mode: drag a path, the selected icon rides it" if draw_mode else ""
-				_update_hud()
-			else:
-				_glow.cycle()
-				_update_hud()
-		KEY_BACKSLASH:
-			if ev.shift_pressed:
-				cycle_blend()
-			else:
-				set_active_layer(active_layer + 1)
-		KEY_S:
-			if ev.shift_pressed:
-				spawn_mosaic()
-			else:
-				steal_palette()
-		KEY_E:
-			if ev.shift_pressed:
-				set_evolve(not evolve)
-		KEY_N:
-			if ev.shift_pressed:
-				set_particles(not particles_on)
-			else:
-				_monitor.cycle_size()
-				_update_hud()
-		KEY_O:
-			if ev.shift_pressed:
-				cycle_rd()
-			else:
-				_fx.cycle_kaleido()
-				_refresh_fx()
-		KEY_R:
-			if ev.shift_pressed:
-				toggle_record()
-		KEY_P:
-			if ev.shift_pressed:
-				toggle_play()
-			else:
-				palette_index = (palette_index + 1) % Palettes.count()
-				_apply_palette()
-		KEY_ENTER, KEY_KP_ENTER:
-			if evolve:
-				if ev.shift_pressed:
-					evolve_discard()
-				else:
-					evolve_keep()
-		KEY_A:
-			if ev.shift_pressed:
-				set_attract(not attract)
-			else:
-				AudioReact.cycle_source()
-				_update_hud()
-		KEY_M: set_monitor(not _monitor.visible)
-		KEY_V:
-			if ev.shift_pressed:
-				screenshot_with_credits()
-			else:
-				_fx.cycle_crt()
-				_refresh_fx()
-		KEY_G:
-			if ev.shift_pressed:
-				_fx.key_threshold = fmod(_fx.key_threshold + 0.1, 0.95)
-				_fx._push()
-			else:
-				_fx.cycle_key()
-			_refresh_fx()
-		KEY_K:
-			if ev.shift_pressed:
-				_fx.cycle_slit()
-			else:
-				_fx.cycle_pixelate()
-			_refresh_fx()
-		KEY_L:
-			if ev.shift_pressed:
-				set_ticker(not ticker_on)
-			else:
-				_fx.toggle_quantize()
-				_refresh_fx()
-		KEY_J:
-			_fx.toggle_dither()
-			_refresh_fx()
-		KEY_MINUS:
-			if ev.shift_pressed: step_preset(-1)
-			else: fb_fade = maxf(0.5, fb_fade - 0.02)
-		KEY_EQUAL:
-			if ev.shift_pressed: step_preset(1)
-			else: fb_fade = minf(0.995, fb_fade + 0.02)
-		KEY_C:
-			if ev.shift_pressed:
-				if _roll.visible:
-					stop_credits_roll()
-				else:
-					start_credits_roll()
-				return
-			clear_actors()
-			for a in _solids.get_children() + _formations.get_children():
-				a.queue_free()
-		KEY_H:
-			if ev.shift_pressed:
-				toggle_blackout()
-				return
-			set_hud_mode((hud_mode + 1) % 3)
-	_update_hud()
+	_m_input.key(ev)
