@@ -210,6 +210,9 @@ func key(ev: InputEvent) -> void:
 	if ev.ctrl_pressed and k == KEY_N:
 		s.set_gnarl(not s.gnarl_on)
 		return
+	if ev.ctrl_pressed and k == KEY_W:
+		s.set_wake(not s.wake_on)
+		return
 	if ev.ctrl_pressed and k == KEY_O:
 		if ev.shift_pressed:
 			s._poultry.cycle_order()

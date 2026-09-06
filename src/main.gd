@@ -881,6 +881,73 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL feedback routing (%s)" % st.routing_describe())
+	# the small ones: Echo's ghosts come and go with the verb, Shimmer flickers, the wake follows
+	# the cursor, a procession is seven in a spectrum, purple rain is a scene, the wake snapshots
+	var ok_sv := true
+	var sv_bad: Array = []
+	var sv_chk := func(label: String, ok: bool):
+		if not ok:
+			sv_bad.append(label)
+	st.panic()
+	st.clear_actors()
+	await get_tree().process_frame
+	Toolbox.select(0)
+	for v in Toolbox.slots[0].get("verbs", []).duplicate():
+		Toolbox.toggle_verb(0, v)
+	Toolbox.toggle_verb(0, "echo")
+	st.spawn_at(Vector2(600, 400))
+	for i in 3:
+		await get_tree().process_frame
+	var ea = st.all_actors()[0]
+	var sprites := func(): return ea.get_children().filter(func(c): return c is Sprite2D).size()
+	sv_chk.call("1", ea.verb_state.has("echo") and sprites.call() == 8)
+	Toolbox.toggle_verb(0, "echo")
+	for i in 3:
+		await get_tree().process_frame
+	sv_chk.call("2", not ea.verb_state.has("echo") and sprites.call() == 1)
+	Toolbox.toggle_verb(0, "shimmer")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var c_a: Color = ea._sprite.modulate
+	for i in 8:
+		await get_tree().process_frame
+	sv_chk.call("3", ea._sprite.modulate != c_a)
+	Toolbox.toggle_verb(0, "shimmer")
+	st.set_wake(true)
+	st._wake_prev = Vector2(100, 100)
+	st._tick_wake(Vector2(400, 400), 0.016)
+	sv_chk.call("4", st.wake_on and st._wake.emitting and st._wake.initial_velocity_max > 100.0 and st._wake.position == Vector2(400, 400))
+	st._tick_wake(Vector2(400, 400), 0.016)                 # no movement: no sparks
+	sv_chk.call("5", not st._wake.emitting)
+	sv_chk.call("6", st.snapshot()["wake"]["on"])
+	st.set_wake(false)
+	sv_chk.call("7", not st.wake_on)
+	st._formation_index = st.FormationScript.KINDS.find("procession")
+	st.spawn_formation()
+	await get_tree().process_frame
+	var pf = st._formations.get_child(st._formations.get_child_count() - 1)
+	var col0: Color = st.FormationScript.instance_color("procession", 0, 7, Palettes.ring(0), 0)   # the multimesh reads back black headless
+	var col6: Color = st.FormationScript.instance_color("procession", 6, 7, Palettes.ring(0), 0)
+	var proc_x: Array = st.FormationScript.transforms("procession", 7)
+	var x_up := true
+	for i in 6:
+		x_up = x_up and proc_x[i + 1].origin.x > proc_x[i].origin.x
+	sv_chk.call("8", pf.count == 7 and pf.kind == "procession" and absf(col0.h - col6.h) > 0.5 and proc_x.size() == 7 and x_up and proc_x[0].origin.x < -2.0)
+	for f in st._formations.get_children():
+		f.queue_free()
+	st._formation_index = 0
+	st.set_scene("purplerain", 0.0)
+	sv_chk.call("9", Scenes.current == "purplerain" and Scenes.get_scene("purplerain")["name"] == "Purple rain")
+	st.set_scene("", 0.0)
+	st.clear_actors()
+	ok_sv = sv_bad.is_empty()
+	if not ok_sv:
+		printerr("small verbs sub-checks failed: ", sv_bad)
+	if ok_sv:
+		print("PASS small verbs and scenes: Echo's ghosts come and go, Shimmer flickers, the wake follows the cursor, a procession spans the spectrum, purple rain")
+	else:
+		fails += 1
+		printerr("FAIL small verbs (sprites %d)" % sprites.call())
 	# TonKnoT: a knot solid, its tube skin, Morph tying it into the next family, the tube
 	# param, the next-family action, the HUD; a live state keeps it a knot
 	var ok_kn := true
@@ -1579,7 +1646,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox", "gnarl", "poultry", "knot"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox", "gnarl", "poultry", "knot", "smallones"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -2085,6 +2152,30 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"smallones":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				current.clear_actors()
+				current.set_scene("purplerain", 0.0)
+				Toolbox.select(0)
+				for v in Toolbox.slots[0].get("verbs", []).duplicate():
+					Toolbox.toggle_verb(0, v)
+				for v in ["echo", "shimmer", "orbit"]:
+					Toolbox.toggle_verb(0, v)
+				for i in 3:
+					current.spawn_at(Vector2(500 + i * 350, 420))
+				current._formation_index = current.FormationScript.KINDS.find("procession")
+				Toolbox.select(1)
+				current.spawn_formation()
+				Toolbox.select(0)
+				current.set_wake(true)
+				await get_tree().create_timer(2.0).timeout
+				for v in ["echo", "shimmer", "orbit"]:
+					Toolbox.toggle_verb(0, v)
+				current._formation_index = 0
 			"knot":
 				menu.close()
 				if current_name != "stage":

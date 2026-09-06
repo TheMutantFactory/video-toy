@@ -40,6 +40,8 @@ var _last_beat := 0.0
 var _base_color := Color.WHITE
 var body: RigidBody2D                      # set while the Physics verb is on
 var voice_wanted := false                  # the Voice verb asks each frame
+var verb_state := {}                       # per-verb scratch (Echo's ghosts); cleared through leave()
+var _prev_ids: Array = []
 var _voice: IconVoice
 var _detune := 1.0
 var _sound := ""                           # the slot's sound path, if any
@@ -172,6 +174,12 @@ func _process(delta: float) -> void:
 	if body and not verbs.has("physics"):
 		IconBody.detach(self)
 	_tick_voice(verbs)
+	for vid in _prev_ids:
+		if not verbs.has(vid):
+			var gone := Verbs.get_instance(str(vid))
+			if gone:
+				gone.leave(self)
+	_prev_ids = verbs.duplicate()
 	if beat_hit and _sound != "" and verbs.has("sparkle"):
 		Sounds.play_once_this_frame(_sound)
 

@@ -45,6 +45,8 @@ The printable version is [key-card.png](key-card.png).
 | `Shift+J` | Outline — hollow the icon to a ring that follows its silhouette |
 | `Ctrl+P` | Physics — a rigid body with the icon's outline: falls, piles up, drag to throw (Ctrl+G gravity) |
 | `Ctrl+V` | Voice — hear the outline as a waveform; Morph glides timbre, Pulse loudness, Spin pitch |
+| `Ctrl+H` | Shimmer — never one fixed colour: thirty close shades, a new one every frame |
+| `Ctrl+K` | Echo — multiplicity: seven fading copies trail a few frames behind |
 
 ## Feedback and scenes
 
@@ -80,7 +82,7 @@ The printable version is [key-card.png](key-card.png).
 | --- | --- |
 | `B` | 3D solid of the selected icon at the mouse |
 | `Shift+B` | next shape: cube / sphere / torus / cylinder / prism / cookie / knot (TonKnoT: Morph ties it into the next knot) |
-| `Shift+Space` | formation of 200 copies · Shift+X next: helix / lattice / shell / ring |
+| `Shift+Space` | formation of 200 copies · Shift+X next: helix / lattice / shell / ring / procession (seven, a spectrum) |
 | `Shift+arrows` | camera orbit / dolly · Shift+PgUp/PgDn roll · Shift+Home resets |
 | `\` | next layer (1 base, 2, 3) · Shift+\ blend mix / add / sub / mul · Shift+[ ] opacity |
 | `Shift+D` | draw mode: drag a path and the icon rides it · right-click a path removes it |
@@ -100,6 +102,7 @@ The printable version is [key-card.png](key-card.png).
 | `Ctrl+S` | play the selected slot's sound |
 | `Shift+O` | reaction-diffusion presets |
 | `click a Sparkle icon` | pinata: it bursts into confetti of itself |
+| `Ctrl+W` | wake: green sparks along the cursor's movement |
 
 ## Show
 

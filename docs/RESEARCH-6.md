@@ -47,11 +47,11 @@ are the twist-box's missing stages, the regulator, and two philtres.
    snapshot); **TonKnoT** — built: a "knot" solid (src/knot.gd: torus-knot curves, a
    parallel-transport tube, point-for-point blends), seven families, the icon flowing along
    the tube, Morph resting then tying into the next family, a tube param and a next action.
-4. **Small verbs and scenes**: Shimmer (thirty-colour flicker within a palette family), Echo
-   (translucent delayed copies — multiplicity), Wake (sparks along the cursor's movement), a
-   spectrum procession formation, a purple-static-rain scene.
-5. **Vocabulary**: name the loop's controls Twist, Memory, Cutup, Cleanup on the panel and the
-   key card, so the loop reads as an instrument rather than a filter.
+4. **Small verbs and scenes** — built: Shimmer (Ctrl+H), Echo (Ctrl+K, with a `leave()` hook
+   so a verb can clean up after itself), Wake (Ctrl+W), the procession formation, the purple
+   rain scene.
+5. **Vocabulary** — built: the routing panel is "The loop: Twist · Memory · Cutup · Cleanup"
+   and its delay is memory; the key card names the twist-box on Ctrl+F.
 
 ## Not worth it here
 

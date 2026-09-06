@@ -4,7 +4,8 @@ extends Node3D
 ## like solid.gd: Spin turns the whole formation, Pulse breathes it, Rainbow
 ## cycles the ring, Orbit swings it around the origin.
 
-const KINDS := ["helix", "lattice", "shell", "ring"]
+const KINDS := ["helix", "lattice", "shell", "ring", "procession"]
+const PROCESSION_N := 7
 
 var slot_id := ""
 var kind := "helix"
@@ -41,6 +42,12 @@ static func transforms(kind_: String, n: int, spread := 3.2) -> Array:
 				var dir := -p.normalized() if p.length() > 0.001 else Vector3.FORWARD
 				var up := Vector3.RIGHT if absf(dir.y) > 0.99 else Vector3.UP     # poles: avoid colinear up
 				var b := Basis.looking_at(dir, up).scaled(Vector3.ONE * 0.3)
+				out.append(Transform3D(b, p))
+		"procession":
+			for i in n:
+				var f := (i + 0.5) / n - 0.5
+				var p := Vector3(f * spread * 1.9, sin(f * PI * 2.0) * 0.15, 0.0)
+				var b := Basis(Vector3.UP, f * 0.6).scaled(Vector3.ONE * 0.5)
 				out.append(Transform3D(b, p))
 		"ring":
 			for i in n:
@@ -89,10 +96,17 @@ func recolor(pal: int, color_index: int, hue_shift := 0.0) -> void:
 	_color_index = color_index
 	var ring := Palettes.ring(pal)
 	for i in count:
-		var c: Color = ring[posmod(color_index + (i * ring.size()) / maxi(count, 1), ring.size())]
-		if hue_shift != 0.0:
-			c.h = fmod(c.h + hue_shift, 1.0)
-		_mm.multimesh.set_instance_color(i, c)
+		_mm.multimesh.set_instance_color(i, instance_color(kind, i, count, ring, color_index, hue_shift))
+
+
+## Pure: a procession marches red to violet in hard steps; the rest walk the palette ring.
+static func instance_color(kind_: String, i: int, n: int, ring: Array, color_index: int, hue_shift := 0.0) -> Color:
+	if kind_ == "procession":
+		return Color.from_hsv(fmod(float(i) / maxi(n, 1) * 0.85 + hue_shift, 1.0), 0.9, 1.0)
+	var c: Color = ring[posmod(color_index + (i * ring.size()) / maxi(n, 1), ring.size())]
+	if hue_shift != 0.0:
+		c.h = fmod(c.h + hue_shift, 1.0)
+	return c
 
 
 func _verbs() -> Array:

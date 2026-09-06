@@ -10,6 +10,7 @@ const ALL := [
 	{"id": "truchet", "name": "Truchet", "kind": "art"},
 	{"id": "voronoi", "name": "Voronoi", "kind": "art"},
 	{"id": "blobs", "name": "Blobs", "kind": "art"},
+	{"id": "purplerain", "name": "Purple rain", "kind": "art"},
 	{"id": "ramp", "name": "Ramp", "kind": "osc"},
 	{"id": "bars", "name": "Bars", "kind": "osc"},
 	{"id": "rings", "name": "Rings", "kind": "osc"},

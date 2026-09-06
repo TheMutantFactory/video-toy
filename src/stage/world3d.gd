@@ -76,6 +76,8 @@ func spawn_formation(n := 200) -> void:
 	var slot := Toolbox.current()
 	if slot.is_empty():
 		return
+	if formation_kind() == "procession":
+		n = s.FormationScript.PROCESSION_N
 	var icon := IconMedia.texture_for(str(slot.get("svg_path", "")))
 	var mesh: Mesh = s.SolidScript.make_mesh(next_shape(), icon.get_image() if (next_shape() == "cookie" and icon) else null)
 	var skin := StandardMaterial3D.new()

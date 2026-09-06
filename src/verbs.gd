@@ -76,6 +76,13 @@ static func by_key(keycode: int, shift := false, ctrl := false) -> String:
 	return ""
 
 
+static func get_instance(id: String) -> Verb:
+	for v in instances():
+		if v.id == id:
+			return v
+	return null
+
+
 static func get_verb(id: String) -> Dictionary:
 	for v in instances():
 		if v.id == id:

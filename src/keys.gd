@@ -58,7 +58,7 @@ static func groups() -> Array:
 		{"title": "3D and layers", "tab": "3D", "rows": [
 			["B", "3D solid of the selected icon at the mouse"],
 			["Shift+B", "next shape: cube / sphere / torus / cylinder / prism / cookie / knot (TonKnoT: Morph ties it into the next knot)"],
-			["Shift+Space", "formation of 200 copies · Shift+X next: helix / lattice / shell / ring"],
+			["Shift+Space", "formation of 200 copies · Shift+X next: helix / lattice / shell / ring / procession (seven, a spectrum)"],
 			["Shift+arrows", "camera orbit / dolly · Shift+PgUp/PgDn roll · Shift+Home resets"],
 			["\\", "next layer (1 base, 2, 3) · Shift+\\ blend mix / add / sub / mul · Shift+[ ] opacity"],
 			["Shift+D", "draw mode: drag a path and the icon rides it · right-click a path removes it"],
@@ -75,6 +75,7 @@ static func groups() -> Array:
 			["Ctrl+S", "play the selected slot's sound"],
 			["Shift+O", "reaction-diffusion presets"],
 			["click a Sparkle icon", "pinata: it bursts into confetti of itself"],
+			["Ctrl+W", "wake: green sparks along the cursor's movement"],
 		]},
 		{"title": "Show", "tab": "Show", "rows": [
 			["Shift+Esc", "PANIC: known-good look, toolbox untouched"],

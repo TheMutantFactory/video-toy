@@ -57,3 +57,8 @@ func post3d(_s, _delta: float) -> void:
 
 func formation(_f, _delta: float) -> void:
 	pass
+
+
+## Called once on a host when the verb stops being active there (Echo frees its ghosts).
+func leave(_host) -> void:
+	pass

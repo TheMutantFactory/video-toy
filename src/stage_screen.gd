@@ -212,6 +212,9 @@ var particles_flux := 0.0                  # fluxdots: re-birth rate on the sour
 var flux_src := 0                          # FLUX_SOURCES index
 const FLUX_SOURCES := ["off", "self", "layer 2", "layer 3", "webcam"]
 var _poultry: Poultry                      # the quasicrystal philtre (Ctrl+O)
+var wake_on := false                       # sparks along the cursor's movement (Ctrl+W)
+var _wake: CPUParticles2D
+var _wake_prev := Vector2.ZERO
 var gnarl_on := false                      # the regulator holds complexity near gnarl_target
 var gnarl_target := 0.5
 var gnarl_speed := 0.5
@@ -384,6 +387,22 @@ func _ready() -> void:
 	_build_layers()
 	_build_particles()
 	_build_rd()
+	_wake = CPUParticles2D.new()                 # the phosphorescent wake, off until Ctrl+W
+	_wake.emitting = false
+	_wake.amount = 500
+	_wake.lifetime = 1.3
+	_wake.local_coords = false
+	_wake.direction = Vector2.ZERO
+	_wake.spread = 180.0
+	_wake.gravity = Vector2.ZERO
+	_wake.initial_velocity_min = 40.0
+	_wake.initial_velocity_max = 220.0
+	_wake.damping_min = 60.0
+	_wake.damping_max = 140.0
+	_wake.scale_amount_min = 2.5
+	_wake.scale_amount_max = 6.0
+	_wake.z_index = 2
+	_world.add_child(_wake)
 	_p2_node = Node2D.new()
 	_p2_node.set_script(P2CursorScript)
 	_p2_node.z_index = 3
@@ -1423,6 +1442,8 @@ func _update_hud() -> void:
 		line2 += "   ·   loop " + rd_s
 	if _poultry.on:
 		line2 += "   ·   " + _poultry.describe()
+	if wake_on:
+		line2 += "   ·   wake"
 	var kn := knots()
 	if not kn.is_empty():
 		line2 += "   ·   knots: " + ", ".join(kn.map(func(k): return k.knot_describe()))
@@ -1637,6 +1658,28 @@ func loop_mask() -> int:
 	return m
 
 
+# ---------------- the wake ----------------
+func set_wake(on: bool) -> void:
+	wake_on = on
+	if not on:
+		_wake.emitting = false
+	_wake.color = Palettes.color(palette_index, 2).lightened(0.3)
+	_steal_note = "wake: sparks follow the cursor" if on else "wake off"
+	_update_hud()
+
+
+## Emission follows how fast the cursor moves (a hand through dark water).
+func _tick_wake(mouse: Vector2, delta: float) -> void:
+	if not wake_on:
+		return
+	var speed := mouse.distance_to(_wake_prev) / maxf(delta, 0.001)
+	_wake_prev = mouse
+	_wake.position = mouse
+	var inside := Rect2(Vector2.ZERO, Vector2(WORLD)).has_point(mouse)
+	_wake.emitting = inside and speed > 60.0
+	_wake.initial_velocity_max = clampf(80.0 + speed * 0.15, 80.0, 420.0)   # a faster hand throws sparks further
+
+
 # ---------------- Poultry: the quasicrystal philtre ----------------
 func set_poultry(on: bool) -> void:
 	if on:
@@ -1784,8 +1827,8 @@ func toggle_routing_panel() -> void:
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 6)
 		_routing_panel.add_child(col)
-		col.add_child(UI.label("Feedback routing", 26, UI.ACCENT))
-		col.add_child(UI.label("Which layers re-enter the loop, how many frames back the loop reads, and what happens to the picture on every pass.", 15, UI.DIM))
+		col.add_child(UI.label("The loop: Twist · Memory · Cutup · Cleanup", 26, UI.ACCENT))
+		col.add_child(UI.label("Twist is the feedback's zoom, twist and warp (the keys); Memory is which layers re-enter and how many frames back the loop reads; Cutup and Cleanup are what happens to the picture on every pass.", 15, UI.DIM))
 		var lrow := HBoxContainer.new()
 		lrow.add_theme_constant_override("separation", 14)
 		lrow.add_child(UI.label("In the loop:", 18))
@@ -1801,7 +1844,7 @@ func toggle_routing_panel() -> void:
 		grid.add_theme_constant_override("h_separation", 12)
 		grid.add_theme_constant_override("v_separation", 6)
 		col.add_child(grid)
-		for spec in [["delay", "frame delay", 0.0, float(RING - 1), 1.0, func(v: float): set_fb_delay(int(v))],
+		for spec in [["delay", "memory (frame delay)", 0.0, float(RING - 1), 1.0, func(v: float): set_fb_delay(int(v))],
 				["blur", "sharpen ← → blur", -1.0, 1.0, 0.05, func(v: float):
 					fb_blur = v
 					_update_hud()],
@@ -2051,6 +2094,7 @@ func _process(_delta: float) -> void:
 	var t5 := Time.get_ticks_usec()
 	_prof = {"modes": t1 - t0, "tl_rd": t2 - t1, "quality": t3 - t2, "p2": t4 - t3, "particles": t5 - t4}
 	var mouse := _world_pos(get_local_mouse_position())
+	_tick_wake(mouse, _delta)
 	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _dragging
 	for a in all_actors():
 		a.mouse_world = mouse

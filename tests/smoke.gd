@@ -268,7 +268,7 @@ func _init() -> void:
 		var sh2 = load(Scenes.shader_path(sid))
 		if not (sh2 is Shader) or not sh2.get_code().contains("common.gdshaderinc"):
 			all_load = false
-	_check("every scene shader loads and includes common", all_load and Scenes.ALL.size() == 9)
+	_check("every scene shader loads and includes common", all_load and Scenes.ALL.size() == 10 and Scenes.ids().has("purplerain"))
 	_check("scene neighbour wraps and enters from off", Scenes.neighbour("", 1) == "plasma" and Scenes.neighbour("noise", 1) == "plasma" and Scenes.neighbour("plasma", -1) == "noise")
 	var fm := FeedbackMesh.build(Vector2(1920, 1080), 4, 2)
 	_check("warp mesh has (cols+1)(rows+1) vertices and 6 indices per quad",
@@ -733,11 +733,11 @@ func _init() -> void:
 
 	# verbs as files: discovered from res://verbs, ordered, group-exclusive; a foreign directory loads too
 	var vids: Array = Verbs.ids()
-	_check("eighteen verbs are discovered from res://verbs", vids.size() == 18 and vids.has("bounce") and vids.has("morph") and vids.has("dejong") and vids.has("physics") and vids.has("voice"))
+	_check("twenty verbs are discovered from res://verbs", vids.size() == 20 and vids.has("bounce") and vids.has("morph") and vids.has("dejong") and vids.has("physics") and vids.has("voice") and vids.has("shimmer") and vids.has("echo"))
 	var order_ok := vids.find("bounce") < vids.find("wander") and vids.find("wander") < vids.find("flock") and vids.find("swarm") < vids.find("orbit") and vids.find("lorenz") < vids.find("rossler")
 	_check("verbs are ordered by their motion order", order_ok)
 	var panel_ids: Array = Verbs.all().map(func(m): return m["id"])
-	_check("the panel keeps keyboard order", panel_ids.slice(0, 8) == ["wander", "orbit", "spin", "bounce", "pulse", "sparkle", "rainbow", "swarm"] and panel_ids[-3] == "outline" and panel_ids[-2] == "physics" and panel_ids[-1] == "voice")
+	_check("the panel keeps keyboard order", panel_ids.slice(0, 8) == ["wander", "orbit", "spin", "bounce", "pulse", "sparkle", "rainbow", "swarm"] and panel_ids[-3] == "voice" and panel_ids[-2] == "shimmer" and panel_ids[-1] == "echo")
 	var act: Array = Verbs.active_for(["orbit", "rossler", "lorenz", "spin", "dejong"]).map(func(v): return v.id)
 	_check("active_for keeps order and runs one attractor only", act == ["lorenz", "orbit", "spin"])
 	_check("verb objects carry hooks", Verbs.instances()[0] is Verb and Verbs.get_verb("flock")["shift"] == true and Verbs.get_verb("bounce").has("hint"))
@@ -1175,6 +1175,19 @@ func _init() -> void:
 	var kn_pb := Knot.points(2, 3, 3, 4, 1.0, 30)
 	var kn_pm := Knot.points(2, 3, 3, 4, 0.5, 30)
 	_check("blending knots is point for point: the ends are the two knots, the middle between", kn_pa[7].is_equal_approx(Knot.curve(2, 3, 7.0 / 30.0)) and kn_pb[7].is_equal_approx(Knot.curve(3, 4, 7.0 / 30.0)) and kn_pm[7].is_equal_approx(kn_pa[7].lerp(kn_pb[7], 0.5)))
+
+	# the small ones: Shimmer's shades, the procession, the verbs' leave hook
+	var sm_sh_v = Verbs.get_instance("shimmer")
+	var sm_gold := Color(1.0, 0.8, 0.2)
+	var sm_seen := {}
+	var sm_near := true
+	for i in 60:
+		var sm_c: Color = sm_sh_v.shade(sm_gold, i / 30.0)
+		sm_seen[str(sm_c)] = true
+		sm_near = sm_near and absf(fmod(sm_c.h - sm_gold.h + 1.5, 1.0) - 0.5) < 0.035 and sm_c.v > 0.7 and sm_c.v <= 1.0
+	_check("shimmer: many close shades of one colour, none far from it", sm_seen.size() >= 20 and sm_near and sm_sh_v.shade(sm_gold, 0.01) == sm_sh_v.shade(sm_gold, 0.02))
+	_check("echo runs last and unknown verbs are null", Verbs.get_instance("echo").order == 200 and Verbs.get_instance("nope") == null)
+	_check("verbs have a leave hook and the new ones are Ctrl keys", Verb.new().has_method("leave") and Verbs.by_key(KEY_H, false, true) == "shimmer" and Verbs.by_key(KEY_K, false, true) == "echo")
 
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)

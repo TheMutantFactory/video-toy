@@ -10,6 +10,7 @@ const KNOT_DEFORM := 3.0                    # seconds the tying takes
 
 var slot_id := ""
 var shape := "cube"
+var verb_state := {}                        # per-verb scratch, cleared through leave()
 var knot_family := 0                        # Knot.FAMILIES index shown
 var knot_next := 1                          # the family it ties into (Morph)
 var knot_morph := 0.0                       # 0 = this family, 1 = the next

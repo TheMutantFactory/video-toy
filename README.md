@@ -271,6 +271,18 @@ re-deals on the beat. All params or actions, all snapshotted, all cleared by pan
 All of it snapshots and crossfades, panic clears it, the HUD names what is on, and the delay,
 blur, hue and displacement are params with the layer switches and the source as actions.
 
+## The small ones from the grimoire
+
+**Shimmer** (**Ctrl+H**) is the thirty-colour flicker: every frame the icon steps to one of
+about thirty shades close to its colour, so a gold is never one gold. **Echo** (**Ctrl+K**) is
+multiplicity: seven fading copies trail a few frames behind the icon and go when the verb goes.
+**Wake** (**Ctrl+W**, an action, in the snapshot) sends green sparks along the cursor's
+movement, more the faster the hand moves. **Procession** is a fifth formation kind
+(**Shift+X**): seven copies in a row, red through violet. **Purple rain** is a tenth scene
+(**Tab**): tiny lights raining through the picture in three depths with bursts of static.
+And the routing panel now says what the grimoire says: the loop is Twist, Memory, Cutup and
+Cleanup.
+
 ## TonKnoT: knots that tie themselves
 
 **Shift+B** cycles the 3D shape to **knot**: a (p, q) torus knot swept into a tube with

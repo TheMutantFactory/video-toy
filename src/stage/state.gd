@@ -40,6 +40,7 @@ func snapshot() -> Dictionary:
 		"rd": {"preset": s.rd_preset, "feed": s.rd_feed, "kill": s.rd_kill},
 		"physics": {"gravity": s.gravity},
 		"gnarl": {"on": s.gnarl_on, "target": s.gnarl_target, "speed": s.gnarl_speed, "bias": s.gnarl_bias},
+		"wake": {"on": s.wake_on},
 		"poultry": {"on": s._poultry.on, "scale": s._poultry.cell_scale, "adherence": s._poultry.adherence, "order": s._poultry.order, "fat": s._poultry.fat},
 	}
 
@@ -158,6 +159,9 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 		var pon := bool(pt.get("on", s.particles_on))
 		if pon != s.particles_on:
 			s.set_particles(pon)
+	var wk: Dictionary = d.get("wake", {})
+	if not wk.is_empty() and bool(wk.get("on", s.wake_on)) != s.wake_on:
+		s.set_wake(bool(wk["on"]))
 	var po: Dictionary = d.get("poultry", {})
 	if not po.is_empty():
 		s._poultry.cell_scale = clampf(float(po.get("scale", s._poultry.cell_scale)), 3.0, 30.0)
