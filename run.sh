@@ -51,7 +51,10 @@ case "${1:-play}" in
   reference) # (re)record the reference shots from the current build
            audio_override; mkdir -p out tests/reference
            "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,ref_stage,ref_crt >/dev/null 2>&1
-           for f in start settings menu attribution ref_stage ref_crt; do cp "out/$f.png" "tests/reference/$f.png"; done
+           for f in start settings menu attribution ref_stage ref_crt; do
+             cp "out/$f.png" "tests/reference/$f.png"
+             sips -z 540 960 "tests/reference/$f.png" --out "tests/reference/$f.png" >/dev/null 2>&1 || true   # half size keeps the repo small; the diff compares at 240x135
+           done
            echo "reference shots updated: $(ls tests/reference)" ;;
   *) echo "usage: $0 [play|test|capture [shot]|import|templates|check|reference|diff]" >&2; exit 2 ;;
 esac
