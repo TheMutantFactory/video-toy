@@ -169,6 +169,8 @@ func _keycard(dir: String) -> void:
 ## (non-zero exit) if any screen errors while building itself.
 func _selftest() -> void:
 	var fails := 0
+	if Toolbox.slots.is_empty():                        # a fresh machine (CI): the five demo shapes
+		DemoPack.load_into(Toolbox, Ledger)
 	for name in SCREENS.keys():
 		show_screen(name)
 		await get_tree().process_frame
