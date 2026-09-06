@@ -853,6 +853,26 @@ func _init() -> void:
 	_check("docs/KEYS.md is up to date (./run.sh keycard)", FileAccess.get_file_as_string("res://docs/KEYS.md") == Keys.markdown())
 	_check("docs/key-card.png exists and docs/SHOW.md points at it", FileAccess.file_exists("res://docs/key-card.png") and FileAccess.get_file_as_string("res://docs/SHOW.md").contains("key-card.png"))
 
+	# settings.cfg: defaults, round trip, reset; help filter is pure
+	var sp := "user://_smoke_settings.cfg"
+	Settings.reset(sp)
+	_check("settings defaults", int(Settings.get_value("osc_port", sp)) == 9000 and str(Settings.get_value("quality_lock", sp)) == "auto" and Settings.get_value("nope", sp) == null)
+	Settings.set_value("osc_port", 9123, sp)
+	Settings.set_value("syphon_name", "Knobcon", sp)
+	Settings._cache.erase(sp)                             # force a re-read from disk
+	_check("settings round-trip through the file", int(Settings.get_value("osc_port", sp)) == 9123 and str(Settings.get_value("syphon_name", sp)) == "Knobcon" and Settings.all(sp).size() == Settings.DEFAULTS.size())
+	Settings.reset(sp)
+	_check("settings reset restores defaults and removes the file", int(Settings.get_value("osc_port", sp)) == 9000 and not FileAccess.file_exists(sp))
+	var tabs_ok := true
+	for g in Keys.groups():
+		tabs_ok = tabs_ok and str(g.get("tab", "")) != ""
+	var f1 := HelpOverlay.filter(Keys.groups(), "", "slit-scan")
+	var f2 := HelpOverlay.filter(Keys.groups(), "Verbs", "")
+	var f3 := HelpOverlay.filter(Keys.groups(), "", "zzzz-nothing")
+	var f4 := HelpOverlay.filter(Keys.groups(), "Show", "blackout")
+	_check("help filter: every group has a tab; query, tab, tab+query, no match", tabs_ok and f1.size() == 1 and f1[0]["rows"].size() == 1 and f2.size() == 1 and f2[0]["rows"].size() == Verbs.instances().size() and f3.is_empty() and f4.size() == 1 and f4[0]["rows"].size() == 1)
+	_check("image diff thresholds come from settings", is_equal_approx(float(Settings.get_value("diff_mean", sp)), 0.035) and is_equal_approx(float(Settings.get_value("diff_block", sp)), 0.45))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

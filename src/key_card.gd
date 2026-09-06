@@ -23,6 +23,11 @@ static func weight(g: Dictionary, wrap := WRAP) -> int:
 ## column (brute force: at most nine groups).
 static func split(groups: Array, columns: int, wrap := WRAP) -> Array:
 	var w: Array = groups.map(func(g): return weight(g, wrap))
+	if groups.size() <= columns:
+		var few: Array = []
+		for i in columns:
+			few.append([groups[i]] if i < groups.size() else [])
+		return few
 	var best: Array = []
 	var best_max := 1 << 30
 	var n := groups.size()
@@ -113,10 +118,11 @@ static func overflow(root: Control) -> float:
 
 ## The in-app help: the same rows, dark, small, in `columns`, minus the verbs
 ## (the verb panel on the stage already lists them with their keys).
-static func help(columns := 2, font := 14) -> Control:
+static func help(columns := 2, font := 14, groups: Array = []) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 28)
-	var groups: Array = Keys.groups().filter(func(g): return not str(g["title"]).begins_with("Verbs"))
+	if groups.is_empty():
+		groups = Keys.groups().filter(func(g): return not str(g["title"]).begins_with("Verbs"))
 	var runs: Array = split(groups, columns, 38)
 	for i in columns:
 		var c := VBoxContainer.new()

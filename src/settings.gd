@@ -1,0 +1,66 @@
+class_name Settings
+## user://settings.cfg: the show knobs an exported app has no shell or
+## environment for. Static, cached per path; every consumer reads at its
+## own start (the stage, Osc, Clock, the Syphon output, ImageDiff).
+
+const PATH := "user://settings.cfg"
+const SECTION := "settings"
+const DEFAULTS := {
+	"quality_lock": "auto",        # auto | full | high | medium | low
+	"osc_port": 9000,
+	"syphon_name": "Video Toy",
+	"autosave_interval": 30,       # seconds
+	"attract_idle": 60,            # seconds idle before attract mode
+	"hud": "full",                 # full | compact | hidden at Play start
+	"clock_source": "off",         # off | internal, at launch
+	"clock_bpm": 120,
+	"lock_scenes": false,
+	"diff_mean": 0.035,            # ./run.sh check thresholds
+	"diff_block": 0.45,
+}
+
+static var _cache: Dictionary = {}     # path -> Dictionary
+
+
+static func _load(path: String) -> Dictionary:
+	if _cache.has(path):
+		return _cache[path]
+	var d: Dictionary = {}
+	var cfg := ConfigFile.new()
+	if FileAccess.file_exists(path) and cfg.load(path) == OK and cfg.has_section(SECTION):
+		for k in cfg.get_section_keys(SECTION):
+			d[k] = cfg.get_value(SECTION, k)
+	_cache[path] = d
+	return d
+
+
+static func get_value(key: String, path := PATH) -> Variant:
+	var d := _load(path)
+	if d.has(key):
+		return d[key]
+	return DEFAULTS.get(key)
+
+
+static func set_value(key: String, value: Variant, path := PATH) -> bool:
+	var d := _load(path)
+	d[key] = value
+	return _save(path)
+
+
+static func all(path := PATH) -> Dictionary:
+	var out: Dictionary = DEFAULTS.duplicate()
+	out.merge(_load(path), true)
+	return out
+
+
+static func reset(path := PATH) -> void:
+	_cache[path] = {}
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+static func _save(path: String) -> bool:
+	var cfg := ConfigFile.new()
+	for k in _cache[path]:
+		cfg.set_value(SECTION, k, _cache[path][k])
+	return cfg.save(path) == OK

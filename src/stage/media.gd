@@ -231,10 +231,11 @@ func set_syphon(on: bool) -> void:
 	s.syphon_on = on
 	if on:
 		s._syphon = ClassDB.instantiate("SyphonOutput")
-		s._syphon.server_name = "Video Toy"
+		var sname := str(Settings.get_value("syphon_name"))
+		s._syphon.server_name = sname
 		s.add_child(s._syphon)
 		s._syphon.texture = s._composite.get_texture()
-		s._steal_note = "Syphon: publishing 'Video Toy' (1920x1080, no HUD)"
+		s._steal_note = "Syphon: publishing '%s' (1920x1080, no HUD)" % sname
 	else:
 		s._steal_note = "Syphon: off"
 	s._update_hud()

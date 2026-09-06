@@ -40,7 +40,7 @@ editor). It takes effect on the next launch.
 | Find Icons | Type a word, browse free thumbnails, click to inspect the license, **Add to toolbox** (one metered download). Keep exploring: more pages, new words. |
 | Play | Click to spawn the selected icon. Verbs are toggles per slot and apply live to every actor from that slot. |
 | Scenes | Shader sources (plasma, warp, truchet, voronoi, blobs) and oscillators (ramp, bars, rings, noise) as a layer behind everything, crossfaded. |
-| Settings | Noun Project API key/secret, saved to `user://noun_credentials.cfg` (outside the repo). |
+| Settings | Quality lock, OSC port, Syphon server name, autosave and attract timers, HUD at start, clock at launch, microphone input, reference-diff thresholds (`user://settings.cfg`, most applied live), and the Noun Project API key/secret (`user://noun_credentials.cfg`). |
 | Attribution | Paginated list of every asset ever downloaded, with icon and creator links. Also on **Esc** / **☰** from any screen. |
 | Load demo shapes | Five built-in shapes so the toy plays with no API key. |
 | Add word | Type a word on the start screen (or in Find Icons): it is rendered white-on-alpha like an icon, so it tints, gets verbs, wraps solids and extrudes. |
@@ -50,9 +50,10 @@ editor). It takes effect on the next launch.
 [![key card](docs/key-card.png)](docs/key-card.png)
 
 The one-page card above and [docs/KEYS.md](docs/KEYS.md) are generated from `src/keys.gd` by
-`./run.sh keycard` (the smoke test fails when they drift). The same list is the in-app help
-panel on the right of the stage (**H** hides the HUD). [docs/SHOW.md](docs/SHOW.md) is the show
-manual: setup checklist, panic and blackout, restore after a crash, credits at the end.
+`./run.sh keycard` (the smoke test fails when they drift). The same list is the in-app help:
+**?** (Shift+/), the **? Keys** button or the Esc menu open an overlay with a tab per group and
+a search box; Esc closes it. **H** cycles the HUD full / compact / hidden. [docs/SHOW.md](docs/SHOW.md)
+is the show manual: setup checklist, panic and blackout, restore after a crash, credits at the end.
 
 ## Scenes, oscillators, warp mesh
 
@@ -153,7 +154,8 @@ script time plus Godot's measured CPU + GPU render time across every viewport, s
 a 30 Hz display does not read as slowness. A **quality ladder** (full / high / medium / low)
 sheds load — particle count, reaction-diffusion rate, slit-scan stride, glow taps, 3D
 anti-aliasing — and steps down by itself after a second over 20 ms of work, back up after five
-seconds under 12 ms, with a three-second cooldown. **Shift+F** locks a level (or `./run.sh play low`).
+seconds under 12 ms, with a three-second cooldown. **Shift+F** locks a level (or Settings → Quality,
+or `./run.sh play low`).
 
 **Shift+Esc** is **panic**: every effect, feedback, particles, reaction-diffusion, scene, monitor,
 webcam, layer blend, camera, draw / evolve / attract / timeline off, glow soft — toolbox and actors

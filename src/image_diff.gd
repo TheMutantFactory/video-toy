@@ -32,4 +32,4 @@ static func compare(a: Image, b: Image) -> Dictionary:
 			total += acc
 			worst = maxf(worst, acc / maxf(cnt, 1))
 	var mean := total / float(GRID.x * GRID.y)
-	return {"mean": mean, "worst_block": worst, "pass": mean <= MEAN_LIMIT and worst <= BLOCK_LIMIT}
+	return {"mean": mean, "worst_block": worst, "pass": mean <= float(Settings.get_value("diff_mean")) and worst <= float(Settings.get_value("diff_block"))}

@@ -244,7 +244,10 @@ var _worldmix: SubViewport
 var _drag_offset := Vector2.ZERO
 var _dragging := false
 var _hud: Label
-var _help: PanelContainer
+var _help: HelpOverlay
+var hud_mode := 0                         # 0 full, 1 compact, 2 hidden
+var idle_attract := IDLE_ATTRACT
+var autosave_interval := Autosave.INTERVAL
 var _verb_panel: VBoxContainer
 var _verb_checks := {}
 var _fx_pixel_btn: Button
@@ -406,12 +409,18 @@ func _ready() -> void:
 	_build_midi()
 	_sync_videos()
 	Toolbox.changed.connect(_sync_videos)
+	var names := Quality.LEVELS.map(func(l): return l["name"])
+	var lock := str(Settings.get_value("quality_lock"))
+	if names.has(lock):
+		quality.locked = names.find(lock)
 	var args := OS.get_cmdline_user_args()
 	var qi := args.find("--quality")
 	if qi >= 0 and qi + 1 < args.size():
-		var names := Quality.LEVELS.map(func(l): return l["name"])
 		var want: String = args[qi + 1]
 		quality.locked = names.find(want) if names.has(want) else (int(want) if want.is_valid_int() else -1)
+	autosave_interval = maxf(5.0, float(Settings.get_value("autosave_interval")))
+	idle_attract = maxf(10.0, float(Settings.get_value("attract_idle")))
+	set_hud_mode(maxi(0, ["full", "compact", "hidden"].find(str(Settings.get_value("hud")))))
 	apply_quality(quality.effective())
 	_enable_measurement()
 
@@ -1003,11 +1012,13 @@ func _build_hud() -> void:
 	hud_card.position = Vector2(12, 8)
 	add_child(hud_card)
 	_hud = UI.label("", 18, UI.DIM)
+	_hud.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hud.custom_minimum_size.x = 1540             # wraps before the top-right buttons
 	hud_card.add_child(_hud)
 
 	# Verb panel sits on a translucent card so it reads on light palettes too.
 	var card := PanelContainer.new()
-	card.position = Vector2(12, 96)
+	card.position = Vector2(12, 122)              # under the three-line HUD card
 	add_child(card)
 	_verb_panel = VBoxContainer.new()
 	_verb_panel.add_theme_constant_override("separation", 2)
@@ -1073,11 +1084,7 @@ func _build_hud() -> void:
 	_verb_panel.add_child(UI.button("Recolor slot (X)", func(): _recolor()))
 	_verb_panel.add_child(UI.button("Remove slot (Del)", func(): Toolbox.remove(Toolbox.selected)))
 
-	_help = PanelContainer.new()
-	_help.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_help.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_help.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_help.add_child(KeyCard.help(3, 14))
+	_help = HelpOverlay.new()
 	add_child(_help)
 
 	var top_right := HBoxContainer.new()
@@ -1085,6 +1092,8 @@ func _build_hud() -> void:
 	top_right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	top_right.offset_right = -20
 	top_right.offset_top = 14
+	top_right.add_child(UI.button("? Keys", func(): _help.toggle()))
+	top_right.add_child(UI.hspace(8))
 	top_right.add_child(UI.button("Find Icons", func(): navigate.emit("search")))
 	top_right.add_child(UI.hspace(8))
 	top_right.add_child(UI.button("← Back", func(): navigate.emit("start")))
@@ -1151,7 +1160,7 @@ func _update_hud() -> void:
 		_fx_scene_btn.text = "Tab  Scene: %s" % (Scenes.get_scene(Scenes.current).get("name", "?") if Scenes.current != "" else "off")
 	var cur := Toolbox.current()
 	var name := str(cur.get("term", "—")) if not cur.is_empty() else "empty toolbox — press Find Icons"
-	_hud.text = "fps %d/%dHz · work %.1f ms · q %s   ·   slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   monitor: %s   ·   actors: %d" % [
+	var line1: String = "fps %d/%dHz · work %.1f ms · q %s   ·   slot %d: %s   ·   palette: %s   ·   feedback: %s   ·   fx: %s   ·   monitor: %s   ·   actors: %d" % [
 		Engine.get_frames_per_second(), roundi(DisplayServer.screen_get_refresh_rate()), quality.avg_ms, quality.describe(),
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
@@ -1179,7 +1188,25 @@ func _update_hud() -> void:
 		line2 += "   ·   rd " + rd_describe()
 	if fb_warp > 0.0 or fb_drift != Vector2.ZERO:
 		line2 += "   ·   warp %.2f drift %d,%d" % [fb_warp, fb_drift.x, fb_drift.y]
-	_hud.text += "\n" + line2
+	if hud_mode == 1:
+		_hud.text = "fps %d · work %.1f ms · q %s · slot %d: %s · palette: %s · feedback: %s · fx: %s · actors: %d%s" % [
+			Engine.get_frames_per_second(), quality.avg_ms, quality.describe(), Toolbox.selected + 1, name,
+			Palettes.get_palette(palette_index)["name"], "on" if feedback else "off", _fx.describe(), all_actors().size(),
+			"  ·  BLACKOUT" if blackout else ""]
+	else:
+		_hud.text = line1 + "\n" + line2
+
+
+## 0 full (two lines + verb panel), 1 compact (one short line), 2 hidden.
+func set_hud_mode(m: int) -> void:
+	hud_mode = clampi(m, 0, 2)
+	_verb_panel.get_parent().visible = hud_mode == 0
+	_hud.get_parent().visible = hud_mode < 2
+	_update_hud()
+
+
+func open_help() -> void:
+	_help.open()
 
 
 static func _bar(v: float) -> String:
@@ -1281,7 +1308,7 @@ func restore_live(st: Dictionary) -> int:
 
 func _tick_autosave(delta: float) -> void:
 	_autosave_t += delta
-	if _autosave_t >= Autosave.INTERVAL:
+	if _autosave_t >= autosave_interval:
 		_autosave_t = 0.0
 		Autosave.write(live_state())
 
@@ -1429,6 +1456,14 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 		return
 	var k: int = ev.keycode
 	if _p2_key(k):
+		return
+	if k == KEY_ESCAPE and not ev.shift_pressed and _help.visible:
+		_help.close()
+		get_viewport().set_input_as_handled()
+		return
+	if (k == KEY_SLASH and ev.shift_pressed) or k == KEY_QUESTION:
+		_help.toggle()
+		get_viewport().set_input_as_handled()
 		return
 	if k >= KEY_F1 and k <= KEY_F12:
 		var n := k - KEY_F1 + 1
@@ -1635,7 +1670,5 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			if ev.shift_pressed:
 				toggle_blackout()
 				return
-			_help.visible = not _help.visible
-			_verb_panel.get_parent().visible = _help.visible
-			_hud.get_parent().visible = _help.visible
+			set_hud_mode((hud_mode + 1) % 3)
 	_update_hud()

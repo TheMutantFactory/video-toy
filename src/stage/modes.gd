@@ -141,7 +141,7 @@ func attract_step() -> void:
 
 func _tick_modes(delta: float) -> void:
 	s._idle += delta
-	if not s.attract and s._idle >= s.IDLE_ATTRACT:
+	if not s.attract and s._idle >= s.idle_attract:
 		set_attract(true)
 	if s.attract:
 		s._attract_timer += delta

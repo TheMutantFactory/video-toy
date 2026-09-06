@@ -14,8 +14,9 @@ The printable version is [key-card.png](key-card.png).
 | `X` | recolor the slot |
 | `P` | next palette |
 | `C` | clear the stage |
-| `H` | hide the HUD (clean capture) |
-| `Esc / ☰` | menu: panic, blackout, attribution, rigs, clip |
+| `H` | HUD full / compact / hidden |
+| `?` | this key list, with tabs and a search box (Shift+/) |
+| `Esc / ☰` | menu: panic, blackout, attribution, rigs, clip, settings |
 | `drop image / .svg / .ttf .otf / .txt / .ogv / rig .zip` | raster slot (Shift: chroma backdrop) / icon / font for words / word list / video slot / import rig |
 
 ## Verbs (toggle on the selected slot)

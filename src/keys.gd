@@ -6,7 +6,7 @@ class_name Keys
 const DROPS := "drop image / .svg / .ttf .otf / .txt / .ogv / rig .zip"
 
 
-## [{title, rows: [[keys, what], ...]}, ...]
+## [{title, tab, rows: [[keys, what], ...]}, ...]
 static func groups() -> Array:
 	var verbs: Array = []
 	var inst: Array = Verbs.instances().duplicate()
@@ -15,7 +15,7 @@ static func groups() -> Array:
 		var hint: String = v.hint if v.hint != "" else v.name.to_lower()
 		verbs.append([v.key.replace("⇧", "Shift+"), "%s — %s" % [v.name, hint]])
 	return [
-		{"title": "Basics", "rows": [
+		{"title": "Basics", "tab": "Basics", "rows": [
 			["click", "spawn the selected icon at the mouse"],
 			["right-click", "remove the nearest icon"],
 			["Space", "spawn somewhere"],
@@ -23,12 +23,13 @@ static func groups() -> Array:
 			["X", "recolor the slot"],
 			["P", "next palette"],
 			["C", "clear the stage"],
-			["H", "hide the HUD (clean capture)"],
-			["Esc / ☰", "menu: panic, blackout, attribution, rigs, clip"],
+			["H", "HUD full / compact / hidden"],
+			["?", "this key list, with tabs and a search box (Shift+/)"],
+			["Esc / ☰", "menu: panic, blackout, attribution, rigs, clip, settings"],
 			[DROPS, "raster slot (Shift: chroma backdrop) / icon / font for words / word list / video slot / import rig"],
 		]},
-		{"title": "Verbs (toggle on the selected slot)", "rows": verbs},
-		{"title": "Feedback and scenes", "rows": [
+		{"title": "Verbs (toggle on the selected slot)", "tab": "Verbs", "rows": verbs},
+		{"title": "Feedback and scenes", "tab": "Feedback", "rows": [
 			["F", "feedback on / off"],
 			["[ ]  , .  - =", "feedback zoom · twist · fade"],
 			["arrows", "feedback drift · PgUp/PgDn warp · Home resets"],
@@ -36,7 +37,7 @@ static func groups() -> Array:
 			["M", "monitor inside the scene (recursion)"],
 			["N", "monitor size · drag it to move"],
 		]},
-		{"title": "Effects", "rows": [
+		{"title": "Effects", "tab": "Effects", "rows": [
 			["O", "kaleidoscope off / 3 / 4 / 6 / 8 / 12"],
 			["K", "pixelate off / 4 / 8 / 12 / 20 / 32"],
 			["L  J", "palette quantise · dither"],
@@ -46,7 +47,7 @@ static func groups() -> Array:
 			["D", "glow off / soft / heavy"],
 			["'", "ASCII off / mono / colour"],
 		]},
-		{"title": "3D and layers", "rows": [
+		{"title": "3D and layers", "tab": "3D", "rows": [
 			["B", "3D solid of the selected icon at the mouse"],
 			["Shift+B", "next shape: cube / sphere / torus / cylinder / prism / cookie"],
 			["Shift+Space", "formation of 200 copies · Shift+X next: helix / lattice / shell / ring"],
@@ -54,7 +55,7 @@ static func groups() -> Array:
 			["\\", "next layer (1 base, 2, 3) · Shift+\\ blend mix / add / sub / mul · Shift+[ ] opacity"],
 			["Shift+D", "draw mode: drag a path and the icon rides it · right-click a path removes it"],
 		]},
-		{"title": "Modes", "rows": [
+		{"title": "Modes", "tab": "Modes", "rows": [
 			["Shift+S", "mosaic: the slot's picture rebuilt from the toolbox icons"],
 			["Shift+E", "evolve: a mutation every 8 beats · Enter keeps · Shift+Enter discards"],
 			["Shift+A", "attract mode (automatic after 60 s idle; any input ends it)"],
@@ -63,7 +64,7 @@ static func groups() -> Array:
 			["Shift+O", "reaction-diffusion presets"],
 			["click a Sparkle icon", "pinata: it bursts into confetti of itself"],
 		]},
-		{"title": "Show", "rows": [
+		{"title": "Show", "tab": "Show", "rows": [
 			["Shift+Esc", "PANIC: known-good look, toolbox untouched"],
 			["Shift+H", "blackout (fades over half a second)"],
 			["Shift+F", "quality lock: auto / full / high / medium / low"],
@@ -75,13 +76,13 @@ static func groups() -> Array:
 			["Shift+L  Shift+C", "credits ticker · credits roll (end card)"],
 			["Shift+Z", "Syphon output \"Video Toy\" (picture, no HUD)"],
 		]},
-		{"title": "Sources and controllers", "rows": [
+		{"title": "Sources and controllers", "tab": "Controllers", "rows": [
 			[";", "MIDI + audio panel: learn, clock, controller maps, OSC port"],
 			["A", "audio off / mic / test groove / file (drop mp3 ogg wav)"],
 			["Z", "webcam off / layer behind everything / chroma backdrop"],
 			["S", "steal a palette from the raster or the webcam"],
 		]},
-		{"title": "Player 2 (keypad or gamepad)", "rows": [
+		{"title": "Player 2 (keypad or gamepad)", "tab": "Player 2", "rows": [
 			["8 2 4 6 / stick", "move the cursor"],
 			["5 / A", "spawn · 0 / B removes"],
 			["+ - / X", "slot · . / Y layer"],

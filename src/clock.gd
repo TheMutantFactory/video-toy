@@ -28,6 +28,10 @@ var _audio: Node
 
 func _ready() -> void:
 	_audio = get_node_or_null("/root/AudioReact")
+	bpm = clampf(float(Settings.get_value("clock_bpm")), 40.0, 240.0)
+	lock_scenes = bool(Settings.get_value("lock_scenes"))
+	if str(Settings.get_value("clock_source")) == "internal":
+		start_internal(bpm)
 
 
 func _input(ev: InputEvent) -> void:

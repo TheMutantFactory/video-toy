@@ -97,9 +97,8 @@ func _clip(seconds: float) -> void:
 	var st := Autosave.read()
 	if not st.is_empty():
 		current.restore_live(st)
-	current._help.visible = false
-	current._verb_panel.get_parent().visible = false
-	current._hud.get_parent().visible = false
+	current._help.close()
+	current.set_hud_mode(2)
 	if current.timeline.load():
 		current.toggle_play()
 	await get_tree().create_timer(seconds).timeout
@@ -113,6 +112,11 @@ func show_screen(name: String) -> void:
 		return
 	if name == "attribution":
 		menu.show_attribution()
+		return
+	if name == "help":
+		if current_name != "stage":
+			show_screen("stage")
+		current.open_help()
 		return
 	if name == "panic" or name == "blackout":
 		if current_name != "stage":
@@ -299,7 +303,7 @@ func _selftest() -> void:
 	st.evolve_discard()
 	st.set_evolve(false)
 	ok_modes = ok_modes and not st.evolve
-	st._idle = st.IDLE_ATTRACT + 1.0
+	st._idle = st.idle_attract + 1.0
 	st._tick_modes(0.016)
 	ok_modes = ok_modes and st.attract and st._monitor.visible
 	var key := InputEventKey.new()
@@ -556,6 +560,35 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL sdf / morph")
+	# help overlay (tabs, search, Esc), HUD modes, settings-backed knobs, live OSC re-bind
+	var ok_help := true
+	st.open_help()
+	await get_tree().process_frame
+	ok_help = ok_help and st._help.visible and st._help.row_count() > 60
+	st._help.search("slit-scan")
+	ok_help = ok_help and st._help.row_count() == 1
+	st._help.search("")
+	st._help.select_tab("Verbs")
+	ok_help = ok_help and st._help.row_count() == Verbs.instances().size()
+	var esc := InputEventKey.new()
+	esc.pressed = true
+	esc.keycode = KEY_ESCAPE
+	st._unhandled_key_input(esc)
+	ok_help = ok_help and not st._help.visible and not menu.is_open()
+	st.set_hud_mode(1)
+	ok_help = ok_help and st._hud.get_parent().visible and not st._verb_panel.get_parent().visible and not st._hud.text.contains("\n")
+	st.set_hud_mode(2)
+	ok_help = ok_help and not st._hud.get_parent().visible
+	st.set_hud_mode(0)
+	ok_help = ok_help and st._hud.text.contains("\n") and st._verb_panel.get_parent().visible
+	var old_port: int = Osc.port
+	ok_help = ok_help and Osc.set_port(9137) and Osc.port == 9137 and Osc.set_port(old_port) and Osc.port == old_port
+	ok_help = ok_help and st.idle_attract >= 10.0 and st.autosave_interval >= 5.0 and Settings.get_value("syphon_name") != null
+	if ok_help:
+		print("PASS help overlay tabs + search + Esc, HUD full / compact / hidden, OSC port re-bind, settings-backed knobs")
+	else:
+		fails += 1
+		printerr("FAIL help / hud / settings")
 	# clock: internal beats drive AudioReact, the timeline quantises and waits for the bar, scenes lock
 	var ok_ck := true
 	Clock.start_internal(120.0)
@@ -784,7 +817,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "ref_stage", "ref_crt"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "ref_stage", "ref_crt", "help"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1266,6 +1299,13 @@ func _capture_all(dir: String) -> void:
 					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
 				current._ascii.set_mode(2)
 				await get_tree().create_timer(0.8).timeout
+			"help":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.open_help()
+				await get_tree().create_timer(0.3).timeout
 			"ref_stage", "ref_crt":
 				# Deterministic reference shots for tests/diff.gd: seeded RNG, fixed
 				# positions, no motion verbs, no feedback, HUD hidden.
@@ -1298,9 +1338,8 @@ func _capture_all(dir: String) -> void:
 				for i in grid.size():
 					Toolbox.select(i % mini(5, Toolbox.slots.size()))
 					current.spawn_at(grid[i])
-				current._help.visible = false
-				current._verb_panel.get_parent().visible = false
-				current._hud.get_parent().visible = false
+				current._help.close()
+				current.set_hud_mode(2)
 				await get_tree().create_timer(0.5).timeout
 			"stage":
 				show_screen(name)

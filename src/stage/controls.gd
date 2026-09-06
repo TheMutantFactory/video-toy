@@ -321,7 +321,8 @@ func _tick_timeline(delta: float) -> void:
 
 func toggle_midi_panel() -> void:
 	s._midi_panel.visible = not s._midi_panel.visible
-	s._help.visible = not s._midi_panel.visible          # the panel is wide; give it the room
+	if s._midi_panel.visible:
+		s._help.close()                                   # the panel is wide; give it the room
 	if s._midi_panel.visible:
 		s._midi_panel.refresh()
 	else:

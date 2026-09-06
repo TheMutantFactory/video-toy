@@ -24,11 +24,12 @@ The night-before and day-of checklist for Knobcon, a stream or a party. The keys
   as a cut on a beat, 4 s as a scene change.
 - **Controllers**: **;** opens the panel. Plug in, **Rescan**, click a row, move the knob. Or load
   the **Launchpad map** / **APC mini map** buttons (`docs/controllers/`), or send
-  `docs/controllers/video-toy.tosc` to a phone running TouchOSC (host = the toy's IP, port 9000).
+  `docs/controllers/video-toy.tosc` to a phone running TouchOSC (host = the toy's IP, port 9000
+  — Settings → OSC port changes it live and says whether the port bound).
   Test **panic** and **blackout** from the surface, not just the keyboard.
 - **Quality**: watch the HUD's `work` figure with the heaviest preset up. If it steps down on its
   own, that is the ladder doing its job; lock it with **Shift+F** (or `./run.sh play medium`) if
-  the flicker between levels shows.
+  the flicker between levels shows. Settings → Quality remembers the lock across launches.
 
 ## Setup at the venue (20 minutes)
 
@@ -37,14 +38,17 @@ The night-before and day-of checklist for Knobcon, a stream or a party. The keys
 2. Fullscreen: the window's green button or **⌃⌘F**. The picture is 1920×1080 scaled to the
    display; on a 4K TV at 30 Hz everything still runs at 30 fps and the HUD says so.
 3. **Video out**: HDMI straight to the projector, or **Shift+Z** to publish the picture (no HUD)
-   as the Syphon server "Video Toy" — in OBS add a *Syphon Client* source and pick it; Resolume
+   as the Syphon server "Video Toy" (Settings → Syphon server renames it) — in OBS add a
+   *Syphon Client* source and pick it; Resolume
    and VDMX list it under Syphon. The HUD shows `syphon on` while it publishes.
 4. **Audio in**: **A** until the HUD says `mic`; clap and watch the beat dot. No input device?
    **A** again for the built-in test groove, or a dropped mp3 / ogg / wav, or the internal clock
-   (**;** panel, BPM learnable) for beat-driven verbs without any audio.
+   (**;** panel, BPM learnable; Settings → Clock starts it at launch) for beat-driven verbs
+   without any audio.
 5. **Camera** (if used): **Z** once for a layer behind everything, twice for the chroma backdrop.
-6. Recall bank 1 preset 1 (**F1**), check the toolbox slots, press **H** to hide the HUD for the
-   audience feed, keep it on the operator screen if you have two.
+6. Recall bank 1 preset 1 (**F1**), check the toolbox slots, press **H** for the compact HUD
+   (again to hide it) on the audience feed; Settings → HUD at start remembers it. **?** opens
+   the key list with a search box if you blank on a key.
 7. Leave it in **attract mode** (**Shift+A**, or wait 60 s) while people wander in; any input
    ends it.
 
@@ -83,5 +87,5 @@ the problem. The toolbox, presets and bindings are on disk regardless.
 
 `~/Library/Application Support/Video Toy/`: `toolbox.json`, `presets/`, `banks/`, `midi.json`,
 `ledger.json`, `autosave.json`, `rigs/`, `shots/`, `clips/`, `credits.txt`,
-`noun_credentials.cfg`. `override.cfg` (the microphone switch) sits beside the executable in
+`noun_credentials.cfg`, `settings.cfg`. `override.cfg` (the microphone switch) sits beside the executable in
 `Video Toy.app/Contents/MacOS/`. The version is on the start screen and in Settings.

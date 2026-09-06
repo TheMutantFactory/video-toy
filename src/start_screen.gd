@@ -30,7 +30,7 @@ func _ready() -> void:
 		["Find Icons", "search", "search the Noun Project and fill the toolbox"],
 		["Play", "stage", "spawn icons, give them verbs, turn on feedback"],
 		["Scenes", "scenes", "shader backgrounds and oscillators"],
-		["Settings", "settings", "Noun Project API key"],
+		["Settings", "settings", "API key · quality lock · OSC port · Syphon · clock · microphone"],
 		["Attribution", "attribution", "every downloaded asset, with links"],
 		["Quit", "quit", ""],
 	]

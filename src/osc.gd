@@ -16,6 +16,7 @@ var _midi: Node
 
 
 func _ready() -> void:
+	port = int(Settings.get_value("osc_port"))
 	var env := OS.get_environment("VIDEO_TOY_OSC_PORT")
 	if env.is_valid_int():
 		port = int(env)
@@ -28,6 +29,13 @@ func start() -> void:
 	listening = _udp.bind(port, "0.0.0.0") == OK
 	if not listening:
 		push_warning("OSC: could not bind UDP port %d" % port)
+
+
+## Re-bind live (the Settings screen). False when the port is taken.
+func set_port(p: int) -> bool:
+	port = p
+	start()
+	return listening
 
 
 func stop() -> void:
