@@ -780,6 +780,8 @@ func _selftest() -> void:
 	ok_mo = ok_mo and AudioReact.beat.is_connected(st._on_beat_out)
 	st._on_beat_out()                                           # the beat handler itself (a real pulse would also fire learned actions)
 	await get_tree().create_timer(0.3).timeout                 # gates pass; the stage ticks note-offs
+	MidiOut.tick(Time.get_ticks_msec() + 5000)                  # a slow runner may not have ticked past every gate yet
+	await get_tree().create_timer(0.05).timeout
 	var mgot: Array = []
 	while mrx.get_available_packet_count() > 0:
 		mgot.append_array(Osc.parse(mrx.get_packet()))
