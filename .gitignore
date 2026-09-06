@@ -11,8 +11,11 @@
 secrets.cfg
 .env
 
-# Written by run.sh on machines without an audio input device
+# Written by run.sh on machines without an audio input device (or by Settings)
 override.cfg
+
+# Written by run.sh export (git hash + date), baked into the bundle
+build.json
 
 # Test probes and captured screenshots
 tests/probe_*

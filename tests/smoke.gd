@@ -824,6 +824,21 @@ func _init() -> void:
 	var ash = load("res://src/ascii.gdshader")
 	_check("ascii shader loads", ash is Shader and ash.get_code().contains("glyphs") and ash.get_code().contains("mode"))
 
+	# build stamp and the audio-input override
+	var bp2 := "user://_smoke_build.json"
+	var bf := FileAccess.open(bp2, FileAccess.WRITE)
+	bf.store_string('{"version":"1.2.3","hash":"abcdef1234567890","date":"2026-09-06"}')
+	bf.close()
+	_check("build stamp reads version, short hash and date", Build.describe(bp2) == "v1.2.3 abcdef12 2026-09-06" and Build.describe("user://_none.json").begins_with("v1.0.0 dev"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(bp2))
+	var op := "user://_smoke_override.cfg"
+	_check("no override = -1", AudioInputSetting.override_state(op) == -1)
+	AudioInputSetting.set_enabled(false, op)
+	var st0 := AudioInputSetting.override_state(op)
+	AudioInputSetting.set_enabled(true, op)
+	_check("audio input override writes enable_input=false and is removed when re-enabled", st0 == 0 and AudioInputSetting.override_state(op) == -1 and not FileAccess.file_exists(op))
+	_check("override path is res:// in the editor and beside the executable in a build", AudioInputSetting.override_path().ends_with("override.cfg"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

@@ -7,6 +7,7 @@
 # ./run.sh check      capture the deterministic reference shots and pixel-diff them (exit 1 on regression)
 # ./run.sh reference  re-record the reference shots (after an intentional visual change)
 # ./run.sh clip [s]   render the autosaved stage state offline to out/clip-*.avi (Movie Maker, 60 fps)
+# ./run.sh export     build out/Video Toy.app (macOS, ad-hoc signed, privacy strings) and self-test the bundle
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -45,6 +46,31 @@ case "${1:-play}" in
   import)  exec "$G" --headless --path . --import ;;
   templates) exec "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;
   diff)    exec "$G" --headless --path . -s tests/diff.gd ;;
+  export)  # macOS .app into out/, ad-hoc signed, with the privacy strings; then prove the bundle runs
+           printf '{"version":"1.0.0","hash":"%s","date":"%s"}\n' "$(git rev-parse --short=12 HEAD 2>/dev/null || echo nogit)" "$(date +%Y-%m-%d)" > build.json
+           mkdir -p out; rm -rf "out/Video Toy.app"
+           "$G" --headless --path . --export-release "macOS" "out/Video Toy.app" 2>&1 | grep -iE "error|warn|DONE" | grep -v "copy symlink" || true
+           app="out/Video Toy.app"
+           test -x "$app/Contents/MacOS/Video Toy" || { echo "export failed: no binary" >&2; exit 1; }
+           # Godot copies Syphon.framework with its symlinks resolved, which breaks the seal
+           # (macOS then SIGKILLs the app). Put a faithful copy back and re-sign ad hoc.
+           rm -rf "$app/Contents/Frameworks/Syphon.framework"
+           ditto addons/godot-syphon/bin/Syphon.framework "$app/Contents/Frameworks/Syphon.framework"
+           for f in "$app"/Contents/Frameworks/*.dylib "$app/Contents/Frameworks/Syphon.framework"; do
+             codesign --force --sign - "$f" 2>&1 | grep -v "replacing existing signature" || true
+           done
+           codesign --force --sign - --entitlements export/macos.entitlements "$app" 2>&1 | grep -v "replacing existing signature" || true
+           codesign --verify --deep --strict "$app" && echo "codesign: valid" || { echo "codesign: INVALID" >&2; exit 1; }
+           echo "plist: mic='$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$app/Contents/Info.plist" 2>/dev/null)'"
+           echo "plist: cam='$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$app/Contents/Info.plist" 2>/dev/null)'"
+           echo "frameworks: $(ls "$app/Contents/Frameworks" 2>/dev/null | tr '\n' ' ')"
+           codesign -dv "$app" 2>&1 | grep -E "Signature|Identifier" | head -2 || true
+           echo "size: $(du -sh "$app" | cut -f1)"
+           echo "selftest from the bundle:"
+           st="$(perl -e 'alarm 240; exec @ARGV' "$app/Contents/MacOS/Video Toy" --headless -- --selftest 2>&1 || true)"
+           echo "  PASS blocks: $(grep -c '^PASS' <<<"$st" || true)   errors: $(grep -cE 'ERROR|FAIL' <<<"$st" || true)"
+           grep -E "^FAIL|ERROR" <<<"$st" | head -3 || true
+           echo "$app" ;;
   clip)    # render the autosaved state (the last thing on stage) to an AVI: ./run.sh clip [seconds]
            audio_override; out="$(pwd)/out/clip-$(date +%Y%m%d-%H%M%S).avi"; mkdir -p out
            "$G" --path . --write-movie "$out" --fixed-fps 60 -- --clip "${2:-20}" >/dev/null 2>&1

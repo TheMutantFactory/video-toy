@@ -524,7 +524,8 @@ func _selftest() -> void:
 	var t_now: float = float(act._sdf_mat.get_shader_parameter("t")) if act._sdf_mat else -1.0
 	ok_sdf = ok_sdf and act._sdf_mat != null and act._sprite.texture == sdf_tex and act._morph_target == Toolbox.slots[1]["id"] and t_now > 0.05 and t_now < 0.9 and act._sdf_mult > 1.5
 	Toolbox.toggle_verb(0, "morph")
-	Toolbox.toggle_verb(0, "outline")
+	if not Toolbox.has_verb(0, "outline"):                # a killed run can leave it on disk
+		Toolbox.toggle_verb(0, "outline")
 	await get_tree().process_frame
 	await get_tree().process_frame
 	ok_sdf = ok_sdf and act._sdf_mat != null and float(act._sdf_mat.get_shader_parameter("outline")) > 0.0 and float(act._sdf_mat.get_shader_parameter("t")) == 0.0

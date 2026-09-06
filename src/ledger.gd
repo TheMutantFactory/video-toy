@@ -98,7 +98,7 @@ func credits_text(ids: Array = []) -> String:
 			noun.append(credit_line(e))
 		else:
 			local.append(credit_line(e))
-	var out: Array = ["Made with Video Toy (github.com/TheMutantFactory/video-toy)"]
+	var out: Array = ["Made with Video Toy %s (github.com/TheMutantFactory/video-toy)" % Build.describe()]
 	if not noun.is_empty():
 		out.append("")
 		out.append("Icons from The Noun Project (thenounproject.com):")

@@ -16,6 +16,21 @@ that shows the scene, and watch it recurse. Press **B** for 3D solids wearing th
 
 Needs Godot 4.7 (`GODOT=/path/to/godot` if it isn't on PATH or in /Applications).
 
+## The app
+
+`./run.sh export` builds `out/Video Toy.app` from `export_presets.cfg`: universal, ad-hoc
+signed (enough for your own machines; notarize before handing it to strangers), App Sandbox
+**off** (the clip render spawns a process, rig import uses a file dialog, Syphon and the OSC
+socket live outside it), with the microphone and camera usage strings macOS needs before it
+will show a permission prompt — an exported app without them never asks. The export also
+stamps `build.json` (git hash + date) into the bundle; the start screen, Settings and the
+credits text show it. The target then runs the bundle's own binary through the self-test.
+
+Settings has a **Microphone input** switch: on a machine with no audio input device the
+input setting silences all audio, and an exported app has no `run.sh` to write the override,
+so the switch writes `override.cfg` beside the executable (or into the project from the
+editor). It takes effect on the next launch.
+
 ## Modes (start screen)
 
 | Mode | What it does |

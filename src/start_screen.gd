@@ -90,6 +90,9 @@ func _ready() -> void:
 	var st := UI.label(status, 18, UI.DIM)
 	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(st)
+	var ver := UI.label(Build.describe() + "  ·  Godot " + Engine.get_version_info()["string"], 14, UI.DIM)
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(ver)
 
 	var bar := HotbarScript.new()
 	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
