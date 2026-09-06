@@ -3,4 +3,4 @@ extends Verb
 
 func _init() -> void:
 	id = "morph"; panel = 15; name = "Morph"; key = "⇧M"; shift = true
-	hint = "become the next icon in the toolbox, shape to shape (on the beat with audio)"
+	hint = "become the next icon, shape to shape (on the beat with audio)"

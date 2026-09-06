@@ -39,6 +39,9 @@ var _burst: CPUParticles2D
 var _last_beat := 0.0
 var _base_color := Color.WHITE
 var body: RigidBody2D                      # set while the Physics verb is on
+var voice_wanted := false                  # the Voice verb asks each frame
+var _voice: IconVoice
+var _detune := 1.0
 var _sound := ""                           # the slot's sound path, if any
 var _last_hit_ms := 0
 
@@ -168,6 +171,7 @@ func _process(delta: float) -> void:
 					rotation_set = true
 	if body and not verbs.has("physics"):
 		IconBody.detach(self)
+	_tick_voice(verbs)
 	if beat_hit and _sound != "" and verbs.has("sparkle"):
 		Sounds.play_once_this_frame(_sound)
 
@@ -220,6 +224,47 @@ func pinata() -> void:
 	_sprite.visible = false
 	_particles.emitting = false
 	get_tree().create_timer(1.3).timeout.connect(queue_free)
+
+
+# ---------------- voice (the Voice verb asks; the actor owns the node) ----------------
+func _tick_voice(verbs: Array) -> void:
+	var want := voice_wanted
+	voice_wanted = false
+	if want and _voice == null:
+		var i := Toolbox.index_of(slot_id)
+		var tex := IconMedia.sdf_for(_tex_path) if i >= 0 else null
+		if tex == null:
+			return
+		_voice = IconVoice.new()
+		_voice.table_a = IconVoice.table_for(_tex_path, tex.get_image())
+		_detune = randf_range(0.985, 1.015)
+		add_child(_voice)
+	elif not want and _voice != null:
+		_voice.queue_free()
+		_voice = null
+	if _voice == null:
+		return
+	var idx := Toolbox.index_of(slot_id)
+	var f := IconVoice.note_for(maxi(idx, 0)) * _detune
+	if verbs.has("spin"):
+		f *= pow(2.0, 0.25 * sin(_sprite.rotation))
+	_voice.freq = f
+	var a := 0.6
+	if verbs.has("pulse"):
+		a *= clampf(frame_scale / maxf(base_scale, 0.01), 0.2, 2.0)
+	if AudioReact.active():
+		a *= 1.0 + 0.5 * AudioReact.beat_env
+	_voice.amp = a
+	if verbs.has("morph") and _morph_target != "" and _morph_t > 0.0:
+		var j := Toolbox.index_of(_morph_target)
+		if j >= 0:
+			var tp := str(Toolbox.slots[j].get("svg_path", ""))
+			var tb := IconMedia.sdf_for(tp)
+			if tb:
+				_voice.table_b = IconVoice.table_for(tp, tb.get_image())
+				_voice.morph = _morph_t
+	else:
+		_voice.morph = 0.0
 
 
 # ---------------- physics (the Physics verb owns `body`) ----------------

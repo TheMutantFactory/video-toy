@@ -211,6 +211,17 @@ look from a known-good base: panic, a random palette, usually a scene, eight ico
 is empty, six evolve mutations, feedback more often than not. It is one undo step, so the guest
 who pressed it can take it back. Undo, redo and surprise are learnable actions.
 
+## Voice: the icon as an oscillator
+
+The **Voice** verb (**Ctrl+V**) makes the icon audible: its silhouette's radius around the
+centre, read off the distance field at 512 angles, is one cycle of the waveform — a star is a
+five-bump tone, a bolt a ragged buzz, a heart something in between (a circle, being flat, falls
+back to the field's ring, then a sine). Each icon is one oscillator through an
+`AudioStreamGenerator`, pitched by its slot on a pentatonic ladder from A2 with a little
+detune per copy, and quieter the more of them sing. **Morph** glides the timbre toward the
+next icon as the shape glides, **Pulse** is loudness, **Spin** bends the pitch a quarter octave,
+and the beat lifts everything. The shape you see is the wave you hear.
+
 ## Guest mode and the tour
 
 **Ctrl+U** (Settings → Guest mode for launch, the Esc menu, an action) is mouse-only play for

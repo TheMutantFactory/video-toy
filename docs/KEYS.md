@@ -35,15 +35,16 @@ The printable version is [key-card.png](key-card.png).
 | `Y` | Sparkle — spawn particles |
 | `U` | Rainbow — cycle the hue |
 | `I` | Swarm — chase the mouse |
-| `Shift+Q` | Flock — boids with the others from this slot; hold click to attract, right-click empty space to scatter |
+| `Shift+Q` | Flock — boids with its slot-mates; hold click attracts, right-click scatters |
 | `Shift+W` | Lorenz — ride the Lorenz butterfly |
 | `Shift+T` | Rössler — ride the Rössler spiral |
 | `Shift+Y` | Clifford — fly between points of the Clifford map |
 | `Shift+U` | de Jong — fly between points of the de Jong map |
-| `Shift+I` | Field — ride the curl-noise flow field (the same one the particles ride) |
-| `Shift+M` | Morph — become the next icon in the toolbox, shape to shape (on the beat with audio) |
+| `Shift+I` | Field — ride the curl-noise flow field the particles ride |
+| `Shift+M` | Morph — become the next icon, shape to shape (on the beat with audio) |
 | `Shift+J` | Outline — hollow the icon to a ring that follows its silhouette |
-| `Ctrl+P` | Physics — a rigid body with the icon's outline: falls, bounces, piles up; drag to throw (Ctrl+G gravity) |
+| `Ctrl+P` | Physics — a rigid body with the icon's outline: falls, piles up, drag to throw (Ctrl+G gravity) |
+| `Ctrl+V` | Voice — hear the outline as a waveform; Morph glides timbre, Pulse loudness, Spin pitch |
 
 ## Feedback and scenes
 

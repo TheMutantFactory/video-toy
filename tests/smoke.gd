@@ -733,11 +733,11 @@ func _init() -> void:
 
 	# verbs as files: discovered from res://verbs, ordered, group-exclusive; a foreign directory loads too
 	var vids: Array = Verbs.ids()
-	_check("seventeen verbs are discovered from res://verbs", vids.size() == 17 and vids.has("bounce") and vids.has("morph") and vids.has("dejong") and vids.has("physics"))
+	_check("eighteen verbs are discovered from res://verbs", vids.size() == 18 and vids.has("bounce") and vids.has("morph") and vids.has("dejong") and vids.has("physics") and vids.has("voice"))
 	var order_ok := vids.find("bounce") < vids.find("wander") and vids.find("wander") < vids.find("flock") and vids.find("swarm") < vids.find("orbit") and vids.find("lorenz") < vids.find("rossler")
 	_check("verbs are ordered by their motion order", order_ok)
 	var panel_ids: Array = Verbs.all().map(func(m): return m["id"])
-	_check("the panel keeps keyboard order", panel_ids.slice(0, 8) == ["wander", "orbit", "spin", "bounce", "pulse", "sparkle", "rainbow", "swarm"] and panel_ids[-2] == "outline" and panel_ids[-1] == "physics")
+	_check("the panel keeps keyboard order", panel_ids.slice(0, 8) == ["wander", "orbit", "spin", "bounce", "pulse", "sparkle", "rainbow", "swarm"] and panel_ids[-3] == "outline" and panel_ids[-2] == "physics" and panel_ids[-1] == "voice")
 	var act: Array = Verbs.active_for(["orbit", "rossler", "lorenz", "spin", "dejong"]).map(func(v): return v.id)
 	_check("active_for keeps order and runs one attractor only", act == ["lorenz", "orbit", "spin"])
 	_check("verb objects carry hooks", Verbs.instances()[0] is Verb and Verbs.get_verb("flock")["shift"] == true and Verbs.get_verb("bounce").has("hint"))
@@ -917,6 +917,34 @@ func _init() -> void:
 	_check("wheel: item positions land in their own sector", RadialMenu.pick(RadialMenu.item_pos(wc, 5, 9), wc, 9) == 5 and RadialMenu.pick(RadialMenu.item_pos(wc, 0, 17), wc, 17) == 0 and RadialMenu.pick(RadialMenu.item_pos(wc, 16, 17), wc, 17) == 16)
 	_check("tour: five captions with anchors inside the picture", Tour.STEPS.size() == 5 and Tour.STEPS.all(func(st): return str(st["text"]).length() > 40 and Rect2(0, 0, 1, 1).has_point(st["at"])))
 	_check("tour_seen defaults off", not Tour.seen("user://_smoke_no_settings.cfg"))
+
+	# icon voice: the silhouette's radius is the waveform
+	var star_img := Image.create(96, 96, false, Image.FORMAT_RGBA8)
+	for y in 96:
+		for x in 96:
+			var d := Vector2(x - 48, y - 48)
+			var rr := 18.0 + 22.0 * maxf(0.0, cos(5.0 * d.angle()))      # a five-pointed star
+			star_img.set_pixel(x, y, Color(1, 1, 1, 1.0 if d.length() < rr else 0.0))
+	var star_t := IconVoice.table_from_sdf(Sdf.from_alpha(star_img, 96), 256)
+	var peak := 0.0
+	var mean := 0.0
+	for v in star_t:
+		peak = maxf(peak, absf(v))
+		mean += v
+	var zc := IconVoice.zero_crossings(star_t)
+	_check("star: 256 samples, centred, five bumps (about ten zero crossings)", star_t.size() == 256 and absf(mean / 256.0) < 0.05 and peak > 0.7 and peak <= 0.91 and zc >= 8 and zc <= 12)
+	var circ_img := Image.create(96, 96, false, Image.FORMAT_RGBA8)
+	for y in 96:
+		for x in 96:
+			circ_img.set_pixel(x, y, Color(1, 1, 1, 1.0 if Vector2(x - 48, y - 48).length() < 30 else 0.0))
+	var circ_t := IconVoice.table_from_sdf(Sdf.from_alpha(circ_img, 96), 256)
+	var cpeak := 0.0
+	for v in circ_t:
+		cpeak = maxf(cpeak, absf(v))
+	_check("circle: flat profile falls back to a sine (two zero crossings)", circ_t.size() == 256 and cpeak > 0.5 and IconVoice.zero_crossings(circ_t) == 2)
+	_check("pentatonic pitches rise per slot from A2", is_equal_approx(IconVoice.note_for(0), 110.0) and IconVoice.note_for(1) > IconVoice.note_for(0) and is_equal_approx(IconVoice.note_for(5), 220.0) and IconVoice.note_for(9) == IconVoice.note_for(0))
+	var vv = Verbs.instances().filter(func(v): return v.id == "voice")
+	_check("voice verb: Ctrl+V, post-only", vv.size() == 1 and vv[0].ctrl and not vv[0].has_motion2d() and Verbs.by_key(KEY_V, false, true) == "voice")
 
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)

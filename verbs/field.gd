@@ -3,7 +3,7 @@ extends Verb
 
 func _init() -> void:
 	id = "field"; panel = 14; name = "Field"; key = "⇧I"; shift = true; order = 40; sets_rotation = true
-	hint = "ride the curl-noise flow field (the same one the particles ride)"
+	hint = "ride the curl-noise flow field the particles ride"
 
 func has_motion2d() -> bool: return true
 

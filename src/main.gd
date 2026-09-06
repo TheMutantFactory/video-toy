@@ -641,6 +641,34 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# voice: the verb gives the actor an oscillator fed from its distance field; pitched by slot
+	var ok_v := true
+	st.clear_actors()
+	await get_tree().process_frame
+	Toolbox.select(0)
+	if not Toolbox.has_verb(0, "voice"):
+		Toolbox.toggle_verb(0, "voice")
+	st.spawn_at(Vector2(600, 400))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var va = st.all_actors()[0]
+	ok_v = ok_v and va._voice != null and IconVoice.active == 1 and va._voice.table_a.size() == IconVoice.N and va._voice.playing() and absf(va._voice.freq - 110.0) < 3.0 and va._voice.amp > 0.0
+	Toolbox.select(1)
+	st.spawn_at(Vector2(800, 400))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_v = ok_v and IconVoice.active == 1 and st.all_actors().size() == 2               # slot 1 has no voice verb
+	Toolbox.toggle_verb(0, "voice")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok_v = ok_v and va._voice == null and IconVoice.active == 0
+	Toolbox.select(0)
+	st.clear_actors()
+	if ok_v:
+		print("PASS voice: an oscillator per icon from its distance field, pitched by slot, gone with the verb")
+	else:
+		fails += 1
+		printerr("FAIL voice")
 	# undo / redo over spawns, removes and clears (contents only); surprise is a full step
 	var ok_u := true
 	st.clear_actors()

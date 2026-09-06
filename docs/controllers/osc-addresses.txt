@@ -145,3 +145,4 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/verb_morph   Toggle verb: Morph
   /vt/action/verb_outline   Toggle verb: Outline
   /vt/action/verb_physics   Toggle verb: Physics
+  /vt/action/verb_voice   Toggle verb: Voice

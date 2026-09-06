@@ -4,7 +4,7 @@ extends Verb
 
 func _init() -> void:
 	id = "flock"; panel = 9; name = "Flock"; key = "⇧Q"; shift = true; order = 30; sets_rotation = true
-	hint = "boids with the others from this slot; hold click to attract, right-click empty space to scatter"
+	hint = "boids with its slot-mates; hold click attracts, right-click scatters"
 
 func has_motion2d() -> bool: return true
 func has_motion3d() -> bool: return true

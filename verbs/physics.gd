@@ -7,7 +7,7 @@ extends Verb
 
 func _init() -> void:
 	id = "physics"; panel = 17; name = "Physics"; key = "^P"; ctrl = true; exclusive = true; order = 0
-	hint = "a rigid body with the icon's outline: falls, bounces, piles up; drag to throw (Ctrl+G gravity)"
+	hint = "a rigid body with the icon's outline: falls, piles up, drag to throw (Ctrl+G gravity)"
 	sets_rotation = true
 
 func has_motion2d() -> bool: return true
