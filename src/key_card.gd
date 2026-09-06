@@ -7,7 +7,7 @@ const PAPER := Color(0.985, 0.98, 0.97)
 const INK := Color(0.1, 0.1, 0.14)
 const DIM := Color(0.42, 0.42, 0.5)
 const COLUMNS := 3
-const FONT := 19
+const FONT := 18
 const WRAP := 50                            # chars per line in a column, roughly
 
 
