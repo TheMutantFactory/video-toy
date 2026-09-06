@@ -23,6 +23,8 @@ const DEFAULTS := {
 	"osc_out_host": "127.0.0.1",
 	"osc_out_port": 9001,
 	"tour_seen": false,            # the first-run captions have been shown
+	"locks": [],                   # sections Surprise / evolve leave alone
+	"mutate_amount": 1.0,          # 0.25 nearby .. 1.0 everything
 }
 
 static var _cache: Dictionary = {}     # path -> Dictionary

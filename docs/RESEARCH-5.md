@@ -34,8 +34,9 @@ description of this toy. The gaps are where to go next.
 
 1. **Modulators into the learn table** — built: `~` per param row, seven shapes, depth, rate,
    centre from the knob, saved with the map.
-2. **Lock and mutate**: per-section locks (palette, feedback, fx, verbs, scene, layers,
-   camera) that Surprise and evolve respect; a "nearby" amount so mutation can be small.
+2. **Lock and mutate** — built: Ctrl+L panel with eight section locks that Surprise and evolve
+   respect, Ctrl+M / a param for the amount (one nearby nudge to six wild changes), persisted,
+   in the HUD, as actions.
 3. **Feedback routing**: per-layer "re-enters the loop" switches, a frame-delay tap (1..N
    frames), blur / sharpen and colour drift inside the loop, displacement by the scene or
    webcam.

@@ -64,6 +64,7 @@ static func groups() -> Array:
 			["Shift+E", "evolve: a mutation every 8 beats · Enter keeps · Shift+Enter discards"],
 			["Shift+A", "attract mode (automatic after 60 s idle; any input ends it)"],
 			["Ctrl+R", "surprise me: a random look from a known-good base (undo takes it back)"],
+			["Ctrl+L  Ctrl+M", "locks panel: pin palette / verbs / feedback / fx / glow / scene / layers / camera through Surprise and evolve · mutation amount nearby / everything"],
 			["Shift+R  Shift+P", "record controller gestures · loop them"],
 			["Shift+N", "particle field (right-click scatters)"],
 			["Ctrl+G", "gravity on / off for Physics icons"],

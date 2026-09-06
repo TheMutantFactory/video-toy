@@ -12,6 +12,10 @@ func _init(stage: Stage) -> void:
 
 func mutate() -> String:
 	var kinds: Array = ["verb", "verb", "palette", "fx", "feedback", "glow", "scene", "key", "slit", "layer", "camera"]
+	kinds = kinds.filter(func(k): return Locks.allowed(k, s.locks))
+	if kinds.is_empty():
+		return "everything is locked"
+	var amt: float = s.mutate_amount
 	match kinds[randi() % kinds.size()]:
 		"verb":
 			if Toolbox.slots.is_empty():
@@ -38,8 +42,8 @@ func mutate() -> String:
 			if not s.feedback or randf() < 0.3:
 				s._set_feedback(not s.feedback)
 				return "feedback " + ("on" if s.feedback else "off")
-			s.fb_rot = clampf(s.fb_rot + randf_range(-0.03, 0.03), -0.15, 0.15)
-			s.fb_zoom = clampf(s.fb_zoom + randf_range(-0.02, 0.02), 0.95, 1.12)
+			s.fb_rot = clampf(s.fb_rot + randf_range(-0.03, 0.03) * amt, -0.15, 0.15)
+			s.fb_zoom = clampf(s.fb_zoom + randf_range(-0.02, 0.02) * amt, 0.95, 1.12)
 			return "feedback twist %.2f zoom %.2f" % [s.fb_rot, s.fb_zoom]
 		"glow":
 			s._glow.cycle()
@@ -64,21 +68,25 @@ func mutate() -> String:
 			s._apply_layers()
 			return "layer %d %s" % [li + 1, s.BLENDS[s._layers[li]["blend"]]]
 		_:
-			s.cam_orbit = clampf(s.cam_orbit + randf_range(-0.3, 0.3), -1.0, 1.0)
-			s.cam_roll = clampf(s.cam_roll + randf_range(-0.2, 0.2), -1.0, 1.0)
+			s.cam_orbit = clampf(s.cam_orbit + randf_range(-0.3, 0.3) * amt, -1.0, 1.0)
+			s.cam_roll = clampf(s.cam_roll + randf_range(-0.2, 0.2) * amt, -1.0, 1.0)
 			return "camera orbit %.2f roll %.2f" % [s.cam_orbit, s.cam_roll]
 
 
 ## A random look from a known-good base: panic, a palette, usually a scene,
 ## icons on stage if there are none, then `mutations` evolve mutations.
-func surprise(mutations := 6) -> String:
+func surprise(mutations := -1) -> String:
+	if mutations < 0:
+		mutations = Locks.mutation_count(s.mutate_amount)
+	var keep: Dictionary = Locks.keep(s.snapshot(), s.locks)
 	s._history.push("surprise", true)
 	s._history.muted += 1
 	s.panic()
-	s.palette_index = randi() % Palettes.count()
-	s._apply_palette()
+	if not s.locks.has("palette"):
+		s.palette_index = randi() % Palettes.count()
+		s._apply_palette()
 	var ids: Array = Scenes.ids()
-	if not ids.is_empty() and randf() < 0.7:
+	if not s.locks.has("scene") and not ids.is_empty() and randf() < 0.7:
 		s.set_scene(str(ids[randi() % ids.size()]), 0.5)
 	if s.all_actors().is_empty() and not Toolbox.slots.is_empty():
 		for i in 8:
@@ -86,9 +94,12 @@ func surprise(mutations := 6) -> String:
 	var log: Array = []
 	for i in mutations:
 		log.append(mutate())
-	if randf() < 0.6 and not s.feedback:
+	if randf() < 0.6 and not s.feedback and not s.locks.has("feedback"):
 		s._set_feedback(true)
 		log.append("feedback on")
+	if not keep.is_empty():
+		s.restore(keep, 0.0)                               # the locked sections come back as they were
+		log.append("kept " + ", ".join(s.locks))
 	s._history.muted -= 1
 	s._steal_note = "surprise: " + ", ".join(log)
 	s._update_hud()

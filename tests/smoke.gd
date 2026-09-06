@@ -1019,6 +1019,14 @@ func _init() -> void:
 	var md_bogus := Modulator.from_dict({"shape": "nope", "rate": 99.0, "depth": 3.0})
 	_check("modulators round-trip through dictionaries and clamp bad values", md_back.shape == "sine" and is_equal_approx(md_back.depth, 0.5) and md_bogus.shape == "sine" and md_bogus.rate <= 20.0 and md_bogus.depth == 1.0 and Modulator.new().describe().begins_with("sine"))
 
+	# lock and mutate: pure rules
+	_check("locks: kinds map to sections and a locked section blocks its kinds", Locks.allowed("verb", ["palette"]) and not Locks.allowed("verb", ["verbs"]) and not Locks.allowed("key", ["fx"]) and not Locks.allowed("slit", ["fx"]) and Locks.allowed("camera", ["fx", "verbs"]) and not Locks.allowed("layer", ["layers"]))
+	var snap := {"palette": 3, "slots": {"a": {"verbs": ["spin"]}}, "selected": 1, "feedback": {"on": true}, "warp": {"amount": 0.2}, "fx": {"pixel": 2}, "glow": 2, "camera": {"orbit": 0.1}}
+	var kept := Locks.keep(snap, ["palette", "verbs", "feedback"])
+	_check("keep() extracts only the locked sections' snapshot keys", kept.keys().size() == 5 and kept["palette"] == 3 and kept.has("slots") and kept.has("selected") and kept.has("feedback") and kept.has("warp") and not kept.has("fx") and Locks.keep(snap, []).is_empty())
+	_check("mutation count scales from one to six and the amount cycles", Locks.mutation_count(0.0) == 1 and Locks.mutation_count(0.25) == 2 and Locks.mutation_count(0.5) == 4 and Locks.mutation_count(1.0) == 6 and Locks.next_amount(1.0) == 0.25 and Locks.next_amount(0.25) == 0.5 and Locks.next_amount(0.37) == 1.0)
+	_check("describe names locks and a nearby amount, nothing when default", Locks.describe(["palette", "fx"], 1.0) == "locks: palette, fx" and Locks.describe([], 0.5) == "nearby 0.50" and Locks.describe([], 1.0) == "")
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

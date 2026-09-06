@@ -641,6 +641,57 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# lock and mutate: locked sections survive surprise and evolve; the amount sets the count
+	var ok_lk := true
+	var locks_before: Array = st.locks.duplicate()
+	var amount_before: float = st.mutate_amount
+	st.clear_actors()
+	st.panic()
+	st.set_locks(["palette", "verbs"])
+	ok_lk = ok_lk and st.locks == ["palette", "verbs"] and Array(Settings.get_value("locks")) == ["palette", "verbs"] and st._hud.text.contains("locks: palette, verbs")
+	var pal_l: int = st.palette_index
+	var verbs_l: Array = Toolbox.slots.map(func(sl): return sl.get("verbs", []).duplicate())
+	var others_changed := false
+	for i in 4:
+		var before_l: Dictionary = st.snapshot()
+		var note_l: String = st.surprise()
+		await get_tree().process_frame
+		ok_lk = ok_lk and st.palette_index == pal_l and note_l.contains("kept palette, verbs")
+		for j in Toolbox.slots.size():
+			ok_lk = ok_lk and Toolbox.slots[j].get("verbs", []) == verbs_l[j]
+		var after_l: Dictionary = st.snapshot()
+		after_l.erase("palette")
+		before_l.erase("palette")
+		others_changed = others_changed or after_l.hash() != before_l.hash()
+	ok_lk = ok_lk and others_changed
+	st.set_locks(["palette", "verbs", "feedback", "fx", "glow", "scene", "layers"])
+	var only_camera := true
+	for i in 30:
+		var m_l: String = st.mutate()
+		only_camera = only_camera and m_l.begins_with("camera")
+	ok_lk = ok_lk and only_camera
+	st.set_locks(Locks.SECTIONS.duplicate())
+	ok_lk = ok_lk and st.mutate() == "everything is locked"
+	st.set_locks([])
+	st.set_mutate_amount(0.0)
+	ok_lk = ok_lk and Locks.mutation_count(st.mutate_amount) == 1 and st._hud.text.contains("nearby 0.00")
+	st.set_mutate_amount(Locks.next_amount(st.mutate_amount))
+	ok_lk = ok_lk and st.mutate_amount == 1.0
+	st.toggle_locks_panel()
+	ok_lk = ok_lk and st._locks_panel.visible and st._lock_checks.size() == Locks.SECTIONS.size()
+	st._lock_checks["glow"].button_pressed = true
+	ok_lk = ok_lk and st.locks == ["glow"]
+	st.toggle_locks_panel()
+	ok_lk = ok_lk and not st._locks_panel.visible
+	st.set_locks(locks_before)
+	st.set_mutate_amount(amount_before)
+	st.clear_actors()
+	st.panic()
+	if ok_lk:
+		print("PASS lock and mutate: locked palette and verbs ride through surprise, mutate skips locked kinds, amount sets the count, panel toggles locks")
+	else:
+		fails += 1
+		printerr("FAIL lock and mutate")
 	# modulators: a sine on feedback zoom moves the stage value every frame, persists with the map
 	var ok_md := true
 	var keep_path: String = MidiMap.path
@@ -1154,7 +1205,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1660,6 +1711,17 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"locks":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.set_locks(["palette", "verbs"])
+				current.set_mutate_amount(0.5)
+				current.toggle_locks_panel()
+				await get_tree().create_timer(0.4).timeout
+				current.set_locks([])
+				current.set_mutate_amount(1.0)
 			"wheel", "tour":
 				menu.close()
 				if current_name != "stage":

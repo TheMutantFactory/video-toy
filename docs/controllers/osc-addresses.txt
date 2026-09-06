@@ -3,6 +3,7 @@ Video Toy OSC (UDP 9000)
 Params (float 0..1):
   /vt/param/fb_zoom   Feedback zoom
   /vt/param/gravity   Gravity (Physics icons)
+  /vt/param/mutate_amount   Mutation amount (nearby .. everything)
   /vt/param/fb_twist   Feedback twist
   /vt/param/fb_fade   Feedback fade
   /vt/param/pixelate   Pixelate size
@@ -78,6 +79,15 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/surprise   Surprise me
   /vt/action/guest_toggle   Guest mode on / off
   /vt/action/osc_out_toggle   OSC / MIDI out on / off
+  /vt/action/lock_palette   Lock palette (Surprise / evolve keep it)
+  /vt/action/lock_verbs   Lock verbs (Surprise / evolve keep it)
+  /vt/action/lock_feedback   Lock feedback (Surprise / evolve keep it)
+  /vt/action/lock_fx   Lock fx (Surprise / evolve keep it)
+  /vt/action/lock_glow   Lock glow (Surprise / evolve keep it)
+  /vt/action/lock_scene   Lock scene (Surprise / evolve keep it)
+  /vt/action/lock_layers   Lock layers (Surprise / evolve keep it)
+  /vt/action/lock_camera   Lock camera (Surprise / evolve keep it)
+  /vt/action/locks_clear   Clear all locks
   /vt/action/play_sound   Play the selected slot's sound
   /vt/action/blackout   Blackout on/off
   /vt/action/quality   Quality lock: cycle

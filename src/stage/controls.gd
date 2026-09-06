@@ -29,6 +29,7 @@ func midi_params() -> Array:
 	return [
 		{"id": "fb_zoom", "label": "Feedback zoom", "set": func(v): s.fb_zoom = lerpf(0.90, 1.20, v)},
 		{"id": "gravity", "label": "Gravity (Physics icons)", "set": func(v): s.set_gravity(v * 2.0)},
+		{"id": "mutate_amount", "label": "Mutation amount (nearby .. everything)", "set": func(v): s.set_mutate_amount(v)},
 		{"id": "fb_twist", "label": "Feedback twist", "set": func(v): s.fb_rot = lerpf(-0.15, 0.15, v)},
 		{"id": "fb_fade", "label": "Feedback fade", "set": func(v): s.fb_fade = lerpf(0.5, 0.995, v)},
 		{"id": "pixelate", "label": "Pixelate size", "set": func(v):
@@ -178,6 +179,9 @@ func midi_actions() -> Array:
 	out.append({"id": "surprise", "label": "Surprise me", "do": func(): s.surprise()})
 	out.append({"id": "guest_toggle", "label": "Guest mode on / off", "do": func(): s.set_guest(not s.guest)})
 	out.append({"id": "osc_out_toggle", "label": "OSC / MIDI out on / off", "do": func(): s.set_osc_out(not MidiOut.enabled)})
+	for sec in Locks.SECTIONS:
+		out.append({"id": "lock_" + sec, "label": "Lock %s (Surprise / evolve keep it)" % sec, "do": func(): s.toggle_lock(sec)})
+	out.append({"id": "locks_clear", "label": "Clear all locks", "do": func(): s.set_locks([])})
 	out.append({"id": "play_sound", "label": "Play the selected slot's sound", "do": func(): s.play_slot_sound()})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": s.toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": s.cycle_quality_lock})

@@ -248,6 +248,15 @@ verbs, effects and presets, and the help key; click or Space advances, Esc skips
 comes back unless Settings → Tour or Esc menu → **Take the tour** asks for it. Captures and
 self-tests never see it.
 
+## Lock and mutate
+
+**Ctrl+L** opens the locks panel: pin **palette, verbs, feedback, fx, glow, scene, layers** or
+**camera**, and Surprise me and evolve vary everything else — the locked sections ride through a
+surprise untouched (it says "kept …" in the HUD). **Ctrl+M** cycles the **mutation amount**:
+nearby (one small mutation, small nudges) through to everything (six). Locks and the amount
+persist in settings, show in the HUD, and are learnable actions and a param, so a pad row can
+be "keep the colours, change the rest".
+
 ## Physics and sounds
 
 The **Physics** verb (**Ctrl+P**) turns the icon into a rigid body with its own outline

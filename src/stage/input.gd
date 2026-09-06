@@ -195,6 +195,12 @@ func key(ev: InputEvent) -> void:
 	if ev.ctrl_pressed and k == KEY_U:
 		s.set_guest(not s.guest)
 		return
+	if ev.ctrl_pressed and k == KEY_L:
+		s.toggle_locks_panel()
+		return
+	if ev.ctrl_pressed and k == KEY_M:
+		s.set_mutate_amount(Locks.next_amount(s.mutate_amount))
+		return
 	var verb := Verbs.by_key(k, ev.shift_pressed, ev.ctrl_pressed)
 	if verb != "" and not Toolbox.current().is_empty():
 		Toolbox.toggle_verb(Toolbox.selected, verb)

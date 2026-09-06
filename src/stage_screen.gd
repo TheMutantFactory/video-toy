@@ -138,6 +138,11 @@ var _m_layers                              # src/stage/layers.gd
 var _m_input                               # src/stage/input.gd
 var _history                               # src/stage/history.gd (undo / redo)
 var guest := false                         # mouse-only: right-click wheel, long-press removes, spawn on release
+var locks: Array = []                      # Locks.SECTIONS that Surprise / evolve keep
+var mutate_amount := 1.0                   # 0.25 nearby .. 1.0 everything
+var _locks_panel: PanelContainer
+var _lock_checks: Dictionary = {}
+var _amount_slider: HSlider
 var _wheel: RadialMenu
 var _tour: Tour
 var _press_pos := Vector2.ZERO             # guest mode: where the left button went down
@@ -427,6 +432,8 @@ func _ready() -> void:
 	_tour = Tour.new()
 	add_child(_tour)
 	set_guest(bool(Settings.get_value("guest_mode")))
+	locks = Array(Settings.get_value("locks")).filter(func(x): return Locks.SECTIONS.has(str(x))).map(func(x): return str(x))
+	mutate_amount = clampf(float(Settings.get_value("mutate_amount")), 0.0, 1.0)
 	MidiOut.configure(str(Settings.get_value("osc_out_host")), int(Settings.get_value("osc_out_port")), bool(Settings.get_value("osc_out")))
 	AudioReact.beat.connect(_on_beat_out)
 	if not Tour.suppress and not Tour.seen():
@@ -518,6 +525,86 @@ func set_guest(on: bool) -> void:
 		_wheel.close()
 	_steal_note = "guest: right-click = wheel, hold = remove" if on else "guest mode off"
 	_update_hud()
+
+
+# ---------------- lock and mutate ----------------
+func set_locks(sections: Array) -> void:
+	locks = []
+	for sec in sections:
+		if Locks.SECTIONS.has(str(sec)) and not locks.has(str(sec)):
+			locks.append(str(sec))
+	Settings.set_value("locks", locks)
+	_steal_note = ("locked: " + ", ".join(locks)) if not locks.is_empty() else "no locks: Surprise and evolve may change anything"
+	_refresh_locks_panel()
+	_update_hud()
+
+
+func toggle_lock(section: String) -> void:
+	var l := locks.duplicate()
+	if l.has(section):
+		l.erase(section)
+	else:
+		l.append(section)
+	set_locks(l)
+
+
+func set_mutate_amount(v: float) -> void:
+	mutate_amount = clampf(v, 0.0, 1.0)
+	Settings.set_value("mutate_amount", mutate_amount)
+	_steal_note = "mutation amount %.2f (%d mutation%s per surprise)" % [mutate_amount, Locks.mutation_count(mutate_amount), "" if Locks.mutation_count(mutate_amount) == 1 else "s"]
+	_refresh_locks_panel()
+	_update_hud()
+
+
+func toggle_locks_panel() -> void:
+	if _locks_panel == null:
+		_locks_panel = PanelContainer.new()
+		_locks_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		_locks_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_locks_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 6)
+		_locks_panel.add_child(col)
+		col.add_child(UI.label("Lock and mutate", 26, UI.ACCENT))
+		col.add_child(UI.label("Locked sections keep their look through Surprise me (Ctrl+R) and evolve (Shift+E); everything else varies.", 15, UI.DIM))
+		var grid := GridContainer.new()
+		grid.columns = 4
+		grid.add_theme_constant_override("h_separation", 14)
+		col.add_child(grid)
+		for sec in Locks.SECTIONS:
+			var cb := CheckButton.new()
+			cb.text = sec
+			cb.toggled.connect(func(_on: bool): toggle_lock(sec))
+			grid.add_child(cb)
+			_lock_checks[sec] = cb
+		col.add_child(UI.label("Amount: how far a mutation reaches — nearby keeps the idea, everything is a new one. Ctrl+M cycles it.", 15, UI.DIM))
+		_amount_slider = HSlider.new()
+		_amount_slider.min_value = 0.0
+		_amount_slider.max_value = 1.0
+		_amount_slider.step = 0.05
+		_amount_slider.custom_minimum_size = Vector2(420, 30)
+		_amount_slider.value_changed.connect(set_mutate_amount)
+		col.add_child(_amount_slider)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		row.add_child(UI.button("Clear locks", func(): set_locks([]), 130))
+		row.add_child(UI.button("Surprise me", surprise, 130))
+		row.add_child(UI.button("Close (Ctrl+L)", toggle_locks_panel, 150))
+		col.add_child(row)
+		add_child(_locks_panel)
+		_refresh_locks_panel()
+	else:
+		_locks_panel.visible = not _locks_panel.visible
+	if _locks_panel.visible:
+		move_child(_locks_panel, -1)
+
+
+func _refresh_locks_panel() -> void:
+	if _locks_panel == null:
+		return
+	for sec in _lock_checks:
+		_lock_checks[sec].set_pressed_no_signal(locks.has(sec))
+	_amount_slider.set_value_no_signal(mutate_amount)
 
 
 func open_wheel(screen_pos: Vector2, page := "slots") -> void:
@@ -1231,6 +1318,9 @@ func _update_hud() -> void:
 		line2 += "   ·   osc out → " + MidiOut.describe()
 	if not MidiMap.mods.is_empty():
 		line2 += "   ·   mods: %d" % MidiMap.mods.size()
+	var lk := Locks.describe(locks, mutate_amount)
+	if lk != "":
+		line2 += "   ·   " + lk
 	if hud_mode == 1:
 		_hud.text = "fps %d · work %.1f ms · q %s · slot %d: %s · palette: %s · feedback: %s · fx: %s · actors: %d%s" % [
 			Engine.get_frames_per_second(), quality.avg_ms, quality.describe(), Toolbox.selected + 1, name,

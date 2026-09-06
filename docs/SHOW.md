@@ -71,6 +71,8 @@ The night-before and day-of checklist for Knobcon, a stream or a party. The keys
   of fifths, a bolt is a buzz; add Morph and the timbre glides). Keep it to a slot or two.
 - **Ctrl+U** is guest mode: hand over the mouse, no keyboard needed (right-click is the wheel,
   a hold removes). Turn it off before you go back to the keyboard-and-pads flow.
+- **Ctrl+L** locks the sections you like (palette, verbs, feedback…) so surprise and evolve only
+  touch the rest; **Ctrl+M** makes them nudge instead of leap.
 - **Ctrl+R** is "surprise me" — the thing to hand a guest — and **Ctrl+Z** takes it, or any
   stray spawn / clear, back.
 - Let guests play: **Shift+2** hides player 2's cursor when nobody is on the keypad / gamepad.
