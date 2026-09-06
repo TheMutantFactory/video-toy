@@ -1719,9 +1719,7 @@ func _capture_all(dir: String) -> void:
 				current.set_locks(["palette", "verbs"])
 				current.set_mutate_amount(0.5)
 				current.toggle_locks_panel()
-				await get_tree().create_timer(0.4).timeout
-				current.set_locks([])
-				current.set_mutate_amount(1.0)
+				await get_tree().create_timer(0.4).timeout    # the shot is taken after this block; cleanup is at the end of the run
 			"wheel", "tour":
 				menu.close()
 				if current_name != "stage":
@@ -1851,5 +1849,7 @@ func _capture_all(dir: String) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(MidiMap.path))
 		MidiMap.path = MidiMap.PATH
 		MidiMap.load_from_disk()
+	Settings.set_value("locks", [])                          # the locks shot pins two sections
+	Settings.set_value("mutate_amount", 1.0)
 	Autosave.mark_clean_exit()
 	get_tree().quit()
