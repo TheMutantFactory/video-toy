@@ -246,6 +246,11 @@ var _dragging := false
 var _hud: Label
 var _help: HelpOverlay
 var hud_mode := 0                         # 0 full, 1 compact, 2 hidden
+var gravity := 1.0                        # for Physics icons (IconBody.gravity); 0 floats
+var _grab: Node2D                         # physics icon held by the mouse
+var _grab_prev := Vector2.ZERO
+var _grab_vel := Vector2.ZERO
+var _grab_ms := 0
 var idle_attract := IDLE_ATTRACT
 var autosave_interval := Autosave.INTERVAL
 var _verb_panel: VBoxContainer
@@ -400,6 +405,8 @@ func _ready() -> void:
 	_world.add_child(_monitor)
 
 	_build_hud()
+	Sounds.attach(self)
+	IconBody.gravity = gravity
 	Toolbox.selection_changed.connect(func(_i): _refresh_verbs())
 	Toolbox.changed.connect(_refresh_verbs)
 	_refresh_verbs()
@@ -426,6 +433,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	Sounds.detach()
 	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
 		get_window().files_dropped.disconnect(_on_files_dropped)
 	_controls.teardown()
@@ -1188,6 +1196,8 @@ func _update_hud() -> void:
 		line2 += "   ·   rd " + rd_describe()
 	if fb_warp > 0.0 or fb_drift != Vector2.ZERO:
 		line2 += "   ·   warp %.2f drift %d,%d" % [fb_warp, fb_drift.x, fb_drift.y]
+	if gravity != 1.0:
+		line2 += "   ·   gravity %s" % ("off" if gravity == 0.0 else "%.1f" % gravity)
 	if hud_mode == 1:
 		_hud.text = "fps %d · work %.1f ms · q %s · slot %d: %s · palette: %s · feedback: %s · fx: %s · actors: %d%s" % [
 			Engine.get_frames_per_second(), quality.avg_ms, quality.describe(), Toolbox.selected + 1, name,
@@ -1402,6 +1412,35 @@ func demo_spawn() -> void:
 		spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
 
 
+## The physics icon under the cursor, for grabbing.
+func _physics_actor_at(world_pos: Vector2) -> Node2D:
+	var best: Node2D = null
+	var best_d := 1e9
+	for a in all_actors():
+		if a.body == null:
+			continue
+		var d: float = a.position.distance_to(world_pos)
+		if d < a.hit_radius() and d < best_d:
+			best_d = d
+			best = a
+	return best
+
+
+func set_gravity(g: float) -> void:
+	gravity = clampf(g, 0.0, 2.0)
+	IconBody.gravity = gravity
+	_steal_note = "gravity %s" % ("off — Physics icons float" if gravity == 0.0 else "%.1f" % gravity)
+	_update_hud()
+
+
+func play_slot_sound() -> bool:
+	var cur := Toolbox.current()
+	var ok := Sounds.play(str(cur.get("sound_path", "")))
+	_steal_note = "sound: " + (str(cur.get("sound_path", "")).get_file() if ok else "none on slot %d — drop a .wav on it" % (Toolbox.selected + 1))
+	_update_hud()
+	return ok
+
+
 func _remove_nearest(world_pos: Vector2) -> void:
 	for r in all_rides():                          # a stroke under the cursor goes first
 		if r.near(world_pos):
@@ -1432,7 +1471,14 @@ func _gui_input(ev: InputEvent) -> void:
 		var wp := _world_pos(ev.position)
 		if ev.button_index == MOUSE_BUTTON_LEFT:
 			if ev.pressed:
-				if _monitor.visible and _monitor.contains(wp):
+				var held := _physics_actor_at(wp)
+				if held:
+					_grab = held
+					_grab_prev = wp
+					_grab_vel = Vector2.ZERO
+					_grab_ms = Time.get_ticks_msec()
+					held.grab(true)
+				elif _monitor.visible and _monitor.contains(wp):
 					_dragging = true
 					_drag_offset = _monitor.position - wp
 				elif draw_mode:
@@ -1440,11 +1486,26 @@ func _gui_input(ev: InputEvent) -> void:
 				elif not pinata_at(wp):
 					spawn_at(wp)
 			else:
+				if _grab:
+					if is_instance_valid(_grab):
+						_grab.release(_grab_vel)
+					_grab = null
 				_dragging = false
 				if not _stroke.is_empty():
 					end_stroke()
 		elif ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
 			_remove_nearest(wp)
+	elif ev is InputEventMouseMotion and _grab:
+		if not is_instance_valid(_grab):
+			_grab = null
+			return
+		var wp := _world_pos(ev.position)
+		var now := Time.get_ticks_msec()
+		var dt := maxf(0.004, (now - _grab_ms) / 1000.0)
+		_grab_vel = _grab_vel.lerp((wp - _grab_prev) / dt, 0.5)
+		_grab_prev = wp
+		_grab_ms = now
+		_grab.grab_to(wp)
 	elif ev is InputEventMouseMotion and _dragging:
 		_monitor.position = _world_pos(ev.position) + _drag_offset
 	elif ev is InputEventMouseMotion and not _stroke.is_empty():
@@ -1519,7 +1580,13 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 				fb_warp = 0.0
 				fb_drift = Vector2.ZERO
 				fb_stretch = Vector2.ONE
-	var verb := Verbs.by_key(k, ev.shift_pressed)
+	if ev.ctrl_pressed and k == KEY_G:
+		set_gravity(0.0 if gravity > 0.0 else 1.0)
+		return
+	if ev.ctrl_pressed and k == KEY_S:
+		play_slot_sound()
+		return
+	var verb := Verbs.by_key(k, ev.shift_pressed, ev.ctrl_pressed)
 	if verb != "" and not Toolbox.current().is_empty():
 		Toolbox.toggle_verb(Toolbox.selected, verb)
 		return

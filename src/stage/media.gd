@@ -268,7 +268,15 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 				add_raster(f)
 			return
 		if ext in ["mp3", "ogg", "wav"]:
-			AudioReact.load_file(f)
+			var si: int = s._hotbar.slot_at(s.get_viewport().get_mouse_position())
+			if si >= 0 and si < Toolbox.slots.size():
+				if Toolbox.set_slot_sound(si, f):
+					Sounds.play(str(Toolbox.slots[si]["sound_path"]))
+					s._steal_note = "slot %d sounds like %s (spawn, beat with Sparkle, pinata, collisions)" % [si + 1, f.get_file()]
+				else:
+					s._steal_note = "could not copy that sound"
+			else:
+				AudioReact.load_file(f)
 			s._update_hud()
 			return
 		if ext == "svg":

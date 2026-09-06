@@ -13,7 +13,7 @@ static func groups() -> Array:
 	inst.sort_custom(func(a, b): return a.panel < b.panel)
 	for v in inst:
 		var hint: String = v.hint if v.hint != "" else v.name.to_lower()
-		verbs.append([v.key.replace("⇧", "Shift+"), "%s — %s" % [v.name, hint]])
+		verbs.append([v.key.replace("⇧", "Shift+").replace("^", "Ctrl+"), "%s — %s" % [v.name, hint]])
 	return [
 		{"title": "Basics", "tab": "Basics", "rows": [
 			["click", "spawn the selected icon at the mouse"],
@@ -27,6 +27,8 @@ static func groups() -> Array:
 			["?", "this key list, with tabs and a search box (Shift+/)"],
 			["Esc / ☰", "menu: panic, blackout, attribution, rigs, clip, settings"],
 			[DROPS, "raster slot (Shift: chroma backdrop) / icon / font for words / word list / video slot / import rig"],
+			["drop .wav .mp3 .ogg on a slot", "its sound: spawn, beat (with Sparkle), pinata, collisions"],
+			["drag a Physics icon", "throw it"],
 		]},
 		{"title": "Verbs (toggle on the selected slot)", "tab": "Verbs", "rows": verbs},
 		{"title": "Feedback and scenes", "tab": "Feedback", "rows": [
@@ -61,6 +63,8 @@ static func groups() -> Array:
 			["Shift+A", "attract mode (automatic after 60 s idle; any input ends it)"],
 			["Shift+R  Shift+P", "record controller gestures · loop them"],
 			["Shift+N", "particle field (right-click scatters)"],
+			["Ctrl+G", "gravity on / off for Physics icons"],
+			["Ctrl+S", "play the selected slot's sound"],
 			["Shift+O", "reaction-diffusion presets"],
 			["click a Sparkle icon", "pinata: it bursts into confetti of itself"],
 		]},

@@ -28,6 +28,7 @@ func _tick_clock() -> void:
 func midi_params() -> Array:
 	return [
 		{"id": "fb_zoom", "label": "Feedback zoom", "set": func(v): s.fb_zoom = lerpf(0.90, 1.20, v)},
+		{"id": "gravity", "label": "Gravity (Physics icons)", "set": func(v): s.set_gravity(v * 2.0)},
 		{"id": "fb_twist", "label": "Feedback twist", "set": func(v): s.fb_rot = lerpf(-0.15, 0.15, v)},
 		{"id": "fb_fade", "label": "Feedback fade", "set": func(v): s.fb_fade = lerpf(0.5, 0.995, v)},
 		{"id": "pixelate", "label": "Pixelate size", "set": func(v):
@@ -171,6 +172,8 @@ func midi_actions() -> Array:
 		s._update_hud()})
 	out.append({"id": "render_clip", "label": "Render a 20 s clip (offline)", "do": func(): s.get_parent().render_clip(20.0)})
 	out.append({"id": "panic", "label": "PANIC: known-good look", "do": s.panic})
+	out.append({"id": "gravity_toggle", "label": "Gravity on / off", "do": func(): s.set_gravity(0.0 if s.gravity > 0.0 else 1.0)})
+	out.append({"id": "play_sound", "label": "Play the selected slot's sound", "do": func(): s.play_slot_sound()})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": s.toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": s.cycle_quality_lock})
 	out.append({"id": "particles", "label": "Particle field on/off", "do": func(): s.set_particles(not s.particles_on)})

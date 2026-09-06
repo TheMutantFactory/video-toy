@@ -24,7 +24,7 @@ static func manifest(root := "user://") -> Array:
 			for sl in data["slots"]:
 				if not (sl is Dictionary):
 					continue
-				var paths: Array = [str(sl.get("svg_path", ""))] + Array(sl.get("word_paths", []))
+				var paths: Array = [str(sl.get("svg_path", "")), str(sl.get("sound_path", ""))] + Array(sl.get("word_paths", []))
 				for p in paths:
 					var ps := str(p)
 					if ps.begins_with("user://"):

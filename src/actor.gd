@@ -38,6 +38,9 @@ var _particles: CPUParticles2D
 var _burst: CPUParticles2D
 var _last_beat := 0.0
 var _base_color := Color.WHITE
+var body: RigidBody2D                      # set while the Physics verb is on
+var _sound := ""                           # the slot's sound path, if any
+var _last_hit_ms := 0
 
 
 func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
@@ -72,6 +75,9 @@ func setup(slot: Dictionary, pos: Vector2, pal: int, area: Rect2) -> void:
 	add_child(_particles)
 	_burst = _make_emitter(_sprite.texture, 28, 1.1, true)      # on the beat
 	add_child(_burst)
+	_sound = str(slot.get("sound_path", ""))
+	if _sound != "":
+		Sounds.play(_sound, randf_range(0.95, 1.05))
 
 
 func _make_emitter(tex: Texture2D, amount: int, life: float, one_shot: bool) -> CPUParticles2D:
@@ -152,13 +158,18 @@ func _process(delta: float) -> void:
 	moved = false
 	var active := Verbs.active_for(verbs)
 	var rotation_set := false
+	var excl: Array = active.filter(func(v): return v.exclusive)
 	if not riding:
-		for v in active:
+		for v in (excl if not excl.is_empty() else active):
 			if v.has_motion2d():
 				if v.move2d(self, delta):
 					moved = true
 				if v.sets_rotation:
 					rotation_set = true
+	if body and not verbs.has("physics"):
+		IconBody.detach(self)
+	if beat_hit and _sound != "" and verbs.has("sparkle"):
+		Sounds.play_once_this_frame(_sound)
 
 	# defaults the post hooks may override
 	frame_scale = base_scale
@@ -182,6 +193,7 @@ func _follow_slot_image() -> void:
 	var i := Toolbox.index_of(slot_id)
 	if i < 0:
 		return
+	_sound = str(Toolbox.slots[i].get("sound_path", ""))
 	var pth := str(Toolbox.slots[i].get("svg_path", ""))
 	if pth == _tex_path:
 		return
@@ -202,9 +214,57 @@ func pinata() -> void:
 	_dying = true
 	_burst.amount = 60
 	_burst.restart()
+	if _sound != "":
+		Sounds.play(_sound, 0.7)
+	IconBody.detach(self)
 	_sprite.visible = false
 	_particles.emitting = false
 	get_tree().create_timer(1.3).timeout.connect(queue_free)
+
+
+# ---------------- physics (the Physics verb owns `body`) ----------------
+func _on_body_entered(other: Node) -> void:
+	if body == null:
+		return
+	var speed: float = body.linear_velocity.length()
+	if other is RigidBody2D:
+		speed = maxf(speed, (body.linear_velocity - other.linear_velocity).length())
+	if speed < 40.0:
+		return
+	IconBody.collisions += 1
+	var now := Time.get_ticks_msec()
+	if now - _last_hit_ms < 120:
+		return
+	_last_hit_ms = now
+	_burst.amount = 12
+	_burst.restart()
+	if _sound != "":
+		Sounds.play(_sound, randf_range(0.9, 1.1), lerpf(-18.0, 0.0, clampf(speed / 700.0, 0.0, 1.0)))
+
+
+## Held by the mouse: kinematic, follows the cursor; released with a fling.
+func grab(on: bool) -> void:
+	if body == null:
+		return
+	body.freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
+	body.freeze = on
+
+
+func grab_to(p: Vector2) -> void:
+	if body:
+		body.global_position = p
+	position = p
+
+
+func release(fling: Vector2) -> void:
+	if body == null:
+		return
+	body.freeze = false
+	body.linear_velocity = fling.limit_length(2500.0)
+
+
+func hit_radius() -> float:
+	return (_sprite.texture.get_size().x * _sprite.scale.x * 0.5) if _sprite.texture else 40.0
 
 
 # ---------------- morph / outline (signed distance fields) ----------------

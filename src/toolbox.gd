@@ -276,6 +276,30 @@ func add_video(src_path: String) -> int:
 
 
 ## Point a slot at a new image (live words, cycling lists) without touching disk.
+const SOUND_DIR := "user://sounds"
+
+
+## A sound for a slot (copied into user://sounds); "" clears it.
+func set_slot_sound(index: int, src_path: String) -> bool:
+	if index < 0 or index >= slots.size():
+		return false
+	if src_path == "":
+		slots[index].erase("sound_path")
+	else:
+		var ext := src_path.get_extension().to_lower()
+		if not ext in ["wav", "mp3", "ogg"]:
+			return false
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SOUND_DIR))
+		var dst := "%s/%s.%s" % [SOUND_DIR, slots[index]["id"], ext]
+		if DirAccess.copy_absolute(src_path, ProjectSettings.globalize_path(dst)) != OK:
+			return false
+		Sounds.forget(dst)
+		slots[index]["sound_path"] = dst
+	save_to_disk()
+	changed.emit()
+	return true
+
+
 func set_slot_path(index: int, path: String, persist := false) -> void:
 	if index < 0 or index >= slots.size():
 		return

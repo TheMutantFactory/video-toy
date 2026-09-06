@@ -35,6 +35,7 @@ func snapshot() -> Dictionary:
 		"active_layer": s.active_layer,
 		"particles": {"on": s.particles_on, "flow": s.particles_flow, "attract": s.particles_attract},
 		"rd": {"preset": s.rd_preset, "feed": s.rd_feed, "kill": s.rd_kill},
+		"physics": {"gravity": s.gravity},
 	}
 
 
@@ -133,6 +134,9 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 		var pon := bool(pt.get("on", s.particles_on))
 		if pon != s.particles_on:
 			s.set_particles(pon)
+	var ph: Dictionary = d.get("physics", {})
+	if not ph.is_empty() and not is_equal_approx(float(ph.get("gravity", s.gravity)), s.gravity):
+		s.set_gravity(float(ph.get("gravity", s.gravity)))
 	var rdd: Dictionary = d.get("rd", {})
 	if not rdd.is_empty():
 		var rp := int(rdd.get("preset", s.rd_preset))

@@ -68,10 +68,10 @@ static func active_for(active_ids: Array) -> Array:
 	return out
 
 
-static func by_key(keycode: int, shift := false) -> String:
+static func by_key(keycode: int, shift := false, ctrl := false) -> String:
 	var nm := OS.get_keycode_string(keycode).to_upper()
 	for v in instances():
-		if nm == v.key.trim_prefix("⇧") and shift == v.shift:
+		if nm == v.key.trim_prefix("⇧").trim_prefix("^") and shift == v.shift and ctrl == v.ctrl:
 			return v.id
 	return ""
 

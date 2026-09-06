@@ -733,11 +733,11 @@ func _init() -> void:
 
 	# verbs as files: discovered from res://verbs, ordered, group-exclusive; a foreign directory loads too
 	var vids: Array = Verbs.ids()
-	_check("sixteen verbs are discovered from res://verbs", vids.size() == 16 and vids.has("bounce") and vids.has("morph") and vids.has("dejong"))
+	_check("seventeen verbs are discovered from res://verbs", vids.size() == 17 and vids.has("bounce") and vids.has("morph") and vids.has("dejong") and vids.has("physics"))
 	var order_ok := vids.find("bounce") < vids.find("wander") and vids.find("wander") < vids.find("flock") and vids.find("swarm") < vids.find("orbit") and vids.find("lorenz") < vids.find("rossler")
 	_check("verbs are ordered by their motion order", order_ok)
 	var panel_ids: Array = Verbs.all().map(func(m): return m["id"])
-	_check("the panel keeps keyboard order", panel_ids.slice(0, 8) == ["wander", "orbit", "spin", "bounce", "pulse", "sparkle", "rainbow", "swarm"] and panel_ids[-1] == "outline")
+	_check("the panel keeps keyboard order", panel_ids.slice(0, 8) == ["wander", "orbit", "spin", "bounce", "pulse", "sparkle", "rainbow", "swarm"] and panel_ids[-2] == "outline" and panel_ids[-1] == "physics")
 	var act: Array = Verbs.active_for(["orbit", "rossler", "lorenz", "spin", "dejong"]).map(func(v): return v.id)
 	_check("active_for keeps order and runs one attractor only", act == ["lorenz", "orbit", "spin"])
 	_check("verb objects carry hooks", Verbs.instances()[0] is Verb and Verbs.get_verb("flock")["shift"] == true and Verbs.get_verb("bounce").has("hint"))
@@ -847,7 +847,7 @@ func _init() -> void:
 			card_keys.append(r[0])
 	var all_verbs := true
 	for v in Verbs.instances():
-		all_verbs = all_verbs and card_keys.has(v.key.replace("⇧", "Shift+"))
+		all_verbs = all_verbs and card_keys.has(v.key.replace("⇧", "Shift+").replace("^", "Ctrl+"))
 	_check("key groups cover every verb, panic, blackout and the menu", kg.size() >= 8 and all_verbs and card_keys.has("Shift+Esc") and card_keys.has("Shift+H") and card_keys.has("Esc / ☰"))
 	_check("help text and markdown come from the same rows", Keys.help_text().contains("Shift+Esc") and Keys.markdown().begins_with("# Video Toy keys") and Keys.markdown().count("\n| `") == card_keys.size())
 	_check("docs/KEYS.md is up to date (./run.sh keycard)", FileAccess.get_file_as_string("res://docs/KEYS.md") == Keys.markdown())
@@ -872,6 +872,25 @@ func _init() -> void:
 	var f4 := HelpOverlay.filter(Keys.groups(), "Show", "blackout")
 	_check("help filter: every group has a tab; query, tab, tab+query, no match", tabs_ok and f1.size() == 1 and f1[0]["rows"].size() == 1 and f2.size() == 1 and f2[0]["rows"].size() == Verbs.instances().size() and f3.is_empty() and f4.size() == 1 and f4[0]["rows"].size() == 1)
 	_check("image diff thresholds come from settings", is_equal_approx(float(Settings.get_value("diff_mean", sp)), 0.035) and is_equal_approx(float(Settings.get_value("diff_block", sp)), 0.45))
+
+	# physics polygons from alpha, verb key lookup with Ctrl, exclusive flag, test wav
+	var disc2 := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	for y in 64:
+		for x in 64:
+			disc2.set_pixel(x, y, Color(1, 1, 1, 1.0 if Vector2(x - 32, y - 32).length() < 28 else 0.0))
+	var polys: Array = IconBody.polygons_for(ImageTexture.create_from_image(disc2), 0.5)
+	var far2 := 0.0
+	for poly_pt in polys[0]:
+		far2 = maxf(far2, Vector2(poly_pt).length())
+	_check("icon body polygons come from the alpha, scaled", polys.size() >= 1 and polys[0].size() >= 8 and far2 > 10.0 and far2 < 20.0)
+	_check("polygons for a null texture fall back to a box", IconBody.polygons_for(null, 1.0)[0].size() == 4)
+	var pv = Verbs.instances().filter(func(v): return v.id == "physics")
+	_check("physics verb: Ctrl+P, exclusive, order 0, rotation", pv.size() == 1 and pv[0].ctrl and pv[0].exclusive and pv[0].order == 0 and pv[0].sets_rotation and Verbs.by_key(KEY_P, false, true) == "physics" and Verbs.by_key(KEY_P, false, false) == "")
+	var twav := "user://_smoke_tone.wav"
+	_check("test wav writes and loads", Sounds.make_test_wav(twav) and Sounds.load_stream(twav) is AudioStreamWAV and Sounds.load_stream(twav).get_length() > 0.1)
+	_check("no host: play is a no-op", not Sounds.play(twav))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(twav))
+	_check("key card names gravity and slot sounds", Keys.markdown().contains("Ctrl+G") and Keys.markdown().contains("Ctrl+P") and Keys.markdown().contains("drop .wav"))
 
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)

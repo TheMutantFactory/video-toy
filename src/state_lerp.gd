@@ -12,6 +12,7 @@ const CONTINUOUS := {
 	"rd": ["feed", "kill"],
 	"monitor": ["x", "y"],
 	"fx": ["key_threshold"],
+	"physics": ["gravity"],
 }
 
 

@@ -560,6 +560,69 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL sdf / morph")
+	# physics: bodies from the icon alpha fall onto the floor, pile, count collisions, float
+	# without gravity, get thrown; the verb's removal frees the body. Sounds: a wav on a slot
+	# plays on spawn and by hand, the hotbar marks it, and the tile hit test finds the slot.
+	var ok_ph := true
+	var ph_bad: Array = []
+	var ph_chk := func(label: String, ok: bool):
+		if not ok:
+			ph_bad.append(label)
+	st.clear_actors()
+	Toolbox.select(0)
+	if not Toolbox.has_verb(0, "physics"):
+		Toolbox.toggle_verb(0, "physics")
+	st.set_gravity(1.0)
+	for i in 3:
+		st.spawn_at(Vector2(900.0 + i * 12.0, 150.0 + i * 100.0))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var pa = st.all_actors()[0]
+	ph_chk.call("1 pa.body != null and pa.body.get_child_co", pa.body != null and pa.body.get_child_count() >= 1 and pa.get_parent().get_parent().has_node("IconWalls"))
+	var y0: float = pa.position.y
+	await get_tree().create_timer(1.5).timeout
+	ph_chk.call("2 pa.position.y > y0 + 100.0 and pa.positi", pa.position.y > y0 + 100.0 and pa.position.y < st.WORLD.y + 1.0)
+	ph_chk.call("3 IconBody.collisions > 0", IconBody.collisions > 0)
+	st.set_gravity(0.0)
+	await get_tree().process_frame
+	await get_tree().process_frame                       # the verb copies gravity in its _process
+	ph_chk.call("4 pa.body.gravity_scale == 0.0 and st.snap", pa.body.gravity_scale == 0.0 and st.snapshot()["physics"]["gravity"] == 0.0)
+	pa.grab(true)
+	pa.grab_to(Vector2(500, 500))
+	pa.release(Vector2(900, 0))
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	ph_chk.call("5 pa.position.distance_to(Vector2(500, 500", pa.position.distance_to(Vector2(500, 500)) < 80.0 and pa.body.linear_velocity.x > 500.0)
+	ph_chk.call("6 st._physics_actor_at(pa.position) == pa", st._physics_actor_at(pa.position) == pa)
+	Toolbox.toggle_verb(0, "physics")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ph_chk.call("7 pa.body == null", pa.body == null)
+	st.set_gravity(1.0)
+	var wav := ProjectSettings.globalize_path("user://_selftest_tone.wav")
+	ph_chk.call("8 Sounds.make_test_wav(wav) and Toolbox.se", Sounds.make_test_wav(wav) and Toolbox.set_slot_sound(0, wav))
+	var sp := str(Toolbox.slots[0].get("sound_path", ""))
+	var played0: int = Sounds.played
+	ph_chk.call("9 sp.ends_with('.wav') and st.play_slot_so", sp.ends_with(".wav") and st.play_slot_sound() and Sounds.last_played == sp and Sounds.played == played0 + 1)
+	st.spawn_at(Vector2(700, 300))
+	ph_chk.call("10 Sounds.played == played0 + 2            ", Sounds.played == played0 + 2)
+	ph_chk.call("11 Sounds.play_once_this_frame(sp) and not ", Sounds.play_once_this_frame(sp) and not Sounds.play_once_this_frame(sp))
+	await get_tree().process_frame
+	var tile: Control = st._hotbar._tiles[0]
+	ph_chk.call("12 st._hotbar.slot_at(tile.get_global_rect(", st._hotbar.slot_at(tile.get_global_rect().get_center()) == 0 and st._hotbar.slot_at(Vector2(-50, -50)) == -1 and tile.get_child(2).visible)
+	Toolbox.set_slot_sound(0, "")
+	ph_chk.call("13 not Toolbox.slots[0].has('sound_path')", not Toolbox.slots[0].has("sound_path"))
+	DirAccess.remove_absolute(wav)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(sp))
+	st.clear_actors()
+	ok_ph = ph_bad.is_empty()
+	if not ok_ph:
+		printerr("physics / sounds sub-checks failed: ", ph_bad)
+	if ok_ph:
+		print("PASS physics bodies fall, pile, collide, float, throw and detach; slot sounds play on spawn / by hand, once per frame, and the hotbar marks them")
+	else:
+		fails += 1
+		printerr("FAIL physics / sounds")
 	# help overlay (tabs, search, Esc), HUD modes, settings-backed knobs, live OSC re-bind
 	var ok_help := true
 	st.open_help()
@@ -817,7 +880,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "ref_stage", "ref_crt", "help"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1306,6 +1369,23 @@ func _capture_all(dir: String) -> void:
 					await get_tree().create_timer(0.3).timeout
 				current.open_help()
 				await get_tree().create_timer(0.3).timeout
+			"physics":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.clear_actors()
+				current.set_gravity(1.0)
+				for i in Toolbox.slots.size():
+					if not Toolbox.has_verb(i, "physics"):
+						Toolbox.toggle_verb(i, "physics")
+				for i in 18:
+					Toolbox.select(i % Toolbox.slots.size())
+					current.spawn_at(Vector2(500 + (i % 6) * 180, 80 + (i / 6) * 160))
+				await get_tree().create_timer(2.5).timeout
+				for i in Toolbox.slots.size():
+					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
+				Toolbox.select(0)
 			"ref_stage", "ref_crt":
 				# Deterministic reference shots for tests/diff.gd: seeded RNG, fixed
 				# positions, no motion verbs, no feedback, HUD hidden.

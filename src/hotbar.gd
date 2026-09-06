@@ -25,6 +25,10 @@ func _ready() -> void:
 		var num := UI.label(str(i + 1), 14, UI.DIM)
 		num.position = Vector2(6, 2)
 		p.add_child(num)
+		var note := UI.label("♪", 16, UI.ACCENT)          # the slot has a sound
+		note.position = Vector2(SLOT - 22, 0)
+		note.visible = false
+		p.add_child(note)
 		add_child(p)
 		_tiles.append(p)
 	Toolbox.changed.connect(refresh)
@@ -47,9 +51,19 @@ func refresh() -> void:
 			tex.texture = IconMedia.texture_for(str(slot.get("svg_path", "")))
 			tex.modulate = Color.WHITE if Toolbox.is_raster_slot(slot) else Palettes.color(palette_index, int(slot.get("color_index", i)))
 			p.tooltip_text = "%s\n%s" % [slot.get("term", ""), slot.get("attribution", "")]
+			p.get_child(2).visible = str(slot.get("sound_path", "")) != ""
 		else:
 			tex.texture = null
 			p.tooltip_text = ""
+			p.get_child(2).visible = false
+
+
+## Which slot tile is under a global (screen) position, or -1.
+func slot_at(global_pos: Vector2) -> int:
+	for i in _tiles.size():
+		if _tiles[i].get_global_rect().has_point(global_pos):
+			return i
+	return -1
 
 
 func _on_slot_input(ev: InputEvent, i: int) -> void:

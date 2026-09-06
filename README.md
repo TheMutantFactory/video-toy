@@ -200,6 +200,23 @@ the beat in the bar.
 - **Pinata**: click an icon that has Sparkle on and it bursts into confetti of itself; the
   learnable *pinata* action does it to a random one.
 
+## Physics and sounds
+
+The **Physics** verb (**Ctrl+P**) turns the icon into a rigid body with its own outline
+(`BitMap.opaque_to_polygons` on the icon's alpha, cached per texture and scale): it falls, bounces
+off four walls around the picture, spins on impact and piles up with the others. Other motion verbs
+step aside while it is on; Pulse, Rainbow and Sparkle still run, and every collision bursts a few
+copies of the icon. **Drag** a physics icon to throw it. **Ctrl+G** turns gravity off (floating
+billiards) and on; gravity is a learnable param, a snapshot / preset value that crossfades, and
+the HUD says when it is off.
+
+Drop a **.wav / .mp3 / .ogg on a hotbar slot** and that slot has a sound (copied into
+`user://sounds`, exported with the rig, marked ♪ on the tile): it plays on spawn, on the beat
+when the slot has Sparkle (once per beat however many are on stage), at pinata, on physics
+collisions (louder for harder hits, a little pitch spread) and by hand with **Ctrl+S** or the
+"play sound" action. Nine slots, nine samples. Dropped anywhere else the file is still the
+audio-reactivity source.
+
 ## Two-player
 
 A second person plays from the **numeric keypad** or a **gamepad**, with their own slot,

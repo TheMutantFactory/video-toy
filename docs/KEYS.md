@@ -18,6 +18,8 @@ The printable version is [key-card.png](key-card.png).
 | `?` | this key list, with tabs and a search box (Shift+/) |
 | `Esc / ☰` | menu: panic, blackout, attribution, rigs, clip, settings |
 | `drop image / .svg / .ttf .otf / .txt / .ogv / rig .zip` | raster slot (Shift: chroma backdrop) / icon / font for words / word list / video slot / import rig |
+| `drop .wav .mp3 .ogg on a slot` | its sound: spawn, beat (with Sparkle), pinata, collisions |
+| `drag a Physics icon` | throw it |
 
 ## Verbs (toggle on the selected slot)
 
@@ -39,6 +41,7 @@ The printable version is [key-card.png](key-card.png).
 | `Shift+I` | Field — ride the curl-noise flow field (the same one the particles ride) |
 | `Shift+M` | Morph — become the next icon in the toolbox, shape to shape (on the beat with audio) |
 | `Shift+J` | Outline — hollow the icon to a ring that follows its silhouette |
+| `Ctrl+P` | Physics — a rigid body with the icon's outline: falls, bounces, piles up; drag to throw (Ctrl+G gravity) |
 
 ## Feedback and scenes
 
@@ -84,6 +87,8 @@ The printable version is [key-card.png](key-card.png).
 | `Shift+A` | attract mode (automatic after 60 s idle; any input ends it) |
 | `Shift+R  Shift+P` | record controller gestures · loop them |
 | `Shift+N` | particle field (right-click scatters) |
+| `Ctrl+G` | gravity on / off for Physics icons |
+| `Ctrl+S` | play the selected slot's sound |
 | `Shift+O` | reaction-diffusion presets |
 | `click a Sparkle icon` | pinata: it bursts into confetti of itself |
 

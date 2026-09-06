@@ -2,6 +2,7 @@ Video Toy OSC (UDP 9000)
 
 Params (float 0..1):
   /vt/param/fb_zoom   Feedback zoom
+  /vt/param/gravity   Gravity (Physics icons)
   /vt/param/fb_twist   Feedback twist
   /vt/param/fb_fade   Feedback fade
   /vt/param/pixelate   Pixelate size
@@ -15,6 +16,8 @@ Params (float 0..1):
   /vt/param/slot   Toolbox slot
   /vt/param/audio_gain   Audio gain
   /vt/param/glow   Glow
+  /vt/param/ascii   ASCII mode
+  /vt/param/ascii   ASCII mode
   /vt/param/scene   Scene
   /vt/param/scene_speed   Scene speed
   /vt/param/scene_scale   Scene scale
@@ -64,7 +67,13 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/screenshot   Screenshot with credits
   /vt/action/ticker   Credits ticker on/off
   /vt/action/credits_roll   Credits roll start/stop
+  /vt/action/ascii   ASCII mode off/mono/colour
+  /vt/action/render_clip   Render a 20 s clip (offline)
+  /vt/action/ascii   ASCII mode off/mono/colour
+  /vt/action/render_clip   Render a 20 s clip (offline)
   /vt/action/panic   PANIC: known-good look
+  /vt/action/gravity_toggle   Gravity on / off
+  /vt/action/play_sound   Play the selected slot's sound
   /vt/action/blackout   Blackout on/off
   /vt/action/quality   Quality lock: cycle
   /vt/action/particles   Particle field on/off
@@ -131,3 +140,4 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/verb_field   Toggle verb: Field
   /vt/action/verb_morph   Toggle verb: Morph
   /vt/action/verb_outline   Toggle verb: Outline
+  /vt/action/verb_physics   Toggle verb: Physics

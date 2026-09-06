@@ -19,6 +19,8 @@ var name := ""
 var key := ""            # "Q" or "⇧Q"
 var hint := ""
 var shift := false
+var ctrl := false        # key is "^P": Ctrl+P
+var exclusive := false   # while active, no other motion verb runs (Physics)
 var order := 100         # motion order; lower first
 var panel := 100         # position in the verb panel / templates (keyboard order)
 var group := ""          # exclusive group for motion (e.g. "attractor")
@@ -26,7 +28,7 @@ var sets_rotation := false
 
 
 func meta() -> Dictionary:
-	return {"id": id, "name": name, "key": key, "hint": hint, "shift": shift}
+	return {"id": id, "name": name, "key": key, "hint": hint, "shift": shift, "ctrl": ctrl}
 
 
 func has_motion2d() -> bool:
