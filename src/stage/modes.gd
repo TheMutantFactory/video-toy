@@ -17,7 +17,7 @@ func mutate() -> String:
 			if Toolbox.slots.is_empty():
 				return mutate()
 			var i := randi() % Toolbox.slots.size()
-			var v: String = Verbs.ALL[randi() % Verbs.ALL.size()]["id"]
+			var v: String = Verbs.all()[randi() % Verbs.all().size()]["id"]
 			Toolbox.toggle_verb(i, v)
 			return "%s %s on slot %d" % ["+" if Toolbox.has_verb(i, v) else "-", v, i + 1]
 		"palette":

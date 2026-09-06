@@ -1,46 +1,83 @@
 class_name Verbs
-## The things an icon can DO. Each verb is a toggle on a toolbox slot; actors
-## spawned from that slot carry the slot's verbs. Actor.gd implements them.
+## The verb registry: every *.gd in res://verbs/ (or another directory passed
+## to load_from) that extends Verb, instantiated once and sorted by `order`
+## then id. `all()` gives the metadata list the UI, templates and tests use;
+## `instances()` gives the objects the hosts run.
 
-const ALL := [
-	{"id": "wander", "name": "Wander", "key": "Q", "hint": "random motion"},
-	{"id": "orbit", "name": "Orbit", "key": "W", "hint": "circle around spawn point"},
-	{"id": "spin", "name": "Spin", "key": "E", "hint": "rotate in place"},
-	{"id": "bounce", "name": "Bounce", "key": "R", "hint": "DVD-logo off the walls"},
-	{"id": "pulse", "name": "Pulse", "key": "T", "hint": "breathe in and out"},
-	{"id": "sparkle", "name": "Sparkle", "key": "Y", "hint": "spawn particles"},
-	{"id": "rainbow", "name": "Rainbow", "key": "U", "hint": "cycle the hue"},
-	{"id": "swarm", "name": "Swarm", "key": "I", "hint": "chase the mouse"},
-	{"id": "flock", "name": "Flock", "key": "⇧Q", "hint": "boids with the others from this slot; hold click to attract, right-click empty space to scatter", "shift": true},
-	{"id": "lorenz", "name": "Lorenz", "key": "⇧W", "hint": "ride the Lorenz butterfly", "shift": true},
-	{"id": "rossler", "name": "Rössler", "key": "⇧T", "hint": "ride the Rössler spiral", "shift": true},
-	{"id": "clifford", "name": "Clifford", "key": "⇧Y", "hint": "fly between points of the Clifford map", "shift": true},
-	{"id": "dejong", "name": "de Jong", "key": "⇧U", "hint": "fly between points of the de Jong map", "shift": true},
-	{"id": "field", "name": "Field", "key": "⇧I", "hint": "ride the curl-noise flow field (the same one the particles ride)", "shift": true},
-	{"id": "morph", "name": "Morph", "key": "⇧M", "hint": "become the next icon in the toolbox, shape to shape (on the beat with audio)", "shift": true},
-	{"id": "outline", "name": "Outline", "key": "⇧J", "hint": "hollow the icon to a ring that follows its silhouette", "shift": true},
-]
+const DIR := "res://verbs"
+
+static var _loaded := false
+static var _instances: Array = []
+
+
+static func load_from(dir: String) -> Array:
+	var out: Array = []
+	var d := DirAccess.open(dir)
+	if d == null:
+		return out
+	d.list_dir_begin()
+	var f := d.get_next()
+	while f != "":
+		if not d.current_is_dir() and (f.ends_with(".gd") or f.ends_with(".gdc")):
+			var script = load(dir.path_join(f))
+			if script is GDScript and script.can_instantiate():
+				var inst = script.new()
+				if inst is Verb and inst.id != "":
+					out.append(inst)
+		f = d.get_next()
+	d.list_dir_end()
+	out.sort_custom(func(a, b): return a.order < b.order if a.order != b.order else a.id < b.id)
+	return out
+
+
+static func _ensure() -> void:
+	if not _loaded:
+		_instances = load_from(DIR)
+		_loaded = true
+
+
+static func instances() -> Array:
+	_ensure()
+	return _instances
+
+
+## Metadata in panel order (the keyboard layout), for the UI and templates.
+static func all() -> Array:
+	_ensure()
+	var sorted: Array = _instances.duplicate()
+	sorted.sort_custom(func(a, b): return a.panel < b.panel if a.panel != b.panel else a.id < b.id)
+	return sorted.map(func(v): return v.meta())
 
 
 static func ids() -> Array:
+	return instances().map(func(v): return v.id)
+
+
+## The active Verb objects for a slot's id list, in order, group-exclusive.
+static func active_for(active_ids: Array) -> Array:
 	var out: Array = []
-	for v in ALL:
-		out.append(v["id"])
+	var groups := {}
+	for v in instances():
+		if not active_ids.has(v.id):
+			continue
+		if v.group != "":
+			if groups.has(v.group):
+				continue
+			groups[v.group] = true
+		out.append(v)
 	return out
 
 
 static func by_key(keycode: int, shift := false) -> String:
-	var name := OS.get_keycode_string(keycode).to_upper()
-	for v in ALL:
-		var wants_shift: bool = v.get("shift", false)
-		var key: String = v["key"].trim_prefix("⇧")
-		if name == key and shift == wants_shift:
-			return v["id"]
+	var nm := OS.get_keycode_string(keycode).to_upper()
+	for v in instances():
+		if nm == v.key.trim_prefix("⇧") and shift == v.shift:
+			return v.id
 	return ""
 
 
 static func get_verb(id: String) -> Dictionary:
-	for v in ALL:
-		if v["id"] == id:
-			return v
+	for v in instances():
+		if v.id == id:
+			return v.meta()
 	return {}

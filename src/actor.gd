@@ -118,129 +118,63 @@ func _verbs() -> Array:
 	return Toolbox.slots[i].get("verbs", [])
 
 
+## Verb hosts expose these to the verb files (which must not touch autoloads).
+var moved := false                         # a motion verb moved the base position this frame
+var frame_scale := 1.0                     # verbs multiply this; applied to the sprite after post hooks
+var active_ids: Array = []                 # the slot's verb ids this frame
+var beat_hit := false                      # the beat envelope restarted this frame (audio or clock)
+
+
+func audio_active() -> bool:
+	return AudioReact.active()
+
+
+func audio_bass() -> float:
+	return AudioReact.bass
+
+
+func beat_env() -> float:
+	return AudioReact.beat_env
+
+
 func _process(delta: float) -> void:
 	var verbs := _verbs()
 	if not is_inside_tree() or _dying:
 		return
 	t += delta
 	_follow_slot_image()
+	active_ids = verbs
+	beat_hit = AudioReact.active() and AudioReact.beat_env > _last_beat
+	_last_beat = AudioReact.beat_env
 
 	position -= _orbit_off                     # orbit rides on top of the base motion
 	_orbit_off = Vector2.ZERO
-	var moved := false
-	var mobile := not riding
-	if mobile and verbs.has("bounce"):
-		position += velocity * delta
-		var half := _sprite.texture.get_size() * _sprite.scale * 0.5 if _sprite.texture else Vector2(40, 40)
-		if position.x - half.x < bounds.position.x or position.x + half.x > bounds.end.x:
-			velocity.x = -velocity.x
-			position.x = clampf(position.x, bounds.position.x + half.x, bounds.end.x - half.x)
-		if position.y - half.y < bounds.position.y or position.y + half.y > bounds.end.y:
-			velocity.y = -velocity.y
-			position.y = clampf(position.y, bounds.position.y + half.y, bounds.end.y - half.y)
-		home = position
-		moved = true
-	if mobile and verbs.has("wander"):
-		if position.distance_to(wander_target) < 12.0:
-			wander_target = _random_point()
-		var speed := 160.0
-		position = position.move_toward(wander_target, speed * delta)
-		home = position
-		moved = true
-	if mobile and verbs.has("flock"):
-		var others: Array = []
-		for a in get_parent().get_children():
-			if a != self and is_instance_valid(a) and "slot_id" in a and a.slot_id == slot_id:
-				others.append([a.position, a.velocity])
-		var acc := Boids.steer2(position, velocity, others, mouse_world if attract else Vector2.INF, 1.5)
-		if scatter_from != Vector2.INF:
-			acc += (position - scatter_from).normalized() * Boids.MAX_FORCE * 6.0
-			scatter_from = Vector2.INF
-		velocity = (velocity + acc * delta).limit_length(Boids.MAX_SPEED)
-		if velocity.length() < 40.0:
-			velocity = Vector2.from_angle(randf() * TAU) * 120.0
-		position += velocity * delta
-		# soft walls: turn back inside the bounds
-		var margin := 80.0
-		if position.x < bounds.position.x + margin: velocity.x += 600.0 * delta
-		if position.x > bounds.end.x - margin: velocity.x -= 600.0 * delta
-		if position.y < bounds.position.y + margin: velocity.y += 600.0 * delta
-		if position.y > bounds.end.y - margin: velocity.y -= 600.0 * delta
-		position = position.clamp(bounds.position, bounds.end)
-		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
-		home = position
-		moved = true
-	if mobile and verbs.has("field"):
-		var f := Field.curl(position, t) * 240.0
-		velocity = velocity.lerp(f, minf(1.0, delta * 3.0))
-		position += velocity * delta
-		position = Vector2(fposmod(position.x, bounds.size.x), fposmod(position.y, bounds.size.y))
-		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
-		home = position
-		moved = true
-	if mobile and (verbs.has("lorenz") or verbs.has("rossler")):
-		var lor := verbs.has("lorenz")
-		_att = Attractors.lorenz_step(_att, delta * 0.9) if lor else Attractors.rossler_step(_att, delta * 1.6)
-		var target := Attractors.project_lorenz(_att, _att_centre) if lor else Attractors.project_rossler(_att, _att_centre)
-		velocity = (target - position) / maxf(delta, 0.001)
-		position = target
-		_sprite.rotation = velocity.angle() + PI * 0.5 if not verbs.has("spin") else _sprite.rotation
-		home = position
-		moved = true
-	elif mobile and (verbs.has("clifford") or verbs.has("dejong")):
-		# jump to the next map point every ~0.3 s, gliding in between
-		_map_t += delta * 3.4
-		if _map_t >= 1.0:
-			_map_t = 0.0
-			_map_from = _map
-			_map = Attractors.clifford(_map) if verbs.has("clifford") else Attractors.dejong(_map)
-		var a := Attractors.project_map(_map_from, _att_centre)
-		var b := Attractors.project_map(_map, _att_centre)
-		var target := a.lerp(b, smoothstep(0.0, 1.0, _map_t))
-		velocity = (target - position) / maxf(delta, 0.001)
-		position = target
-		home = position
-		moved = true
-	if mobile and verbs.has("swarm"):
-		var to_mouse := mouse_world - position
-		velocity = velocity.lerp(to_mouse.normalized() * 380.0, 2.0 * delta)
-		position += velocity * delta
-		home = position
-		moved = true
-	if mobile and verbs.has("orbit"):
-		angle += delta * 1.4
-		_orbit_off = Vector2.from_angle(angle) * (orbit_radius * (0.35 if moved else 1.0))
-		position += _orbit_off
+	moved = false
+	var active := Verbs.active_for(verbs)
+	var rotation_set := false
+	if not riding:
+		for v in active:
+			if v.has_motion2d():
+				if v.move2d(self, delta):
+					moved = true
+				if v.sets_rotation:
+					rotation_set = true
 
-	if verbs.has("spin"):
-		_sprite.rotation += delta * 2.2
-	elif not (verbs.has("flock") or verbs.has("lorenz") or verbs.has("rossler") or verbs.has("field")):
+	# defaults the post hooks may override
+	frame_scale = base_scale
+	_sprite.modulate = _base_color
+	_particles.emitting = false
+	for v in active:
+		v.post2d(self, delta)
+		if v.sets_rotation:
+			rotation_set = true
+	if not rotation_set:
 		_sprite.rotation = lerpf(_sprite.rotation, 0.0, 6.0 * delta)
-	var s := base_scale
-	if verbs.has("pulse"):
-		# With audio on, Pulse follows the bass instead of a sine.
-		s *= (1.0 + 0.7 * AudioReact.bass) if AudioReact.active() else (1.0 + 0.25 * sin(t * 4.0))
 	if AudioReact.active():
-		s *= 1.0 + 0.18 * AudioReact.beat_env              # everyone jumps on the beat
-	_sprite.scale = Vector2.ONE * s * _sdf_mult
+		frame_scale *= 1.0 + 0.18 * AudioReact.beat_env    # everyone jumps on the beat
+	_sprite.scale = Vector2.ONE * frame_scale * _sdf_mult
 
 	_tick_sdf(verbs, delta)
-
-	if verbs.has("rainbow"):
-		var c := _base_color
-		c.h = fmod(c.h + t * 0.25, 1.0)
-		c.s = maxf(c.s, 0.7)
-		_sprite.modulate = c
-		_particles.color = c
-		_burst.color = c
-	else:
-		_sprite.modulate = _base_color
-
-	_particles.emitting = verbs.has("sparkle")
-	# Beat burst: a one-shot puff of icons whenever the envelope restarts.
-	if verbs.has("sparkle") and AudioReact.active() and AudioReact.beat_env > _last_beat:
-		_burst.restart()
-	_last_beat = AudioReact.beat_env
 
 
 ## Live words and cycling lists change the slot's image; pick it up.

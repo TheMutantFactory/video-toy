@@ -64,7 +64,7 @@ func _init() -> void:
 	box2.free()
 
 	# verbs and palettes are consistent
-	_check("every verb has a unique key", _unique(Verbs.ALL.map(func(v): return v["key"])))
+	_check("every verb has a unique key", _unique(Verbs.all().map(func(v): return v["key"])))
 	_check("verb lookup by keycode", Verbs.by_key(KEY_Q) == "wander" and Verbs.by_key(KEY_Z) == "")
 	_check("palettes parse to colours", Palettes.bg(0) != Color() and Palettes.ring(1).size() >= 3)
 	_check("palette index wraps", Palettes.get_palette(Palettes.count()) == Palettes.get_palette(0))
@@ -730,6 +730,32 @@ func _init() -> void:
 	DirAccess.remove_absolute(svg_src)
 	DirAccess.remove_absolute(vsrc)
 	xb.free()
+
+	# verbs as files: discovered from res://verbs, ordered, group-exclusive; a foreign directory loads too
+	var vids: Array = Verbs.ids()
+	_check("sixteen verbs are discovered from res://verbs", vids.size() == 16 and vids.has("bounce") and vids.has("morph") and vids.has("dejong"))
+	var order_ok := vids.find("bounce") < vids.find("wander") and vids.find("wander") < vids.find("flock") and vids.find("swarm") < vids.find("orbit") and vids.find("lorenz") < vids.find("rossler")
+	_check("verbs are ordered by their motion order", order_ok)
+	var panel_ids: Array = Verbs.all().map(func(m): return m["id"])
+	_check("the panel keeps keyboard order", panel_ids.slice(0, 8) == ["wander", "orbit", "spin", "bounce", "pulse", "sparkle", "rainbow", "swarm"] and panel_ids[-1] == "outline")
+	var act: Array = Verbs.active_for(["orbit", "rossler", "lorenz", "spin", "dejong"]).map(func(v): return v.id)
+	_check("active_for keeps order and runs one attractor only", act == ["lorenz", "orbit", "spin"])
+	_check("verb objects carry hooks", Verbs.instances()[0] is Verb and Verbs.get_verb("flock")["shift"] == true and Verbs.get_verb("bounce").has("hint"))
+	var vdir := "user://_smoke_verbs"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(vdir))
+	var jvf := FileAccess.open(vdir.path_join("jitter.gd"), FileAccess.WRITE)
+	jvf.store_string("extends Verb\nfunc _init() -> void:\n\tid = \"jitter\"; name = \"Jitter\"; key = \"9\"; order = 5\nfunc has_motion2d() -> bool: return true\nfunc move2d(a, _d: float) -> bool:\n\ta.position += Vector2(1, 0)\n\treturn true\n")
+	jvf.close()
+	var extra: Array = Verbs.load_from(vdir)
+	var probe := {"position": Vector2.ZERO}
+	var jit_ok: bool = extra.size() == 1 and extra[0].id == "jitter" and extra[0].has_motion2d()
+	var host := Node2D.new()
+	if jit_ok:
+		jit_ok = extra[0].move2d(host, 0.016) and host.position == Vector2(1, 0)
+	host.free()
+	_check("a verb file in another directory loads and runs against a host", jit_ok)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(vdir.path_join("jitter.gd")))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(vdir))
 
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)

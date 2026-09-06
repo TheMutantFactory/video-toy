@@ -175,92 +175,47 @@ func _verbs() -> Array:
 	return Toolbox.slots[i].get("verbs", [])
 
 
+var moved := false
+var frame_scale := 1.0
+var active_ids: Array = []
+var beat_hit := false
+
+
+func audio_active() -> bool:
+	return AudioReact.active()
+
+
+func audio_bass() -> float:
+	return AudioReact.bass
+
+
+func beat_env() -> float:
+	return AudioReact.beat_env
+
+
 func _process(delta: float) -> void:
 	var verbs := _verbs()
 	if not is_inside_tree():
 		return
 	t += delta
+	active_ids = verbs
 	position -= _orbit_off
 	_orbit_off = Vector3.ZERO
-	var moved := false
-	if verbs.has("bounce"):
-		position += velocity * delta
-		for axis in 3:
-			if absf(position[axis]) > bounds[axis]:
-				velocity[axis] = -velocity[axis]
-				position[axis] = clampf(position[axis], -bounds[axis], bounds[axis])
-		home = position
-		moved = true
-	if verbs.has("wander"):
-		if position.distance_to(wander_target) < 0.15:
-			wander_target = _random_point()
-		position = position.move_toward(wander_target, 1.2 * delta)
-		home = position
-		moved = true
-	if verbs.has("flock"):
-		var others: Array = []
-		for o in get_parent().get_children():
-			if o != self and o.slot_id == slot_id and is_instance_valid(o):
-				others.append([o.position, o.velocity])
-		var acc := Boids.steer3(position, velocity, others, mouse_point if attract else Vector3.INF, 1.5)
-		velocity = (velocity + acc * delta).limit_length(Boids.MAX_SPEED * 0.01)
-		if velocity.length() < 0.4:
-			velocity = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-0.5, 0.5)).normalized() * 1.2
-		position += velocity * delta
-		for axis in 3:
-			if absf(position[axis]) > bounds[axis]:
-				velocity[axis] -= signf(position[axis]) * 6.0 * delta
-		position = position.clamp(-bounds, bounds)
-		if velocity.length() > 0.01:
-			look_at(position + velocity, Vector3.UP)
-		home = position
-		moved = true
-	if verbs.has("lorenz") or verbs.has("rossler"):
-		if verbs.has("lorenz"):
-			_att = Attractors.lorenz_step(_att, delta * 0.9)
-			position = Vector3(_att.x * 0.13, (_att.z - 25.0) * 0.08, _att.y * 0.09)
-		else:
-			_att = Attractors.rossler_step(_att, delta * 1.6)
-			position = Vector3(_att.x * 0.25, _att.z * 0.12 - 1.0, _att.y * 0.25)
-		home = position
-		moved = true
-	elif verbs.has("clifford") or verbs.has("dejong"):
-		_map_t += delta * 3.4
-		if _map_t >= 1.0:
-			_map_t = 0.0
-			_map_from = _map
-			_map = Attractors.clifford(_map) if verbs.has("clifford") else Attractors.dejong(_map)
-		var m := _map_from.lerp(_map, smoothstep(0.0, 1.0, _map_t))
-		position = Vector3(m.x * 1.6, m.y * 1.0, 0.0)
-		home = position
-		moved = true
-	if verbs.has("swarm"):
-		velocity = velocity.lerp((mouse_point - position).normalized() * 3.0, 2.0 * delta)
-		position += velocity * delta
-		home = position
-		moved = true
-	if verbs.has("orbit"):
-		angle += delta * 1.1
-		var r := orbit_radius * (0.35 if moved else 1.0)
-		_orbit_off = Vector3(cos(angle), sin(angle) * 0.6, sin(angle * 0.7) * 0.4) * r
-		position += _orbit_off
-
-	# Solids always turn a little so their faces catch the light; Spin is fast.
-	rotate(spin_axis, delta * (2.4 if verbs.has("spin") else 0.35))
-	var s := base_scale
-	if verbs.has("pulse"):
-		s *= (1.0 + 0.7 * AudioReact.bass) if AudioReact.active() else (1.0 + 0.25 * sin(t * 4.0))
+	moved = false
+	var active := Verbs.active_for(verbs)
+	for v in active:
+		if v.has_motion3d() and v.move3d(self, delta):
+			moved = true
+	# Solids always turn a little so their faces catch the light; Spin adds to it.
+	rotate(spin_axis, delta * 0.35)
+	frame_scale = base_scale
+	_apply_color(_base_color)
+	_particles.emitting = false
+	for v in active:
+		v.post3d(self, delta)
 	if AudioReact.active():
-		s *= 1.0 + 0.18 * AudioReact.beat_env
-	scale = Vector3.ONE * s
-	if verbs.has("rainbow"):
-		var c := _base_color
-		c.h = fmod(c.h + t * 0.25, 1.0)
-		c.s = maxf(c.s, 0.7)
-		_apply_color(c)
-	else:
-		_apply_color(_base_color)
-	_particles.emitting = verbs.has("sparkle")
+		frame_scale *= 1.0 + 0.18 * AudioReact.beat_env
+	scale = Vector3.ONE * frame_scale
 
 
 func _random_point() -> Vector3:

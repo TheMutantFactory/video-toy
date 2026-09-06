@@ -103,20 +103,26 @@ func _verbs() -> Array:
 	return Toolbox.slots[i].get("verbs", [])
 
 
+var frame_scale := 1.0
+
+
+func audio_active() -> bool:
+	return AudioReact.active()
+
+
+func audio_bass() -> float:
+	return AudioReact.bass
+
+
 func _process(delta: float) -> void:
 	var verbs := _verbs()
 	if not is_inside_tree():
 		return
 	t += delta
-	rotate_y(delta * (1.2 if verbs.has("spin") else 0.2))
-	if verbs.has("orbit"):
-		angle += delta * 0.6
-		position = Vector3(cos(angle), 0.0, sin(angle)) * 1.5
-	var s := 1.0
-	if verbs.has("pulse"):
-		s *= (1.0 + 0.5 * AudioReact.bass) if AudioReact.active() else (1.0 + 0.2 * sin(t * 4.0))
+	rotate_y(delta * 0.2)                      # idle turn; Spin adds to it
+	frame_scale = 1.0
+	for v in Verbs.active_for(verbs):
+		v.formation(self, delta)
 	if AudioReact.active():
-		s *= 1.0 + 0.15 * AudioReact.beat_env
-	scale = Vector3.ONE * s
-	if verbs.has("rainbow"):
-		recolor(_pal, _color_index, fmod(t * 0.25, 1.0))
+		frame_scale *= 1.0 + 0.15 * AudioReact.beat_env
+	scale = Vector3.ONE * frame_scale

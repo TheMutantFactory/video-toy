@@ -56,6 +56,8 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/steal_palette   Steal palette
   /vt/action/audio_source   Next audio source
   /vt/action/recolor   Recolor slot
+  /vt/action/pinata   Pinata: burst a random Sparkle icon
+  /vt/action/next_word   Word lists: next word
   /vt/action/syphon   Syphon output on/off
   /vt/action/clock_internal   Internal clock on/off
   /vt/action/clock_lock_scenes   Lock scenes to BPM on/off

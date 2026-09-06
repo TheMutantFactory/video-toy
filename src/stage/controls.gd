@@ -202,7 +202,7 @@ func midi_actions() -> Array:
 		out.append({"id": "preset_%d" % (i + 1), "label": "Recall preset %d" % (i + 1), "do": func(): s.recall_preset(i + 1)})
 	for i in Toolbox.MAX_SLOTS:
 		out.append({"id": "slot_%d" % (i + 1), "label": "Select slot %d" % (i + 1), "do": func(): Toolbox.select(i)})
-	for v in Verbs.ALL:
+	for v in Verbs.all():
 		out.append({"id": "verb_" + v["id"], "label": "Toggle verb: " + v["name"], "do": func():
 			if not Toolbox.current().is_empty():
 				Toolbox.toggle_verb(Toolbox.selected, v["id"])})

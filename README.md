@@ -364,7 +364,8 @@ src/ledger.gd    (autoload) attribution ledger, user://attribution.json
 src/noun_api.gd  (autoload) OAuth 1.0a client (pinned to RFC 5849 vector)
 src/icon_media.gd(autoload) thumbnails + white SVG rasteriser
 src/palettes.gd             named colour sets
-src/verbs.gd                verb table
+src/verb.gd + src/verbs.gd  the Verb base class and the registry (discovers res://verbs at load)
+verbs/*.gd                  one file per verb: metadata + move2d / post2d / move3d / post3d / formation hooks
 src/midi_map.gd  (autoload) the learn table: MIDI, gamepad, OSC and audio bands -> params/actions, user://midi.json
 src/osc.gd       (autoload) OSC over UDP: listener, message/bundle codec, /vt/param and /vt/action routes
 src/templates.gd            TouchOSC (.touchosc / .tosc) layouts and Launchpad / APC mini maps from the tables
@@ -375,6 +376,17 @@ src/webcam.gd               CameraServer feed (RGB or YCbCr) as a sprite; render
 demo/                       built-in shapes
 docs/RESEARCH.md            video toys, feedback, shader art, 3D, raster — the roadmap
 ```
+
+## Adding a verb
+
+A verb is one file in `verbs/` extending `Verb`: set `id`, `name`, `key` (`"⇧K"` with `shift = true`
+for a shifted key), `hint`, and optionally `order` (motion order), `group` (only the first active
+verb of a group moves) and `sets_rotation`. Implement any of `move2d(actor, delta) -> bool`
+(return true if you moved the base position), `post2d`, `move3d(solid, delta)`, `post3d`,
+`formation(formation, delta)`. Hosts expose `position`, `velocity`, `home`, `bounds`, `t`,
+`frame_scale` (multiply it), `active_ids`, `beat_hit`, `audio_active()`, `audio_bass()`,
+`beat_env()`; verb files must not reference autoloads. Drop the file in and it appears in the
+verb panel, the learn table and the controller templates.
 
 ## Licensing
 

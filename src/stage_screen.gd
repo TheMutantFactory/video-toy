@@ -1012,7 +1012,7 @@ func _build_hud() -> void:
 	vgrid.add_theme_constant_override("h_separation", 6)
 	vgrid.add_theme_constant_override("v_separation", 0)
 	_verb_panel.add_child(vgrid)
-	for v in Verbs.ALL:
+	for v in Verbs.all():
 		var cb := CheckButton.new()
 		cb.text = "%s %s" % [v["key"], v["name"]]
 		cb.add_theme_font_size_override("font_size", 18)
