@@ -9,7 +9,9 @@ that shows the scene, and watch it recurse. Press **B** for 3D solids wearing th
 ```bash
 ./run.sh            # play
 ./run.sh test       # headless smoke tests + screen self-test (no network, no quota)
-./run.sh capture    # screenshot every screen into out/
+./run.sh capture    # screenshot every screen into out/ (./run.sh capture a,b to pick shots)
+./run.sh check      # capture the deterministic reference shots and pixel-diff them against tests/reference
+./run.sh reference  # re-record the reference shots after an intentional visual change
 ```
 
 Needs Godot 4.7 (`GODOT=/path/to/godot` if it isn't on PATH or in /Applications).
@@ -337,6 +339,8 @@ src/fx.gd + fx.gdshader     post-process: CRT, kaleidoscope, pixelate, chroma ke
 src/presets.gd              eight banks x twelve stage snapshots, user://presets.json
 src/state_lerp.gd           crossfade maths: continuous fields lerp, discrete flip at the midpoint
 src/quality.gd              the quality ladder + frame-time monitor
+src/rig.gd                  rig export / import (zip of user:// state and assets)
+src/image_diff.gd + tests/diff.gd   capture comparison for ./run.sh check; references in tests/reference
 src/clock.gd     (autoload) MIDI clock in / internal clock: bpm, beats, bars
 addons/godot-syphon         vendored Syphon GDExtension (MIT), macOS Forward+
 src/shot.gd                 screenshot + burned-in credits strip
@@ -376,6 +380,20 @@ src/webcam.gd               CameraServer feed (RGB or YCbCr) as a sprite; render
 demo/                       built-in shapes
 docs/RESEARCH.md            video toys, feedback, shader art, 3D, raster — the roadmap
 ```
+
+## Rig files
+
+The Esc menu has **Export rig**, which zips the toolbox and every asset it points at, the
+attribution ledger, presets and banks, controller bindings, palettes, the timeline loop, the
+current font and the chroma backdrop into `user://rigs/`, and **Import rig…** (or drop a rig
+`.zip` on Play), which unpacks one and reloads everything. "Send me your Knobcon rig."
+
+## Reference captures
+
+`tests/reference/` holds PNGs of six deterministic shots (four screens and two seeded stage
+shots with pixelate + quantise, one with the CRT). `./run.sh check` re-captures them and
+compares each at 240×135 — mean difference and worst 8×8 block — so a HUD digit passes and a
+broken shader fails; `./run.sh reference` re-records them after an intentional change.
 
 ## Adding a verb
 

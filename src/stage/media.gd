@@ -291,6 +291,10 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 				s._steal_note = "could not add the word list (empty, or toolbox full)"
 			s._update_hud()
 			return
+		if ext == "zip":
+			s._steal_note = load("res://src/menu_overlay.gd").import_rig(f)
+			s._update_hud()
+			return
 		if ext == "ogv":
 			var vi := Toolbox.add_video(f)
 			if vi >= 0:

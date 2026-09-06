@@ -4,6 +4,8 @@
 # ./run.sh capture    screenshot every screen into out/
 # ./run.sh import     (re)import assets headlessly
 # ./run.sh templates  write TouchOSC / Launchpad / APC mini templates into docs/controllers
+# ./run.sh check      capture the deterministic reference shots and pixel-diff them (exit 1 on regression)
+# ./run.sh reference  re-record the reference shots (after an intentional visual change)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -41,5 +43,15 @@ case "${1:-play}" in
   capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ${2:+--only "$2"} ;;
   import)  exec "$G" --headless --path . --import ;;
   templates) exec "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;
-  *) echo "usage: $0 [play|test|capture|import]" >&2; exit 2 ;;
+  diff)    exec "$G" --headless --path . -s tests/diff.gd ;;
+  check)   # capture the reference shots, then compare them with tests/reference
+           audio_override; mkdir -p out
+           "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,ref_stage,ref_crt >/dev/null 2>&1
+           exec "$G" --headless --path . -s tests/diff.gd ;;
+  reference) # (re)record the reference shots from the current build
+           audio_override; mkdir -p out tests/reference
+           "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,ref_stage,ref_crt >/dev/null 2>&1
+           for f in start settings menu attribution ref_stage ref_crt; do cp "out/$f.png" "tests/reference/$f.png"; done
+           echo "reference shots updated: $(ls tests/reference)" ;;
+  *) echo "usage: $0 [play|test|capture [shot]|import|templates|check|reference|diff]" >&2; exit 2 ;;
 esac

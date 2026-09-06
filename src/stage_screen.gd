@@ -1091,7 +1091,7 @@ func _build_hud() -> void:
 		+ "Shift+Esc    PANIC: known-good look · Shift+H blackout · Shift+F quality lock\n"
 		+ "Shift+V      screenshot + credits strip · Shift+L credits ticker · Shift+C credits roll\n"
 		+ "Shift+Z      Syphon output (picture, no HUD) · clock: ; panel or MIDI clock in\n"
-		+ "drop .svg/.ttf/.txt/.ogv   icon / font for words / word list / video slot\nclick Sparkle icon   pinata\n"
+		+ "drop .svg/.ttf/.txt/.ogv   icon / font for words / word list / video slot\nclick Sparkle icon   pinata · drop a rig .zip to import it\n"
 		+ "F1-F12       recall preset · Shift+F saves · Shift+, . bank · Shift+- = prev/next preset · Shift+; fade\n"
 		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
 		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"

@@ -757,6 +757,58 @@ func _init() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(vdir.path_join("jitter.gd")))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(vdir))
 
+	# rig: manifest follows the toolbox's assets, export/import round-trips into another root
+	var rroot := "user://_smoke_rig_root"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(rroot.path_join("text")))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(rroot.path_join("fonts")))
+	for pair in [["toolbox.json", JSON.stringify({"slots": [{"id": "t1", "svg_path": "user://text/t1.png", "word_paths": ["user://text/w0.png"]}, {"id": "d", "svg_path": "res://demo/star.svg"}], "selected": 0})],
+			["presets.json", "{\"presets\":{}}"], ["midi.json", "{\"bindings\":{\"cc:1:1\":\"glow\"}}"], ["text/t1.png", "PNG1"], ["text/w0.png", "PNG2"], ["fonts/current.ttf", "FONT"]]:
+		var wf := FileAccess.open(rroot.path_join(pair[0]), FileAccess.WRITE)
+		wf.store_string(pair[1])
+		wf.close()
+	var man: Array = Rig.manifest(rroot)
+	_check("rig manifest lists top files, the font and every asset the toolbox points at (user:// only)",
+		man.has("toolbox.json") and man.has("midi.json") and man.has("fonts/current.ttf") and man.has("text/t1.png") and man.has("text/w0.png") and not man.has("attribution.json") and man.size() == 6)
+	var zpath := "user://_smoke_rig.zip"
+	var rig_out: int = Rig.export(zpath, rroot)
+	var rroot2 := "user://_smoke_rig_root2"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(rroot2))
+	var rig_in: int = Rig.import(zpath, rroot2)
+	_check("rig export/import round-trips every file", rig_out == 6 and rig_in == 6 and FileAccess.get_file_as_string(rroot2.path_join("text/w0.png")) == "PNG2"
+		and FileAccess.get_file_as_string(rroot2.path_join("midi.json")).contains("glow") and FileAccess.file_exists(rroot2.path_join("fonts/current.ttf")))
+	var bogus := "user://_smoke_not_rig.zip"
+	var zb := ZIPPacker.new()
+	zb.open(ProjectSettings.globalize_path(bogus))
+	zb.start_file("hello.txt")
+	zb.write_file("hi".to_utf8_buffer())
+	zb.close_file()
+	zb.close()
+	_check("a zip without rig.json is refused", Rig.import(bogus, rroot2) == -1)
+	for rel in ["text/t1.png", "text/w0.png", "fonts/current.ttf", "toolbox.json", "presets.json", "midi.json", "rig.json"]:
+		for rr in [rroot, rroot2]:
+			var pp2: String = rr.path_join(rel)
+			if FileAccess.file_exists(pp2):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(pp2))
+	for rr in [rroot, rroot2]:
+		for sub in ["text", "fonts"]:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(rr.path_join(sub)))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(rr))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(zpath))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(bogus))
+	# image diff: identical passes, a shifted digit passes, a broken picture fails
+	var ia := Image.create(640, 360, false, Image.FORMAT_RGB8)
+	ia.fill(Color(0.1, 0.1, 0.15))
+	ia.fill_rect(Rect2i(200, 100, 240, 160), Color(1.0, 0.3, 0.6))
+	var ib: Image = ia.duplicate()
+	ib.fill_rect(Rect2i(20, 20, 30, 12), Color.WHITE)                   # a HUD digit changed
+	var ic: Image = ia.duplicate()
+	ic.fill_rect(Rect2i(200, 100, 240, 160), Color(0.1, 0.1, 0.15))   # the picture vanished
+	var same: Dictionary = ImageDiff.compare(ia, ia)
+	var digit: Dictionary = ImageDiff.compare(ia, ib)
+	var broken: Dictionary = ImageDiff.compare(ia, ic)
+	_check("image diff: identical and near-identical pass, a missing picture fails",
+		same["pass"] and same["mean"] == 0.0 and digit["pass"] and not broken["pass"] and broken["mean"] > digit["mean"])
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

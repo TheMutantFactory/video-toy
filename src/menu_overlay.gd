@@ -56,7 +56,7 @@ func _ready() -> void:
 	_panel.add_child(_menu)
 	_menu.add_child(UI.title("Menu", 40))
 	for m in [["Resume", "resume"], ["Panic — known-good look", "panic"], ["Blackout", "blackout"],
-			["Attribution", "attribution"], ["Find Icons", "search"],
+			["Attribution", "attribution"], ["Export rig (zip)", "rig_export"], ["Import rig…", "rig_import"], ["Find Icons", "search"],
 			["Play", "stage"], ["Scenes", "scenes"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
 		_menu.add_child(UI.button(m[0], func(): _pick(m[1])))
 
@@ -129,9 +129,53 @@ func _pick(what: String) -> void:
 	match what:
 		"resume": close()
 		"attribution": show_attribution()
+		"rig_export":
+			var p := Rig.default_export_path()
+			DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://rigs"))
+			var n := Rig.export(p)
+			_note("exported %d files to %s" % [n, ProjectSettings.globalize_path(p)] if n >= 0 else "could not write the rig")
+		"rig_import":
+			var dlg := FileDialog.new()
+			dlg.access = FileDialog.ACCESS_FILESYSTEM
+			dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+			dlg.filters = PackedStringArray(["*.zip ; Video Toy rig"])
+			dlg.use_native_dialog = true
+			dlg.title = "Import a Video Toy rig"
+			add_child(dlg)
+			dlg.file_selected.connect(func(path: String):
+				_note(import_rig(path))
+				dlg.queue_free())
+			dlg.canceled.connect(func(): dlg.queue_free())
+			dlg.popup_centered(Vector2i(900, 600))
 		_:
 			close()
 			navigate.emit(what)
+
+
+## A note under the menu title (the menu has no status line of its own).
+func _note(text: String) -> void:
+	if not _menu.has_node("Note"):
+		var l := UI.label("", 16, UI.DIM)
+		l.name = "Note"
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_menu.add_child(l)
+		_menu.move_child(l, 1)
+	_menu.get_node("Note").text = text
+
+
+## Unpack a rig and reload everything that reads user://.
+static func import_rig(path: String) -> String:
+	var n := Rig.import(path)
+	if n < 0:
+		return "that zip is not a Video Toy rig"
+	Toolbox.load_from_disk()
+	Ledger.load_from_disk()
+	MidiMap.load_from_disk()
+	Palettes._loaded = false
+	IconMedia._svgs.clear()
+	IconMedia._sdfs.clear()
+	TextRaster._custom_checked = false
+	return "imported %d files from %s — toolbox, presets, bindings, palettes reloaded" % [n, path.get_file()]
 
 
 func _go(p: int) -> void:

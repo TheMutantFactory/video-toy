@@ -643,9 +643,10 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ref_stage", "ref_crt"]
+	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
-		if only != "" and name != only and name != "stage":
+		if only != "" and not only_set.has(name) and name != "stage":
 			continue
 		match name:
 			"menu":
@@ -1106,6 +1107,41 @@ func _capture_all(dir: String) -> void:
 				DirAccess.remove_absolute(ctxt)
 				DirAccess.remove_absolute(csvg)
 				_cleanup_birthday = [svg_i, clock_i, cake_i, w_i]
+			"ref_stage", "ref_crt":
+				# Deterministic reference shots for tests/diff.gd: seeded RNG, fixed
+				# positions, no motion verbs, no feedback, HUD hidden.
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.p2_sleep()
+				current.set_particles(false)
+				current.set_rd_preset(0)
+				current.set_scene("", 0.0)
+				current._set_feedback(false)
+				current.set_ticker(false)
+				current.stop_credits_roll()
+				current.clear_actors()
+				for a in current._solids.get_children() + current._formations.get_children():
+					a.queue_free()
+				for i in Toolbox.slots.size():
+					for v in Verbs.ids():
+						if Toolbox.has_verb(i, v):
+							Toolbox.toggle_verb(i, v)
+				current.palette_index = 3                 # Cream
+				current._apply_palette()
+				current._glow.set_level(0)
+				current.set_monitor(false)
+				current.set_fx(12, true, true, 0, false, 2 if name == "ref_crt" else 0)
+				seed(4242)
+				var grid := [Vector2(500, 330), Vector2(960, 330), Vector2(1420, 330), Vector2(500, 750), Vector2(960, 750), Vector2(1420, 750)]
+				for i in grid.size():
+					Toolbox.select(i % mini(5, Toolbox.slots.size()))
+					current.spawn_at(grid[i])
+				current._help.visible = false
+				current._verb_panel.get_parent().visible = false
+				current._hud.get_parent().visible = false
+				await get_tree().create_timer(0.5).timeout
 			"stage":
 				show_screen(name)
 				await get_tree().create_timer(0.3).timeout

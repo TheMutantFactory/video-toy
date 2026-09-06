@@ -155,8 +155,10 @@ func _enable_measurement() -> void:
 		RenderingServer.viewport_set_measure_render_time(rid, true)
 	# Performance.TIME_PROCESS includes the present/vsync wait on macOS, so
 	# script time is bracketed by hand: process_frame -> frame_pre_draw.
-	s.get_tree().process_frame.connect(_on_process_frame)
-	RenderingServer.frame_pre_draw.connect(_on_pre_draw)
+	if not s.get_tree().process_frame.is_connected(_on_process_frame):
+		s.get_tree().process_frame.connect(_on_process_frame)
+	if not RenderingServer.frame_pre_draw.is_connected(_on_pre_draw):
+		RenderingServer.frame_pre_draw.connect(_on_pre_draw)
 
 
 func _on_process_frame() -> void:
@@ -231,13 +233,11 @@ func _tick_quality(delta: float) -> void:
 	if s.quality.update(s.work_ms, delta):
 		s._steal_note = "quality → " + s.quality.describe()
 	apply_quality(s.quality.effective())
-	_enable_measurement()
 
 
 func cycle_quality_lock() -> void:
 	s.quality.cycle_lock()
 	apply_quality(s.quality.effective())
-	_enable_measurement()
 	s._steal_note = "quality " + s.quality.describe()
 	s._update_hud()
 
