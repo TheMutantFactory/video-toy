@@ -252,6 +252,10 @@ func grab(on: bool) -> void:
 
 func grab_to(p: Vector2) -> void:
 	if body:
+		# Straight into the physics server: a node transform change is only
+		# forwarded on the next flush, and the physics sync can overwrite it
+		# with the old position first (a lost teleport, seen on CI).
+		PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, Transform2D(body.rotation, p))
 		body.global_position = p
 	position = p
 
