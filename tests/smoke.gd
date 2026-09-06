@@ -911,6 +911,13 @@ func _init() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(ld.path_join(nm)))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ld))
 
+	# the guest wheel's hit test is pure; the tour has five steps
+	var wc := Vector2(500, 500)
+	_check("wheel: hub, outside, and the first item straight up", RadialMenu.pick(wc, wc, 8) == -2 and RadialMenu.pick(wc + Vector2(400, 0), wc, 8) == -1 and RadialMenu.pick(wc + Vector2(0, -150), wc, 8) == 0 and RadialMenu.pick(wc + Vector2(150, 0), wc, 8) == 2 and RadialMenu.pick(wc + Vector2(0, 150), wc, 8) == 4 and RadialMenu.pick(wc + Vector2(-150, 0), wc, 8) == 6)
+	_check("wheel: item positions land in their own sector", RadialMenu.pick(RadialMenu.item_pos(wc, 5, 9), wc, 9) == 5 and RadialMenu.pick(RadialMenu.item_pos(wc, 0, 17), wc, 17) == 0 and RadialMenu.pick(RadialMenu.item_pos(wc, 16, 17), wc, 17) == 16)
+	_check("tour: five captions with anchors inside the picture", Tour.STEPS.size() == 5 and Tour.STEPS.all(func(st): return str(st["text"]).length() > 40 and Rect2(0, 0, 1, 1).has_point(st["at"])))
+	_check("tour_seen defaults off", not Tour.seen("user://_smoke_no_settings.cfg"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

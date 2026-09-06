@@ -80,6 +80,9 @@ func remove_nearest(p: Vector2) -> void:
 		s.scatter_particles()
 
 
+const LONG_PRESS_MS := 550               # guest mode: hold this long on an icon to remove it
+
+
 func mouse(ev: InputEvent) -> void:
 	if ev is InputEventMouseButton:
 		var wp := world_pos(ev.position)
@@ -97,6 +100,10 @@ func mouse(ev: InputEvent) -> void:
 					s._drag_offset = s._monitor.position - wp
 				elif s.draw_mode:
 					s.begin_stroke(wp)
+				elif s.guest:
+					s._press_pending = true            # decide on release: tap spawns, a hold removes
+					s._press_pos = wp
+					s._press_ms = Time.get_ticks_msec()
 				elif not s.pinata_at(wp):
 					s.spawn_at(wp)
 			else:
@@ -107,8 +114,17 @@ func mouse(ev: InputEvent) -> void:
 				s._dragging = false
 				if not s._stroke.is_empty():
 					s.end_stroke()
+				if s._press_pending:
+					s._press_pending = false
+					if Time.get_ticks_msec() - s._press_ms >= LONG_PRESS_MS:
+						remove_nearest(s._press_pos)
+					elif not s.pinata_at(s._press_pos):
+						s.spawn_at(s._press_pos)
 		elif ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
-			remove_nearest(wp)
+			if s.guest:
+				s.open_wheel(ev.position)
+			else:
+				remove_nearest(wp)
 	elif ev is InputEventMouseMotion and s._grab:
 		if not is_instance_valid(s._grab):
 			s._grab = null
@@ -120,6 +136,8 @@ func mouse(ev: InputEvent) -> void:
 		s._grab_prev = wp
 		s._grab_ms = now
 		s._grab.grab_to(wp)
+	elif ev is InputEventMouseMotion and s._press_pending and world_pos(ev.position).distance_to(s._press_pos) > 24.0:
+		s._press_pending = false                       # a drag, not a tap or a hold
 	elif ev is InputEventMouseMotion and s._dragging:
 		s._monitor.position = world_pos(ev.position) + s._drag_offset
 	elif ev is InputEventMouseMotion and not s._stroke.is_empty():
@@ -171,6 +189,9 @@ func key(ev: InputEvent) -> void:
 		return
 	if ev.ctrl_pressed and k == KEY_R:
 		s.surprise()
+		return
+	if ev.ctrl_pressed and k == KEY_U:
+		s.set_guest(not s.guest)
 		return
 	var verb := Verbs.by_key(k, ev.shift_pressed, ev.ctrl_pressed)
 	if verb != "" and not Toolbox.current().is_empty():

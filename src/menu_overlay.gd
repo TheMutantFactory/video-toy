@@ -56,7 +56,7 @@ func _ready() -> void:
 	_panel.add_child(_menu)
 	_menu.add_child(UI.title("Menu", 40))
 	for m in [["Resume", "resume"], ["Panic — known-good look", "panic"], ["Blackout", "blackout"],
-			["Attribution", "attribution"], ["Help — keys", "help"], ["Undo", "undo"], ["Surprise me", "surprise"], ["Export rig (zip)", "rig_export"], ["Import rig…", "rig_import"],
+			["Attribution", "attribution"], ["Help — keys", "help"], ["Undo", "undo"], ["Surprise me", "surprise"], ["Guest mode on / off", "guest"], ["Take the tour", "tour"], ["Export rig (zip)", "rig_export"], ["Import rig…", "rig_import"],
 			["Render 20 s clip (offline)", "clip"], ["Find Icons", "search"],
 			["Play", "stage"], ["Scenes", "scenes"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
 		_menu.add_child(UI.button(m[0], func(): _pick(m[1])))
@@ -129,7 +129,7 @@ func close() -> void:
 func _pick(what: String) -> void:
 	match what:
 		"resume": close()
-		"help", "undo", "surprise":
+		"help", "undo", "surprise", "guest", "tour":
 			close()
 			navigate.emit(what)
 		"attribution": show_attribution()

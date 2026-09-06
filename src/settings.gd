@@ -18,6 +18,8 @@ const DEFAULTS := {
 	"diff_mean": 0.035,            # ./run.sh check thresholds
 	"diff_block": 0.45,
 	"safe_mode": false,            # no MIDI / OSC / camera / mic at launch (also --safe)
+	"guest_mode": false,           # mouse-only: right-click wheel, long-press removes
+	"tour_seen": false,            # the first-run captions have been shown
 }
 
 static var _cache: Dictionary = {}     # path -> Dictionary

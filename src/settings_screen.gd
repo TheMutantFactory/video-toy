@@ -91,6 +91,16 @@ func _ready() -> void:
 	safe.text = "no MIDI, OSC, camera or microphone at launch"
 	safe.button_pressed = bool(Settings.get_value("safe_mode"))
 	safe.toggled.connect(func(on: bool): Settings.set_value("safe_mode", on))
+	var guest := CheckButton.new()
+	guest.text = "mouse only: right-click opens the wheel, a hold removes"
+	guest.button_pressed = bool(Settings.get_value("guest_mode"))
+	guest.toggled.connect(func(on: bool): Settings.set_value("guest_mode", on))
+	_row(g, "Guest mode", guest, "at launch; Ctrl+U on stage toggles it live. For a party: no keyboard knowledge needed")
+	var tour := CheckButton.new()
+	tour.text = "show the five first-run captions again"
+	tour.button_pressed = not bool(Settings.get_value("tour_seen"))
+	tour.toggled.connect(func(on: bool): Settings.set_value("tour_seen", not on))
+	_row(g, "Tour", tour, "next time Play opens; Esc menu → Take the tour any time")
 	_row(g, "Safe mode", safe, ("ON NOW — " if Safe.active() else "") + "for a machine that misbehaves; also `--safe` on the command line (./run.sh safe). Next launch.")
 
 	# ---------------- clock

@@ -137,6 +137,12 @@ var _m_world3d
 var _m_layers                              # src/stage/layers.gd
 var _m_input                               # src/stage/input.gd
 var _history                               # src/stage/history.gd (undo / redo)
+var guest := false                         # mouse-only: right-click wheel, long-press removes, spawn on release
+var _wheel: RadialMenu
+var _tour: Tour
+var _press_pos := Vector2.ZERO             # guest mode: where the left button went down
+var _press_ms := 0
+var _press_pending := false
 var palette_index := 0
 var feedback := false
 var fb_zoom := 1.04
@@ -414,6 +420,15 @@ func _ready() -> void:
 	_world.add_child(_monitor)
 
 	_build_hud()
+	_wheel = RadialMenu.new()
+	_wheel.provider = _wheel_items
+	_wheel.picked.connect(_on_wheel_pick)
+	add_child(_wheel)
+	_tour = Tour.new()
+	add_child(_tour)
+	set_guest(bool(Settings.get_value("guest_mode")))
+	if not Tour.suppress and not Tour.seen():
+		call_deferred("start_tour")
 	Sounds.attach(self)
 	IconBody.gravity = gravity
 	Toolbox.selection_changed.connect(func(_i): _refresh_verbs())
@@ -490,6 +505,70 @@ func clear_actors() -> void:
 
 func undo() -> bool:
 	return _history.undo()
+
+
+# ---------------- guest mode: the wheel ----------------
+func set_guest(on: bool) -> void:
+	guest = on
+	if not on:
+		_wheel.close()
+	_steal_note = "guest: right-click = wheel, hold = remove" if on else "guest mode off"
+	_update_hud()
+
+
+func open_wheel(screen_pos: Vector2, page := "slots") -> void:
+	_wheel.open_at(screen_pos, page)
+
+
+func start_tour() -> void:
+	_tour.start()
+
+
+## What the wheel shows on each page (RadialMenu asks; it stays pure).
+func _wheel_items(page: String) -> Array:
+	var out: Array = []
+	match page:
+		"slots":
+			for i in Toolbox.slots.size():
+				var sl: Dictionary = Toolbox.slots[i]
+				out.append({"text": "%d %s" % [i + 1, sl.get("term", "")], "tex": IconMedia.texture_for(str(sl.get("svg_path", ""))),
+					"color": Color.WHITE if Toolbox.is_raster_slot(sl) else Palettes.color(palette_index, int(sl.get("color_index", i))), "on": i == Toolbox.selected})
+			if out.is_empty():
+				out.append({"text": "empty toolbox", "sub": "Find Icons or Load demo shapes"})
+		"verbs":
+			for v in Verbs.all():
+				out.append({"text": str(v["name"]), "sub": str(v["key"]), "on": Toolbox.has_verb(Toolbox.selected, str(v["id"]))})
+		_:
+			out = [{"text": "palette", "sub": Palettes.get_palette(palette_index)["name"]}, {"text": "surprise", "sub": "a random look"},
+				{"text": "feedback", "sub": "on" if feedback else "off", "on": feedback}, {"text": "3D solid", "sub": next_shape()},
+				{"text": "formation", "sub": formation_kind()}, {"text": "scene", "sub": "next"}, {"text": "glow", "sub": _glow.describe()},
+				{"text": "undo", "sub": "last thing"}, {"text": "clear", "sub": "the stage"}, {"text": "panic", "sub": "known-good look"}]
+	return out
+
+
+func _on_wheel_pick(page: String, i: int) -> void:
+	match page:
+		"slots":
+			if i < Toolbox.slots.size():
+				Toolbox.select(i)
+		"verbs":
+			if not Toolbox.current().is_empty():
+				Toolbox.toggle_verb(Toolbox.selected, str(Verbs.all()[i]["id"]))
+		_:
+			match i:
+				0:
+					palette_index = (palette_index + 1) % Palettes.count()
+					_apply_palette()
+				1: surprise()
+				2: _set_feedback(not feedback)
+				3: spawn_solid(_wheel.centre if _wheel.visible else Vector2(-1, -1))
+				4: spawn_formation()
+				5: step_scene(1)
+				6: _glow.cycle()
+				7: undo()
+				8: clear_actors()
+				9: panic()
+	_update_hud()
 
 
 func redo() -> bool:
@@ -1122,7 +1201,7 @@ func _update_hud() -> void:
 		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + ("   ·   BLACKOUT" if blackout else "") + ("   ·   TICKER" if ticker_on else "") + ("   ·   CREDITS" if _roll.visible else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
-	var line2 := ("SAFE (no MIDI / OSC / camera / mic)   ·   " if Safe.active() else "") + "midi: " + (_midi_last if _midi_last != "" else "—")
+	var line2 := ("SAFE (no MIDI / OSC / camera / mic)   ·   " if Safe.active() else "") + ("GUEST (right-click: wheel)   ·   " if guest else "") + "midi: " + (_midi_last if _midi_last != "" else "—")
 	line2 += "   ·   audio: " + ((("%s  %s" % [AudioReact.source if AudioReact.source != "file" else AudioReact.file_name, _meter()])) if AudioReact.active() else "off (A)")
 	if AudioReact.driver_missing():
 		line2 += "   ·   no audio device: mic/file unavailable"

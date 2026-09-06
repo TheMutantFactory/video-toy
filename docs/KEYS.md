@@ -21,6 +21,7 @@ The printable version is [key-card.png](key-card.png).
 | `drop .wav .mp3 .ogg on a slot` | its sound: spawn, beat (with Sparkle), pinata, collisions |
 | `drag a Physics icon` | throw it |
 | `Ctrl+Z` | undo the last spawn / remove / clear / mosaic / path / pinata · Ctrl+Shift+Z redo |
+| `Ctrl+U` | guest mode: right-click wheel, hold to remove, mouse only |
 
 ## Verbs (toggle on the selected slot)
 

@@ -211,6 +211,20 @@ look from a known-good base: panic, a random palette, usually a scene, eight ico
 is empty, six evolve mutations, feedback more often than not. It is one undo step, so the guest
 who pressed it can take it back. Undo, redo and surprise are learnable actions.
 
+## Guest mode and the tour
+
+**Ctrl+U** (Settings → Guest mode for launch, the Esc menu, an action) is mouse-only play for
+a party: a **tap spawns**, **holding** on an icon for half a second **removes** it, and
+**right-click opens a wheel** around the cursor — a ring of the toolbox slots as coloured icons,
+a ring of verbs with their on / off marks, and a ring of actions (palette, surprise, feedback,
+3D solid, formation, scene, glow, undo, clear, panic). Click the hub or scroll to change ring;
+right-click or click outside closes. Physics grabs, the monitor drag and draw mode still work.
+
+The first time Play opens, **five captions** walk a newcomer through spawning, the toolbox,
+verbs, effects and presets, and the help key; click or Space advances, Esc skips, and it never
+comes back unless Settings → Tour or Esc menu → **Take the tour** asks for it. Captures and
+self-tests never see it.
+
 ## Physics and sounds
 
 The **Physics** verb (**Ctrl+P**) turns the icon into a rigid body with its own outline

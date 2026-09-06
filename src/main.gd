@@ -37,6 +37,9 @@ func _ready() -> void:
 	menu.navigate.connect(show_screen)
 	add_child(menu)
 	args = OS.get_cmdline_user_args()
+	for harness in ["--selftest", "--capture", "--templates", "--keycard", "--clip", "--safecheck"]:
+		if args.has(harness):
+			Tour.suppress = true                     # the first-run captions never land in a test or a shot
 	var cap := args.find("--capture")
 	var ti := args.find("--templates")
 	var ki := args.find("--keycard")
@@ -119,15 +122,15 @@ func show_screen(name: String) -> void:
 	if name == "attribution":
 		menu.show_attribution()
 		return
-	if name == "help" or name == "undo" or name == "surprise":
+	if name in ["help", "undo", "surprise", "guest", "tour"]:
 		if current_name != "stage":
 			show_screen("stage")
-		if name == "help":
-			current.open_help()
-		elif name == "undo":
-			current.undo()
-		else:
-			current.surprise()
+		match name:
+			"help": current.open_help()
+			"undo": current.undo()
+			"surprise": current.surprise()
+			"guest": current.set_guest(not current.guest)
+			"tour": current.start_tour()
 		return
 	if name == "panic" or name == "blackout":
 		if current_name != "stage":
@@ -688,6 +691,82 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL undo / surprise")
+	# guest mode: right-click opens the wheel, its pages pick a slot / toggle a verb / act,
+	# a tap spawns on release and a hold removes; the tour runs its five steps and persists
+	var ok_g := true
+	var g_bad: Array = []
+	var g_chk := func(label: String, ok: bool):
+		if not ok:
+			g_bad.append(label)
+	st.clear_actors()
+	await get_tree().process_frame                       # the frees land before we count
+	st.set_guest(true)
+	var rmb := InputEventMouseButton.new()
+	rmb.button_index = MOUSE_BUTTON_RIGHT
+	rmb.pressed = true
+	rmb.position = Vector2(900, 500)
+	st._gui_input(rmb)
+	g_chk.call("1", st._wheel.visible and st._wheel.page == "slots" and st._wheel.items.size() == Toolbox.slots.size())
+	st._wheel.activate(2)
+	g_chk.call("2", Toolbox.selected == 2)
+	st._wheel.next_page()
+	g_chk.call("3", st._wheel.page == "verbs" and st._wheel.items.size() == Verbs.all().size())
+	var vid: String = str(Verbs.all()[0]["id"])
+	var had: bool = Toolbox.has_verb(2, vid)
+	st._wheel.activate(0)
+	g_chk.call("4", Toolbox.has_verb(2, vid) != had and bool(st._wheel.items[0]["on"]) != had)
+	st._wheel.activate(0)                                # back as it was
+	st._wheel.next_page()
+	g_chk.call("5", st._wheel.page == "more")
+	var pal_g: int = st.palette_index
+	st._wheel.activate(0)                                # palette
+	g_chk.call("6", st.palette_index == (pal_g + 1) % Palettes.count())
+	st._wheel.close()
+	g_chk.call("7", not st._wheel.visible)
+	Toolbox.select(0)
+	var lmb := InputEventMouseButton.new()
+	lmb.button_index = MOUSE_BUTTON_LEFT
+	lmb.pressed = true
+	lmb.position = Vector2(700, 400)
+	var n0: int = st.all_actors().size()
+	st._gui_input(lmb)
+	g_chk.call("8", st.all_actors().size() == n0 and st._press_pending)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = Vector2(700, 400)
+	st._gui_input(up)
+	g_chk.call("9", st.all_actors().size() == n0 + 1)
+	st._gui_input(lmb)
+	st._press_ms -= 800                                                       # pretend the hold lasted
+	st._gui_input(up)
+	await get_tree().process_frame
+	g_chk.call("10", st.all_actors().size() == n0)
+	st.set_guest(false)
+	Tour.settings_path = "user://_selftest_tour.cfg"
+	Settings.reset(Tour.settings_path)
+	g_chk.call("11", not Tour.seen())
+	st.start_tour()
+	g_chk.call("12", st._tour.visible and st._tour.step == 0 and st._tour._label.text.begins_with("Click anywhere"))
+	for i in 3:
+		st._tour.advance()
+	g_chk.call("13", st._tour.step == 3 and st._tour.visible)
+	var esc2 := InputEventKey.new()
+	esc2.pressed = true
+	esc2.keycode = KEY_ESCAPE
+	st._tour._unhandled_key_input(esc2)
+	g_chk.call("14", not st._tour.visible and Tour.seen())
+	Settings.reset(Tour.settings_path)
+	Tour.settings_path = Settings.PATH
+	st.clear_actors()
+	ok_g = g_bad.is_empty()
+	if not ok_g:
+		printerr("guest / tour sub-checks failed: ", g_bad)
+	if ok_g:
+		print("PASS guest wheel pages pick slots, toggle verbs and act; tap spawns on release, hold removes; the tour steps and persists")
+	else:
+		fails += 1
+		printerr("FAIL guest / tour")
 	# the key table: a few keys through the real dispatcher (plain, Shift, Ctrl, digits)
 	var ok_keys := true
 	var send := func(code: int, shift := false, ctrl := false):
@@ -983,7 +1062,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1489,6 +1568,25 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"wheel", "tour":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				current._help.close()
+				if current._midi_panel.visible:
+					current.toggle_midi_panel()
+				current.set_hud_mode(0)
+				if current.all_actors().size() < 6:
+					current.demo_spawn()
+				if name == "wheel":
+					current.set_guest(true)
+					current.open_wheel(Vector2(1100, 520), "slots")
+				else:
+					current.set_guest(false)
+					current.start_tour()
+				await get_tree().create_timer(0.5).timeout
 			"ref_panel", "ref_help":
 				# Deterministic: an empty stage, HUD hidden, with the control panel
 				# (a throwaway binding file, one learned CC) or the help overlay.
