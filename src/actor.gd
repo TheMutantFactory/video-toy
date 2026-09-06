@@ -246,7 +246,7 @@ func _on_body_entered(other: Node) -> void:
 func grab(on: bool) -> void:
 	if body == null:
 		return
-	body.freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
+	body.freeze_mode = RigidBody2D.FREEZE_MODE_STATIC   # static teleports at once; kinematic queues the move for the next step and a same-frame unfreeze drops it
 	body.freeze = on
 
 

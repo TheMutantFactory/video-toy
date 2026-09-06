@@ -597,6 +597,7 @@ func _selftest() -> void:
 	ph_chk.call("4 pa.body.gravity_scale == 0.0 and st.snap", pa.body.gravity_scale == 0.0 and st.snapshot()["physics"]["gravity"] == 0.0)
 	pa.grab(true)
 	pa.grab_to(Vector2(500, 500))
+	await get_tree().physics_frame                       # a real drag spans frames
 	pa.release(Vector2(900, 0))
 	await get_tree().physics_frame
 	await get_tree().physics_frame
