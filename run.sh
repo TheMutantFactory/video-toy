@@ -2,6 +2,7 @@
 # ./run.sh [play] [low|medium|high|full]   play (optionally lock the quality level)
 # ./run.sh test       headless smoke tests + self-test + a --safe launch check (no network, no quota)
 # ./run.sh safe       play with no MIDI, OSC, camera or microphone (--safe)
+# ./run.sh cue FILE   play and run a cue sheet (docs/cues/opener.cue)
 # ./run.sh capture    screenshot every screen into out/
 # ./run.sh import     (re)import assets headlessly
 # ./run.sh templates  write TouchOSC / Launchpad / APC mini templates into docs/controllers
@@ -41,6 +42,7 @@ audio_override() {
 case "${1:-play}" in
   play)    audio_override; exec "$G" --path . -- ${2:+--quality "$2"} ;;
   safe)    audio_override; exec "$G" --path . -- --safe ;;
+  cue)     audio_override; exec "$G" --path . -- --cue "$(cd "$(dirname "$2")" && pwd)/$(basename "$2")" ;;
   test)    "$G" --headless --path . --import >/dev/null 2>&1 || true
            # perl alarm = portable timeout: a script that errors before quit() would hang forever
            perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -s tests/smoke.gd \

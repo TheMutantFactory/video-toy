@@ -26,7 +26,7 @@ static func groups() -> Array:
 			["H", "HUD full / compact / hidden"],
 			["?", "this key list, with tabs and a search box (Shift+/)"],
 			["Esc / ☰", "menu: panic, blackout, attribution, rigs, clip, settings"],
-			[DROPS, "raster slot (Shift: chroma backdrop) / icon / font for words / word list / video slot / import rig"],
+			[DROPS + " / .cue", "raster slot (Shift: chroma backdrop) / icon / font for words / word list / video slot / import rig / run a cue sheet"],
 			["drop .wav .mp3 .ogg on a slot", "its sound: spawn, beat (with Sparkle), pinata, collisions"],
 			["drag a Physics icon", "throw it"],
 			["Ctrl+Z", "undo the last spawn / remove / clear / mosaic / path / pinata · Ctrl+Shift+Z redo"],

@@ -43,6 +43,11 @@ func _ready() -> void:
 	var cap := args.find("--capture")
 	var ti := args.find("--templates")
 	var ki := args.find("--keycard")
+	var cui := args.find("--cue")
+	if cui >= 0 and cui + 1 < args.size():
+		var cue_path: String = args[cui + 1]
+		show_screen("stage")
+		call_deferred("_start_cli_cues", cue_path)
 	if args.has("--safecheck"):
 		print("SAFECHECK active=%s midi_inputs=%d osc_listening=%s mic=%s webcam=%s log=%s" % [Safe.active(), MidiMap.inputs().size(), Osc.listening, AudioReact.mic_available(), "off" if Safe.active() else "on", FileAccess.file_exists(CrashLog.current())])
 		quit_clean()
@@ -204,6 +209,13 @@ func show_screen(name: String) -> void:
 	if name == "attribution":
 		menu.show_attribution()
 		return
+	if name.begins_with("cues:"):
+		if current_name != "stage":
+			show_screen("stage")
+		var cue_err: String = current.run_cues(name.substr(5))
+		if cue_err != "":
+			push_warning("cue sheet: " + cue_err)
+		return
 	if name in ["help", "undo", "surprise", "guest", "tour"]:
 		if current_name != "stage":
 			show_screen("stage")
@@ -244,6 +256,13 @@ func _templates(dir: String) -> void:
 	var files: Array = Templates.write_all(current.midi_params(), current.midi_actions(), dir)
 	print("TEMPLATES ", dir, ": ", ", ".join(files), "  (%d params, %d actions)" % [current.midi_params().size(), current.midi_actions().size()])
 	get_tree().quit()
+
+
+func _start_cli_cues(path: String) -> void:
+	await get_tree().process_frame
+	var err: String = current.run_cues(path)
+	if err != "":
+		printerr("cue sheet: " + err)
 
 
 ## The harnesses (self-test, capture) run on a scratch toolbox and ledger with
@@ -881,6 +900,68 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL feedback routing (%s)" % st.routing_describe())
+	# cue sheets: cues fire on the stage's time, a ramp moves a param, notes reach the HUD,
+	# a loop restarts, stop stops; a file runs from the drop path and the menu route
+	var ok_cu := true
+	var cu_bad: Array = []
+	var cu_chk := func(label: String, ok: bool):
+		if not ok:
+			cu_bad.append(label)
+	st.panic()
+	st.clear_actors()
+	await get_tree().process_frame
+	Toolbox.select(0)
+	var errs: Array = st.run_cue_text("""
+0.0   action spawn
+0.05  note "hello cue"
+0.1   param fb_zoom 1.0 over 0.2s
+0.4   action clear
+loop
+""", "test sheet")
+	cu_chk.call("1", errs.is_empty() and st.cues_playing() and st._cues.resolved.size() == 4)
+	st._cues._tick(0.0)
+	cu_chk.call("2", st.all_actors().size() == 1 and st._cues.fired == 1)
+	st._cues._tick(0.06)
+	cu_chk.call("3", st._steal_note == "hello cue")
+	st._cues._tick(0.05)                                    # t = 0.11: the ramp starts from 0.5 (unknown)
+	var z_mid: float = st.fb_zoom
+	st._cues._tick(0.1)                                     # t = 0.21: halfway
+	cu_chk.call("4", st.fb_zoom > z_mid)
+	st._cues._tick(0.15)                                    # t = 0.36: ramp done at 1.0 -> zoom 1.20
+	cu_chk.call("5", is_equal_approx(st.fb_zoom, 1.20) and st._cues._ramps.is_empty())
+	st._cues._tick(0.1)                                     # t = 0.46: clear fires; the sheet loops
+	cu_chk.call("6", st._cues.fired == 4 and st._cues.playing and st._cues.next == 0 and st._cues.time < 0.4)
+	st._update_hud()
+	cu_chk.call("7", st._hud.text.contains("cue 0/4"))
+	st.stop_cues()
+	await get_tree().process_frame
+	cu_chk.call("8", st.all_actors().is_empty())
+	cu_chk.call("9", not st.cues_playing())
+	var cue_path := ProjectSettings.globalize_path("user://_selftest.cue")
+	var cf := FileAccess.open(cue_path, FileAccess.WRITE)
+	cf.store_string("0 action spawn\n+0.5 action spawn\n")
+	cf.close()
+	cu_chk.call("10", st.run_cues(cue_path) == "" and st._cues.name == "_selftest.cue" and st._cues.resolved[1]["t"] == 0.5)
+	st.stop_cues()
+	cu_chk.call("11", st.run_cues("/nope/none.cue") != "")
+	var ex: Array = CueSheet.parse(FileAccess.get_file_as_string("res://docs/cues/opener.cue"))["errors"]
+	var ids_ok := true
+	var known: Array = st.midi_actions().map(func(a): return a["id"]) + st.midi_params().map(func(p): return p["id"])
+	for c in CueSheet.parse(FileAccess.get_file_as_string("res://docs/cues/opener.cue"))["cues"]:
+		if c["cmd"] != "note":
+			ids_ok = ids_ok and known.has(c["id"])
+	cu_chk.call("12", ex.is_empty() and ids_ok)
+	DirAccess.remove_absolute(cue_path)
+	st.clear_actors()
+	st.fb_zoom = 1.04
+	ok_cu = cu_bad.is_empty()
+	if not ok_cu:
+		printerr("cue sub-checks failed: ", cu_bad, " example errors: ", ex, " unknown ids: ", ids_ok)
+	if ok_cu:
+		print("PASS cue sheets: cues fire in time, a ramp moves a param, notes reach the HUD, loop, stop, a file, the example names only real actions")
+	else:
+		fails += 1
+		printerr("FAIL cue sheets (zoom %.3f fired %d next %d t %.2f)" % [st.fb_zoom, st._cues.fired, st._cues.next, st._cues.time])
 	# the small ones: Echo's ghosts come and go with the verb, Shimmer flickers, the wake follows
 	# the cursor, a procession is seven in a spectrum, purple rain is a scene, the wake snapshots
 	var ok_sv := true

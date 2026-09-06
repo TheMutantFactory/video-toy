@@ -300,6 +300,11 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 				s._steal_note = "could not add the word list (empty, or toolbox full)"
 			s._update_hud()
 			return
+		if ext == "cue":
+			var cue_err: String = s.run_cues(f)
+			s._steal_note = ("cue sheet running: " + f.get_file()) if cue_err == "" else ("cue sheet: " + cue_err)
+			s._update_hud()
+			return
 		if ext == "zip":
 			s._steal_note = load("res://src/menu_overlay.gd").import_rig(f)
 			s._update_hud()

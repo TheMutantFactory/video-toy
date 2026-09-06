@@ -43,6 +43,7 @@ const StageWorld3dScript = preload("res://src/stage/world3d.gd")
 const StageLayersScript = preload("res://src/stage/layers.gd")
 const StageInputScript = preload("res://src/stage/input.gd")
 const StageHistoryScript = preload("res://src/stage/history.gd")
+const StageCuesScript = preload("res://src/stage/cues.gd")
 const ActorScript = preload("res://src/actor.gd")
 const FxScript = preload("res://src/fx.gd")
 const MonitorScript = preload("res://src/monitor.gd")
@@ -146,6 +147,7 @@ var _m_world3d
 var _m_layers                              # src/stage/layers.gd
 var _m_input                               # src/stage/input.gd
 var _history                               # src/stage/history.gd (undo / redo)
+var _cues                                  # src/stage/cues.gd (cue sheets)
 var guest := false                         # mouse-only: right-click wheel, long-press removes, spawn on release
 var locks: Array = []                      # Locks.SECTIONS that Surprise / evolve keep
 var mutate_amount := 1.0                   # 0.25 nearby .. 1.0 everything
@@ -346,6 +348,7 @@ func _ready() -> void:
 	_m_layers = StageLayersScript.new(self)
 	_m_input = StageInputScript.new(self)
 	_history = StageHistoryScript.new(self)
+	_cues = StageCuesScript.new(self)
 	_modes = StageModesScript.new(self)
 	_state = StageStateScript.new(self)
 	_controls = StageControlsScript.new(self)
@@ -1444,6 +1447,8 @@ func _update_hud() -> void:
 		line2 += "   ·   " + _poultry.describe()
 	if wake_on:
 		line2 += "   ·   wake"
+	if _cues.playing:
+		line2 += "   ·   " + _cues.describe()
 	var kn := knots()
 	if not kn.is_empty():
 		line2 += "   ·   knots: " + ", ".join(kn.map(func(k): return k.knot_describe()))
@@ -1656,6 +1661,34 @@ func loop_mask() -> int:
 		if bool(_layers[i].get("loop", true)):
 			m |= 1 << i
 	return m
+
+
+# ---------------- cue sheets ----------------
+func run_cues(path: String) -> String:
+	var errs: Array = _cues.load_file(path)
+	if not errs.is_empty():
+		_steal_note = "cue sheet: " + str(errs[0])
+		_update_hud()
+		return str(errs[0])
+	_cues.start()
+	return ""
+
+
+func run_cue_text(text: String, label := "cue sheet") -> Array:
+	var errs: Array = _cues.load_text(text, label)
+	if errs.is_empty():
+		_cues.start()
+	return errs
+
+
+func stop_cues() -> void:
+	_cues.stop()
+	_steal_note = "cues stopped"
+	_update_hud()
+
+
+func cues_playing() -> bool:
+	return _cues.playing
 
 
 # ---------------- the wake ----------------
@@ -2075,6 +2108,7 @@ func _process(_delta: float) -> void:
 	var t0 := Time.get_ticks_usec()
 	MidiOut.tick()
 	_tick_gnarl()
+	_cues._tick(_delta)
 	_tick_crossfade(_delta)
 	_tick_credits(_delta)
 	_tick_clock()

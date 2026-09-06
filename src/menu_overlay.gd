@@ -57,7 +57,7 @@ func _ready() -> void:
 	_menu.add_child(UI.title("Menu", 40))
 	for m in [["Resume", "resume"], ["Panic — known-good look", "panic"], ["Blackout", "blackout"],
 			["Attribution", "attribution"], ["Help — keys", "help"], ["Undo", "undo"], ["Surprise me", "surprise"], ["Guest mode on / off", "guest"], ["Take the tour", "tour"], ["Export rig (zip)", "rig_export"], ["Import rig…", "rig_import"],
-			["Render 20 s clip (offline)", "clip"], ["Render the loop (timeline length, seamless)", "clip_loop"], ["Find Icons", "search"],
+			["Render 20 s clip (offline)", "clip"], ["Render the loop (timeline length, seamless)", "clip_loop"], ["Run a cue sheet…", "cues"], ["Find Icons", "search"],
 			["Play", "stage"], ["Scenes", "scenes"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
 		_menu.add_child(UI.button(m[0], func(): _pick(m[1])))
 
@@ -144,6 +144,20 @@ func _pick(what: String) -> void:
 			DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://rigs"))
 			var n := Rig.export(p)
 			_note("exported %d files to %s" % [n, ProjectSettings.globalize_path(p)] if n >= 0 else "could not write the rig")
+		"cues":
+			var cdlg := FileDialog.new()
+			cdlg.access = FileDialog.ACCESS_FILESYSTEM
+			cdlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+			cdlg.filters = PackedStringArray(["*.cue ; Video Toy cue sheet"])
+			cdlg.use_native_dialog = true
+			cdlg.title = "Run a cue sheet"
+			add_child(cdlg)
+			cdlg.file_selected.connect(func(path: String):
+				close()
+				navigate.emit("cues:" + path)
+				cdlg.queue_free())
+			cdlg.canceled.connect(func(): cdlg.queue_free())
+			cdlg.popup_centered(Vector2i(900, 600))
 		"rig_import":
 			var dlg := FileDialog.new()
 			dlg.access = FileDialog.ACCESS_FILESYSTEM

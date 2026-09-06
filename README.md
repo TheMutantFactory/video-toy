@@ -571,6 +571,27 @@ second cross-dissolved from the frames that follow the loop's end, so the end me
 Without ffmpeg the AVI stays and a `.sh` with the exact command is written beside it. The HUD
 reports each stage. `./run.sh clip [s] [9:16]` does the render from the shell.
 
+## Cue sheets: scripting the toy
+
+A cue sheet is a text file, one cue per line, a time and a command; the commands are the learn
+table's own actions and params by the names OSC uses (`docs/controllers/osc-addresses.txt`):
+
+```
+0:00      action preset_1
+bar 4     action spawn
+bar 8     param fb_zoom 0.75 over 4 bars
++2        note "verse two"
+bar 32    action panic
+loop
+```
+
+Times are `m:ss`, seconds, `bar n` or `beat n` at the running clock's tempo (120 without one),
+or `+n [s|bars|beats]` after the previous cue; `param … over …` ramps from the param's last
+scripted value; `note` shows in the HUD; `loop` restarts the sheet. Run one with `./run.sh cue
+docs/cues/opener.cue`, `--cue FILE` on the app, Esc → **Run a cue sheet…**, or drop a `.cue`
+on Play; **Stop the cue sheet** is an action, so a pad can end it, and the HUD shows
+`cue 7/14 · 0:32.5` while it plays. Every future action is scriptable for free.
+
 ## Rig files
 
 The Esc menu has **Export rig**, which zips the toolbox and every asset it points at, the

@@ -1189,6 +1189,30 @@ func _init() -> void:
 	_check("echo runs last and unknown verbs are null", Verbs.get_instance("echo").order == 200 and Verbs.get_instance("nope") == null)
 	_check("verbs have a leave hook and the new ones are Ctrl keys", Verb.new().has_method("leave") and Verbs.by_key(KEY_H, false, true) == "shimmer" and Verbs.by_key(KEY_K, false, true) == "echo")
 
+	# cue sheets: parse the grammar, resolve bars and beats to seconds, ramps, loop, errors
+	var cu_sheet := CueSheet.parse("""
+# a comment
+0:00      action preset_1
+4.5       param fb_zoom 0.7
+bar 2     param fb_zoom 0.9 over 4 beats   # ramp
+beat 3    action spawn
++2        note "hello there"
++1 bar    preset 3
+12s       param nope 7
+bogus line
+0:10      action
+loop
+""")
+	var cu_cq: Array = cu_sheet["cues"]
+	_check("cue sheet: seven cues parse, two lines are errors, loop is read", cu_cq.size() == 7 and cu_sheet["loop"] and cu_sheet["errors"].size() == 2 and str(cu_sheet["errors"][0]).contains("bogus") and str(cu_sheet["errors"][1]).contains("no command"))
+	_check("cue sheet: kinds, values, relatives and clamps", cu_cq[0]["cmd"] == "action" and cu_cq[0]["id"] == "preset_1" and cu_cq[1]["at"] == 4.5 and cu_cq[2]["when"] == "bar" and cu_cq[2]["over"] == 4.0 and cu_cq[2]["over_kind"] == "beat" and cu_cq[3]["when"] == "beat" and cu_cq[4]["relative"] and cu_cq[4]["cmd"] == "note" and cu_cq[4]["text"] == "hello there" and cu_cq[5]["relative"] and cu_cq[5]["when"] == "bar" and cu_cq[5]["id"] == "preset_3" and cu_cq[6]["value"] == 1.0)
+	var cu_rs := CueSheet.resolve(cu_cq, 120.0)
+	var cu_times: Array = cu_rs.map(func(c): return snappedf(float(c["t"]), 0.01))
+	_check("cue sheet: at 120 bpm a bar is 2 s, a beat 0.5 s, relatives add to the previous cue in sheet order, then sorted by time", cu_times == [0.0, 1.5, 3.5, 4.0, 4.5, 5.5, 12.0] and is_equal_approx(float(cu_rs[3]["over_s"]), 2.0) and is_equal_approx(CueSheet.length(cu_rs), 12.0) and CueSheet.describe(cu_rs[3]).contains("over 2.0s") and cu_rs[2]["cmd"] == "note")
+	_check("cue sheet: tempo changes the bars, not the seconds", is_equal_approx(CueSheet.seconds("bar", 2.0, 60.0), 8.0) and is_equal_approx(CueSheet.seconds("s", 3.0, 60.0), 3.0) and CueSheet.parse("").cues.is_empty())
+	var glued: Array = CueSheet.parse("0 param fb_fade 0.6 over 6s\n1 param fb_zoom 0.2 over 4bars\n2 param fb_rot 0.5 over 3 beats")["cues"]
+	_check("cue sheet: a unit glued to the ramp length (6s, 4bars) reads like a spaced one", glued[0]["over"] == 6.0 and glued[0]["over_kind"] == "s" and glued[1]["over"] == 4.0 and glued[1]["over_kind"] == "bar" and glued[2]["over"] == 3.0 and glued[2]["over_kind"] == "beat")
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

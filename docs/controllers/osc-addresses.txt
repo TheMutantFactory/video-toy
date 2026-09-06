@@ -119,6 +119,7 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/poultry_toggle   Poultry philtre on / off
   /vt/action/knots_next   Knots tie into the next family
   /vt/action/wake_toggle   Wake (sparks along the cursor) on / off
+  /vt/action/cues_stop   Stop the cue sheet
   /vt/action/poultry_order   Poultry 5-fold / 7-fold
   /vt/action/poultry_peck   Poultry: peck
   /vt/action/clip_format   Next clip format (16:9 / 9:16 / 1:1)
@@ -194,6 +195,7 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/verb_outline   Toggle verb: Outline
   /vt/action/verb_physics   Toggle verb: Physics
   /vt/action/verb_voice   Toggle verb: Voice
+  /vt/action/verb_shimmer   Toggle verb: Shimmer
   /vt/action/verb_echo   Toggle verb: Echo
 
 Outgoing (Settings -> OSC out, default UDP 9001; osc-midi-bridge.py turns the /vt/midi family into a MIDI port):
