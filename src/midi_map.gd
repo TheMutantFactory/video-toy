@@ -35,6 +35,8 @@ const AUDIO_ACTION_BANDS := ["", "beat"]
 var last_source := ""              # "midi" | "pad" | "osc" | "audio" — who emitted last
 var bindings := {}                 # message key -> id
 var audio_bindings := {}           # id -> band
+var mods := {}                     # id -> Modulator (LFO / random / S&H / env), params only
+var _beat_pending := false
 var armed_id := ""
 var last_text := ""
 var path := PATH
@@ -83,6 +85,7 @@ func unbind(id: String) -> void:
 func clear_all() -> void:
 	bindings.clear()
 	audio_bindings.clear()
+	mods.clear()
 	save_to_disk()
 
 
@@ -123,6 +126,67 @@ func set_audio_binding(id: String, band: String) -> void:
 	save_to_disk()
 
 
+# ---------------- modulators (no patching: a shape and a depth per row) ----------------
+func mod_for(id: String) -> Modulator:
+	return mods.get(id)
+
+
+func set_mod(id: String, shape: String, depth := -1.0, rate := -1.0) -> Modulator:
+	if shape == "" or id.begins_with("act:"):
+		mods.erase(id)
+		save_to_disk()
+		return null
+	var m: Modulator = mods.get(id)
+	if m == null:
+		m = Modulator.new()
+		mods[id] = m
+	m.shape = shape if Modulator.SHAPES.has(shape) else "sine"
+	if depth >= 0.0:
+		m.depth = clampf(depth, 0.0, 1.0)
+	if rate > 0.0:
+		m.rate = rate
+	save_to_disk()
+	return m
+
+
+## off -> sine -> tri -> square -> saw -> random -> sh -> env -> off
+func cycle_mod(id: String) -> String:
+	var m := mod_for(id)
+	var i := Modulator.SHAPES.find(m.shape) if m else -1
+	if i + 1 >= Modulator.SHAPES.size():
+		set_mod(id, "")
+		return ""
+	return set_mod(id, Modulator.SHAPES[i + 1]).shape
+
+
+func set_mod_depth(id: String, depth: float) -> void:
+	var m := mod_for(id)
+	if m:
+		m.depth = clampf(depth, 0.0, 1.0)
+		save_to_disk()
+
+
+func cycle_mod_rate(id: String) -> float:
+	var m := mod_for(id)
+	if m == null:
+		return 0.0
+	var r := m.next_rate()
+	save_to_disk()
+	return r
+
+
+## Every frame: each modulated param gets its next value.
+func _process(delta: float) -> void:
+	if mods.is_empty():
+		_beat_pending = false
+		return
+	var beat := _beat_pending
+	_beat_pending = false
+	for id in mods:
+		param.emit(id, mods[id].output(delta, beat))
+	last_source = "mod"
+
+
 ## Cycle a row through the bands that make sense for it.
 func cycle_audio_binding(id: String) -> String:
 	var table: Array = AUDIO_ACTION_BANDS if id.begins_with("act:") else AUDIO_PARAM_BANDS
@@ -144,6 +208,7 @@ func feed_audio(bands: Dictionary) -> void:
 ## Called by AudioReact on each detected beat.
 func feed_beat() -> void:
 	last_source = "audio"
+	_beat_pending = true
 	for id in audio_bindings:
 		if audio_bindings[id] == "beat" and id.begins_with("act:"):
 			action.emit(id.trim_prefix("act:"))
@@ -260,19 +325,25 @@ func _handle(key: String, value: float, is_off: bool, is_note: bool, text: Strin
 			action.emit(id.trim_prefix("act:"))
 	elif not is_off:
 		param.emit(id, value)
+		if mods.has(id):
+			mods[id].centre = value              # the knob sets what the modulator swings around
 	_last_value[key] = value
 
 
 func save_to_disk() -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"bindings": bindings, "audio": audio_bindings}, "\t"))
+		var md := {}
+		for id in mods:
+			md[id] = mods[id].to_dict()
+		f.store_string(JSON.stringify({"bindings": bindings, "audio": audio_bindings, "mods": md}, "\t"))
 		f.close()
 
 
 func load_from_disk() -> void:
 	bindings = {}
 	audio_bindings = {}
+	mods = {}
 	if not FileAccess.file_exists(path):
 		return
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -282,3 +353,7 @@ func load_from_disk() -> void:
 	if data is Dictionary and data.get("audio") is Dictionary:
 		for k in data["audio"]:
 			audio_bindings[str(k)] = str(data["audio"][k])
+	if data is Dictionary and data.get("mods") is Dictionary:
+		for k in data["mods"]:
+			if data["mods"][k] is Dictionary:
+				mods[str(k)] = Modulator.from_dict(data["mods"][k])

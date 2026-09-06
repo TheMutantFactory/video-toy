@@ -969,6 +969,56 @@ func _init() -> void:
 	MidiOut.configure("127.0.0.1", 9001, false)
 	MidiOut.sent = 0
 
+	# modulators: shapes, depth around a centre, S&H holds until a trigger, md_env decays, round trip
+	_check("waves: sine peak, tri at quarter, square halves, saw ramps", is_equal_approx(Modulator.wave("sine", 0.25), 1.0) and is_equal_approx(Modulator.wave("tri", 0.25), 0.0) and Modulator.wave("square", 0.1) == 1.0 and Modulator.wave("square", 0.6) == -1.0 and is_equal_approx(Modulator.wave("saw", 0.75), 0.5))
+	var md_lfo := Modulator.new()
+	md_lfo.shape = "sine"
+	md_lfo.rate = 1.0
+	md_lfo.depth = 1.0
+	md_lfo.centre = 0.5
+	var md_lo := 1.0
+	var md_hi := 0.0
+	for i in 100:
+		var v := md_lfo.output(0.01)
+		md_lo = minf(md_lo, v)
+		md_hi = maxf(md_hi, v)
+	_check("a full-depth sine swings 0..1 around 0.5 and one second is one cycle", md_lo < 0.02 and md_hi > 0.98 and absf(md_lfo.phase) < 0.02)
+	md_lfo.centre = 0.9
+	md_lfo.depth = 0.5
+	var md_over := false
+	for i in 100:
+		md_over = md_over or md_lfo.output(0.01) > 1.0
+	_check("depth around a high centre clamps at 1", not md_over)
+	var md_sh := Modulator.new()
+	md_sh.shape = "sh"
+	md_sh.rate = 0.01
+	var md_a1 := md_sh.output(0.016, true)
+	var md_a2 := md_sh.output(0.016)
+	var md_a3 := md_sh.output(0.016, true)
+	var md_changed_on_beat := false
+	for i in 8:                                             # a random draw can repeat; try a few beats
+		md_changed_on_beat = md_changed_on_beat or absf(md_sh.output(0.016, true) - md_a1) > 0.001
+	_check("sample-and-hold holds between triggers and redraws on a beat", is_equal_approx(md_a1, md_a2) and md_changed_on_beat)
+	var md_env := Modulator.new()
+	md_env.shape = "env"
+	md_env.rate = 1.0
+	md_env.depth = 1.0
+	var md_e0 := md_env.output(0.0, true)
+	var md_e1 := md_env.output(0.5)
+	var md_e2 := md_env.output(0.5)
+	_check("the beat envelope jumps to the top and decays", md_e0 > 0.95 and md_e1 < md_e0 and md_e2 < md_e1 and md_e2 > 0.0)
+	var md_rw := Modulator.new()
+	md_rw.shape = "random"
+	md_rw.rate = 4.0
+	var md_rw_ok := true
+	for i in 300:
+		var v := md_rw.output(0.016)
+		md_rw_ok = md_rw_ok and v >= 0.0 and v <= 1.0
+	_check("a random walk stays in range", md_rw_ok)
+	var md_back := Modulator.from_dict(Modulator.new().to_dict())
+	var md_bogus := Modulator.from_dict({"shape": "nope", "rate": 99.0, "depth": 3.0})
+	_check("modulators round-trip through dictionaries and clamp bad values", md_back.shape == "sine" and is_equal_approx(md_back.depth, 0.5) and md_bogus.shape == "sine" and md_bogus.rate <= 20.0 and md_bogus.depth == 1.0 and Modulator.new().describe().begins_with("sine"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

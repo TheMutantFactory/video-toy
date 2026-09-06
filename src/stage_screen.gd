@@ -1229,6 +1229,8 @@ func _update_hud() -> void:
 		line2 += "   ·   gravity %s" % ("off" if gravity == 0.0 else "%.1f" % gravity)
 	if MidiOut.enabled:
 		line2 += "   ·   osc out → " + MidiOut.describe()
+	if not MidiMap.mods.is_empty():
+		line2 += "   ·   mods: %d" % MidiMap.mods.size()
 	if hud_mode == 1:
 		_hud.text = "fps %d · work %.1f ms · q %s · slot %d: %s · palette: %s · feedback: %s · fx: %s · actors: %d%s" % [
 			Engine.get_frames_per_second(), quality.avg_ms, quality.describe(), Toolbox.selected + 1, name,

@@ -8,6 +8,8 @@ var params: Array = []             # [{id, label}]
 var actions: Array = []            # [{id, label}]
 var _rows := {}                    # full id -> Button
 var _audio_btns := {}              # full id -> Button
+var _mod_btns := {}                # param id -> Button (shape · rate)
+var _depths := {}                  # param id -> HSlider
 var _status: Label
 var _inputs: Label
 var _osc_line: Label
@@ -45,7 +47,7 @@ func _ready() -> void:
 	col.add_child(head)
 	_inputs = UI.label("", 16, UI.DIM)
 	col.add_child(_inputs)
-	col.add_child(UI.label("Click a row, then move a knob / stick / fader or hit a pad / button / send an OSC message. Right-click to unbind. ♪ cycles an audio band. ; closes.", 16, UI.DIM))
+	col.add_child(UI.label("Click a row, then move a knob / stick / fader or hit a pad / button / send an OSC message. Right-click to unbind. ♪ cycles an audio band. ~ cycles a modulator (sine, tri, square, saw, random walk, sample & hold, beat envelope; right-click: rate) and the slider is its depth around the knob's last value. ; closes.", 16, UI.DIM))
 	_osc_line = UI.label("", 16, UI.DIM)
 	col.add_child(_osc_line)
 
@@ -101,6 +103,28 @@ func _column(title: String, table: Array, prefix: String) -> Control:
 			MidiMap.cycle_audio_binding(full)
 			refresh())
 		row.add_child(a)
+		if prefix == "":
+			var mb := Button.new()
+			mb.custom_minimum_size = Vector2(92, 36)
+			mb.tooltip_text = "modulator: click cycles the shape, right-click the rate"
+			mb.pressed.connect(func():
+				MidiMap.cycle_mod(full)
+				refresh())
+			mb.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
+					MidiMap.cycle_mod_rate(full)
+					refresh())
+			row.add_child(mb)
+			var sl := HSlider.new()
+			sl.min_value = 0.0
+			sl.max_value = 1.0
+			sl.step = 0.05
+			sl.custom_minimum_size = Vector2(70, 36)
+			sl.tooltip_text = "depth"
+			sl.value_changed.connect(func(v: float): MidiMap.set_mod_depth(full, v))
+			row.add_child(sl)
+			_mod_btns[full] = mb
+			_depths[full] = sl
 		list.add_child(row)
 		_rows[full] = b
 		_audio_btns[full] = a
@@ -126,6 +150,15 @@ func refresh() -> void:
 		var a: Button = _audio_btns[full]
 		a.text = ("♪ " + band) if band != "" else "♪"
 		a.modulate = Color.WHITE if band != "" else UI.DIM
+		if _mod_btns.has(full):
+			var m: Modulator = MidiMap.mod_for(full)
+			var mb: Button = _mod_btns[full]
+			mb.text = ("~ " + m.describe()) if m else "~"
+			mb.modulate = Color.WHITE if m else UI.DIM
+			var sl: HSlider = _depths[full]
+			sl.visible = m != null
+			if m:
+				sl.set_value_no_signal(m.depth)
 
 
 func _refresh_inputs() -> void:

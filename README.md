@@ -316,6 +316,16 @@ a centre deadzone), buttons are actions (or 1/0 params). **OSC** listens on UDP 
 name with no learning, and any other address (`/1/fader3` from TouchOSC, say) is learnable like a
 CC. The `;` panel lists connected pads and the OSC port.
 
+## Modulators: motion without patching
+
+Every param row in the **;** panel has a **~** button: click it to cycle a modulator through
+sine, triangle, square, saw, a random walk, sample-and-hold and a beat envelope (right-click
+cycles the rate: 0.1 to 4 Hz; S&H and the envelope also retrigger on the beat), and the slider
+beside it is the depth. The modulator swings around the last value the knob sent, so a MIDI
+fader sets the centre and the LFO breathes around it — the research doc's "drag a modulator
+onto a parameter, adjust its depth beside the control", minus the drag. Modulators are saved
+with the controller map (so with the rig), the HUD counts them, and panic leaves them alone.
+
 ## Audio reactivity
 
 Press **A** to cycle the source: **mic**, a built-in **test** groove (120 BPM, no input

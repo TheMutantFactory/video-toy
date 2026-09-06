@@ -641,6 +641,37 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# modulators: a sine on feedback zoom moves the stage value every frame, persists with the map
+	var ok_md := true
+	var keep_path: String = MidiMap.path
+	MidiMap.path = "user://_selftest_mods.json"
+	MidiMap.set_mod("fb_zoom", "sine", 1.0, 4.0)
+	var m0: Modulator = MidiMap.mod_for("fb_zoom")
+	ok_md = ok_md and m0 != null and m0.shape == "sine" and m0.depth == 1.0 and m0.rate == 4.0
+	var z_seen: Array = []
+	for i in 12:
+		await get_tree().process_frame
+		z_seen.append(st.fb_zoom)
+	var z_min: float = z_seen.min()
+	var z_max: float = z_seen.max()
+	ok_md = ok_md and z_max - z_min > 0.05 and z_min >= 0.90 and z_max <= 1.20 and MidiMap.last_source == "mod"
+	ok_md = ok_md and MidiMap.cycle_mod("fb_zoom") == "tri" and MidiMap.cycle_mod_rate("fb_zoom") == 0.1
+	MidiMap.set_mod_depth("fb_zoom", 0.3)
+	var saved = JSON.parse_string(FileAccess.get_file_as_string(MidiMap.path))
+	ok_md = ok_md and saved is Dictionary and saved.get("mods", {}).has("fb_zoom") and is_equal_approx(float(saved["mods"]["fb_zoom"]["depth"]), 0.3)
+	MidiMap.load_from_disk()
+	ok_md = ok_md and MidiMap.mod_for("fb_zoom") != null and MidiMap.mod_for("fb_zoom").shape == "tri"
+	MidiMap.set_mod("fb_zoom", "")
+	ok_md = ok_md and MidiMap.mods.is_empty()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(MidiMap.path))
+	MidiMap.path = keep_path
+	MidiMap.load_from_disk()
+	st.fb_zoom = 1.04
+	if ok_md:
+		print("PASS modulators: a sine drives feedback zoom each frame, shape / rate / depth cycle, saved with the map")
+	else:
+		fails += 1
+		printerr("FAIL modulators (zoom %.3f..%.3f)" % [z_min, z_max])
 	# MIDI out over OSC: a spawn sends a note and an event, the beat a kick, both over loopback
 	var ok_mo := true
 	var mrx := PacketPeerUDP.new()
