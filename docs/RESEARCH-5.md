@@ -45,7 +45,9 @@ description of this toy. The gaps are where to go next.
    (Ctrl+E), the child renders at the crop's window size, "Render the loop" is the timeline
    loop's exact length after a pre-roll, and with ffmpeg the parent makes an mp4 — seamless
    for loops (xfade of the head from the post-end frames) — or leaves a script otherwise.
-5. **Audio shaping**: attack / release / smoothing per band, BPM from audio.
+5. **Audio shaping** — built: per-band attack / decay / sustain / release / gate / smoothing
+   (Ctrl+A panel, params, settings), an onset-fed tempo tracker with confidence and phase,
+   set-clock-from-audio and clock-follows-audio.
 6. **Windows and Linux exports**: cheap in Godot; Syphon needs a Spout twin.
 7. Small: preset thumbnails, per-effect cost in the HUD, a soak test in CI, mp4 playback,
    particle emitters from an image.

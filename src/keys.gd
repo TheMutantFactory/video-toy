@@ -89,6 +89,7 @@ static func groups() -> Array:
 		{"title": "Sources and controllers", "tab": "Controllers", "rows": [
 			[";", "MIDI + audio panel: learn, clock, controller maps, OSC port"],
 			["A", "audio off / mic / test groove / file (drop mp3 ogg wav)"],
+			["Ctrl+A", "audio shaping: attack / decay / sustain / release / gate / smoothing per band, tracked bpm → clock"],
 			["Z", "webcam off / layer behind everything / chroma backdrop"],
 			["S", "steal a palette from the raster or the webcam"],
 		]},

@@ -368,6 +368,19 @@ with no input device at all that setting makes CoreAudio fail and *all* audio go
 that turns input off when there is none (the HUD says so; test groove and file still work).
 Plug in an interface and run again to get the mic back.
 
+## Audio shaping and tempo
+
+**Ctrl+A** opens audio shaping: each band (bass, mid, high) has an **attack** and **release**
+time, a **decay** to a **sustain** level after every rise (sustain below one makes transients
+pop and sustained tones sit back), a **gate** and extra **smoothing**, with a live meter per
+band. Attack, release, sustain and smoothing for all bands at once are learnable params, and the
+shapes persist in settings. The onset detector keeps its own fast follower, so shaping a band
+never breaks the beat, and every onset feeds a **tempo tracker**: intervals between recent beats,
+folded into 60–200 bpm, voted, refined — the HUD shows `~124 bpm` once it is confident.
+**Set clock from audio** starts the internal clock at that tempo (an action too), and **clock
+follows the audio** (Settings → Clock, live) keeps retuning it while the music plays, so scenes
+locked to BPM and bar-quantised loops follow the DJ without a MIDI clock.
+
 ## Raster and webcam
 
 Drop a PNG / JPG / WebP on the window and it becomes a toolbox slot: verbs, spawning and 3D

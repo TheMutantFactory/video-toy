@@ -1059,6 +1059,61 @@ func _init() -> void:
 	var ce_gr: Array = FrameGuide.rects(Rect2(0, 0, 960, 540), Vector2i(1920, 1080), Vector2i(608, 1080))
 	_check("the guide's crop sits centred in the drawn picture at the display's scale", ce_gr[0] == Rect2(0, 0, 960, 540) and ce_gr[1].size.is_equal_approx(Vector2(304, 540)) and ce_gr[1].position.is_equal_approx(Vector2(328, 0)))
 
+	# band shaping: attack / release times, gate, sustain transient, smoothing; the tempo tracker
+	var bs_fast := BandShaper.new()
+	bs_fast.attack = 0.01
+	bs_fast.release = 0.05
+	var bs_slow := BandShaper.new()
+	bs_slow.attack = 0.01
+	bs_slow.release = 1.0
+	for i in 10:
+		bs_fast.step(1.0, 0.016)
+		bs_slow.step(1.0, 0.016)
+	var bs_f_peak := bs_fast.value
+	for i in 20:
+		bs_fast.step(0.0, 0.016)
+		bs_slow.step(0.0, 0.016)
+	_check("release time: the bs_slow band still holds after the bs_fast one has dropped", bs_f_peak > 0.9 and bs_fast.value < 0.05 and bs_slow.value > 0.6)
+	var bs_gated := BandShaper.new()
+	bs_gated.gate = 0.3
+	for i in 30:
+		bs_gated.step(0.2, 0.016)
+	_check("a gate silences what is under it", bs_gated.value < 0.01)
+	var bs_pop := BandShaper.new()
+	bs_pop.attack = 0.005
+	bs_pop.sustain = 0.3
+	bs_pop.decay = 0.1
+	var bs_early := 0.0
+	for i in 40:
+		var v := bs_pop.step(1.0, 0.016)
+		if i == 1:
+			bs_early = v
+	_check("sustain below one: a held note decays to the sustain level after the transient", bs_early > 0.6 and absf(bs_pop.value - 0.3) < 0.05)
+	var bs_sm := BandShaper.from_dict({"smooth": 0.9, "attack": 0.001, "nope": 5})
+	bs_sm.step(1.0, 0.016)
+	_check("smoothing slows the output and dictionaries round-trip with clamping", bs_sm.value < 0.5 and bs_sm.smooth == 0.9 and BandShaper.from_dict({"attack": 99.0}).attack == 1.0 and BandShaper.new().to_dict() == BandShaper.DEFAULTS)
+	var bs_tr := BpmTracker.new()
+	var bs_t := 0.0
+	for i in 16:
+		bs_tr.onset(bs_t)
+		bs_t += 0.5 + (0.006 if i % 2 == 0 else -0.006)
+	_check("sixteen onsets half a second apart track 120 bpm with high confidence", absf(bs_tr.bpm() - 120.0) < 1.5 and bs_tr.confidence > 0.7)
+	var bs_tr2 := BpmTracker.new()
+	for i in 12:
+		bs_tr2.onset(i * 1.0)
+	_check("one-second onsets read as 60 bpm; too few onsets read nothing", absf(bs_tr2.bpm() - 60.0) < 1.0 and BpmTracker.new().bpm() == 0.0)
+	_check("intervals fold into one octave so multiples of the beat vote together", is_equal_approx(BpmTracker.fold(2.0), 0.5) and is_equal_approx(BpmTracker.fold(1.0), 0.5) and is_equal_approx(BpmTracker.fold(0.1), 0.4) and is_equal_approx(BpmTracker.fold(0.5), 0.5) and is_equal_approx(BpmTracker.fold(0.75), 0.375))
+	var bs_tr4 := BpmTracker.new()
+	for i in 12:
+		bs_tr4.onset(i * 0.75)
+	_check("a 0.75 s pulse reads as 80 bpm, not 160", absf(bs_tr4.bpm() - 80.0) < 1.0 and bs_tr4.confidence > 0.9)
+	var bs_ph := bs_tr.phase(bs_tr.anchor + 0.25)
+	_check("phase runs from the last onset and next_beat lands a period ahead", absf(bs_ph - 0.5) < 0.05 and absf(bs_tr.next_beat(bs_tr.anchor) - (bs_tr.anchor + bs_tr.period)) < 0.001)
+	var bs_tr3 := BpmTracker.new()
+	bs_tr3.onset(0.0)
+	bs_tr3.onset(0.02)
+	_check("a double hit within 100 ms is ignored", bs_tr3.onsets.size() == 1)
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

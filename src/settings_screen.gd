@@ -170,6 +170,11 @@ func _ready() -> void:
 		Settings.set_value("lock_scenes", on)
 		Clock.lock_scenes = on)
 	_row(gc, "Lock scenes", lock, "live")
+	var fol := CheckButton.new()
+	fol.text = "the internal clock follows the tempo tracked from the audio"
+	fol.button_pressed = bool(Settings.get_value("clock_follow_audio"))
+	fol.toggled.connect(func(on: bool): AudioReact.set_follow_clock(on))
+	_row(gc, "Follow audio", fol, "live; Ctrl+A on stage shows the tracked bpm and shapes each band's envelope")
 
 	# ---------------- audio
 	_section(col, "Audio")

@@ -21,6 +21,13 @@ var level := 0.0
 var beat_env := 0.0                     # 1 on a beat, decays to 0
 var gain := 1.0                         # 0.25 .. 4
 var file_name := ""
+var raw_bass := 0.0                     # before shaping (the tracker and the meters)
+var raw_mid := 0.0
+var raw_high := 0.0
+var shapers := {"bass": BandShaper.new(), "mid": BandShaper.new(), "high": BandShaper.new()}
+var tracker := BpmTracker.new()
+var follow_clock := false               # the internal clock follows the tracked tempo
+var _time := 0.0
 
 var _mic_bus := -1
 var _file_bus := -1
@@ -46,6 +53,63 @@ func _ready() -> void:
 	_midi = get_node_or_null("/root/MidiMap")
 	if _midi:
 		beat.connect(_midi.feed_beat)
+	load_shape(Settings.get_value("audio_shape"))
+	follow_clock = bool(Settings.get_value("clock_follow_audio"))
+
+
+## Per-band shape from settings ({bass: {...}, ...}); missing keys keep defaults.
+func load_shape(d) -> void:
+	if d is Dictionary:
+		for band in shapers:
+			if d.get(band) is Dictionary:
+				shapers[band].apply(d[band])
+
+
+func save_shape() -> void:
+	var d := {}
+	for band in shapers:
+		d[band] = shapers[band].to_dict()
+	Settings.set_value("audio_shape", d)
+
+
+func set_shape(band: String, key: String, v: float) -> void:
+	if shapers.has(band) and BandShaper.DEFAULTS.has(key):
+		shapers[band].apply({key: v})
+		save_shape()
+
+
+## One knob for all three bands (learnable).
+func set_shape_all(key: String, v: float) -> void:
+	for band in shapers:
+		shapers[band].apply({key: v})
+	save_shape()
+
+
+func reset_shape() -> void:
+	for band in shapers:
+		shapers[band].reset()
+	save_shape()
+
+
+func bpm() -> float:
+	return tracker.bpm()
+
+
+func bpm_confidence() -> float:
+	return tracker.confidence
+
+
+func set_follow_clock(on: bool) -> void:
+	follow_clock = on
+	Settings.set_value("clock_follow_audio", on)
+
+
+## Start (or retune) the internal clock at the tracked tempo, on the tracked phase.
+func clock_from_audio() -> bool:
+	if tracker.period <= 0.0 or _clock == null:
+		return false
+	_clock.start_internal(tracker.bpm())
+	return true
 
 
 func _make_bus(name: String, volume_db: float) -> int:
@@ -171,22 +235,34 @@ func _process(delta: float) -> void:
 		_midi.feed_audio({"bass": bass, "mid": mid, "high": high, "level": level})
 
 
-## Pure: smooth raw 0..1 bands (fast attack, slow release), track level, and
-## detect bass onsets. Split out so the smoke test can drive it.
+## Pure: shape raw 0..1 bands (attack / decay / sustain / release / gate /
+## smoothing per band), track level, detect bass onsets on a fast follower,
+## and feed the tempo tracker. Split out so the smoke test can drive it.
 func update_bands(raw: Dictionary, delta: float) -> bool:
-	bass = _follow(bass, clampf(raw.get("bass", 0.0) * gain, 0.0, 1.0), delta)
-	mid = _follow(mid, clampf(raw.get("mid", 0.0) * gain, 0.0, 1.0), delta)
-	high = _follow(high, clampf(raw.get("high", 0.0) * gain, 0.0, 1.0), delta)
+	_time += delta
+	raw_bass = clampf(raw.get("bass", 0.0) * gain, 0.0, 1.0)
+	raw_mid = clampf(raw.get("mid", 0.0) * gain, 0.0, 1.0)
+	raw_high = clampf(raw.get("high", 0.0) * gain, 0.0, 1.0)
+	bass = shapers["bass"].step(raw_bass, delta)
+	mid = shapers["mid"].step(raw_mid, delta)
+	high = shapers["high"].step(raw_high, delta)
 	level = maxf(bass, maxf(mid, high))
-	_bass_avg = lerpf(_bass_avg, bass, minf(1.0, delta * 2.0))
+	_onset_env = _follow(_onset_env, raw_bass, delta)          # the detector keeps its own fast follower
+	_bass_avg = lerpf(_bass_avg, _onset_env, minf(1.0, delta * 2.0))
 	_cooldown = maxf(0.0, _cooldown - delta)
 	beat_env = maxf(0.0, beat_env - delta * 4.0)
-	var hit := bass > 0.18 and bass > _bass_avg * 1.35 and _cooldown <= 0.0
+	var hit := _onset_env > 0.18 and _onset_env > _bass_avg * 1.35 and _cooldown <= 0.0
 	if hit:
 		_cooldown = 0.18
 		beat_env = 1.0
+		tracker.onset(_time)
+		if follow_clock and tracker.confidence > 0.5 and _clock and _clock.source == "internal" and _clock.running:
+			_clock.bpm = tracker.bpm()
 		beat.emit()
 	return hit
+
+
+var _onset_env := 0.0
 
 
 static func _follow(cur: float, target: float, delta: float) -> float:

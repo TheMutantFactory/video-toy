@@ -207,6 +207,8 @@ var _overvp: SubViewport                   # the layers kept OUT of the loop, dr
 var _over_mix: ColorRect
 var _overlay: TextureRect
 var _guide: FrameGuide                     # the clip's crop over the picture
+var _audio_panel: PanelContainer
+var _audio_widgets: Dictionary = {}
 var _top_right: HBoxContainer              # ? Keys · Find Icons · Back
 var _routing_panel: PanelContainer
 var _routing_widgets: Dictionary = {}
@@ -1349,6 +1351,8 @@ func _update_hud() -> void:
 	# second line: controllers
 	var line2 := ("SAFE (no MIDI / OSC / camera / mic)   ·   " if Safe.active() else "") + ("GUEST (right-click: wheel)   ·   " if guest else "") + "midi: " + (_midi_last if _midi_last != "" else "—")
 	line2 += "   ·   audio: " + ((("%s  %s" % [AudioReact.source if AudioReact.source != "file" else AudioReact.file_name, _meter()])) if AudioReact.active() else "off (A)")
+	if AudioReact.active() and AudioReact.bpm() > 0.0 and AudioReact.bpm_confidence() >= 0.4:
+		line2 += " ~%.0f bpm%s" % [AudioReact.bpm(), " → clock" if AudioReact.follow_clock else ""]
 	if AudioReact.driver_missing():
 		line2 += "   ·   no audio device: mic/file unavailable"
 	line2 += "   ·   webcam: " + (("%s, %s" % [webcam_mode(), _webcam.status]) if _webcam_mode > 0 else "off (Z)")
@@ -1455,6 +1459,93 @@ func _set_feedback(on: bool) -> void:
 		for rv in _ring:
 			rv.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_update_hud()
+
+
+# ---------------- audio shaping (Ctrl+A) ----------------
+func clock_from_audio() -> void:
+	if AudioReact.clock_from_audio():
+		_steal_note = "clock set from the audio: %.1f bpm" % AudioReact.bpm()
+	else:
+		_steal_note = "no tempo tracked yet — play something with a beat (A)"
+	_update_hud()
+
+
+func toggle_audio_panel() -> void:
+	if _audio_panel == null:
+		_audio_panel = PanelContainer.new()
+		_audio_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		_audio_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_audio_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 6)
+		_audio_panel.add_child(col)
+		col.add_child(UI.label("Audio shaping", 26, UI.ACCENT))
+		col.add_child(UI.label("Each band's envelope: attack and release times, a decay to a sustain level after every rise (below 1 = transients pop), a gate and extra smoothing. The onset detector and the tempo tracker read the raw bands.", 15, UI.DIM))
+		var grid := GridContainer.new()
+		grid.columns = 8
+		grid.add_theme_constant_override("h_separation", 10)
+		grid.add_theme_constant_override("v_separation", 4)
+		col.add_child(grid)
+		grid.add_child(UI.label("", 15))
+		for k in ["attack", "decay", "sustain", "release", "gate", "smooth"]:
+			grid.add_child(UI.label(k, 15, UI.DIM))
+		grid.add_child(UI.label("level", 15, UI.DIM))
+		for band in ["bass", "mid", "high"]:
+			grid.add_child(UI.label(band, 18))
+			for k in ["attack", "decay", "sustain", "release", "gate", "smooth"]:
+				var sl := HSlider.new()
+				var r: Array = BandShaper.RANGES[k]
+				sl.min_value = r[0]
+				sl.max_value = r[1]
+				sl.step = (r[1] - r[0]) / 100.0
+				sl.custom_minimum_size = Vector2(120, 26)
+				sl.value_changed.connect(func(v: float): AudioReact.set_shape(band, k, v))
+				grid.add_child(sl)
+				_audio_widgets[band + "." + k] = sl
+			var meter := ProgressBar.new()
+			meter.min_value = 0.0
+			meter.max_value = 1.0
+			meter.show_percentage = false
+			meter.custom_minimum_size = Vector2(90, 22)
+			grid.add_child(meter)
+			_audio_widgets[band + ".meter"] = meter
+		var brow := HBoxContainer.new()
+		brow.add_theme_constant_override("separation", 10)
+		var bpm_l := UI.label("", 18, UI.ACCENT)
+		bpm_l.custom_minimum_size.x = 300
+		brow.add_child(bpm_l)
+		_audio_widgets["bpm"] = bpm_l
+		brow.add_child(UI.button("Set clock from audio", clock_from_audio, 190))
+		var fol := CheckButton.new()
+		fol.text = "clock follows the audio"
+		fol.toggled.connect(func(on: bool):
+			AudioReact.set_follow_clock(on)
+			_update_hud())
+		brow.add_child(fol)
+		_audio_widgets["follow"] = fol
+		brow.add_child(UI.button("Reset shapes", func():
+			AudioReact.reset_shape()
+			_refresh_audio_panel(), 130))
+		brow.add_child(UI.button("Close (Ctrl+A)", toggle_audio_panel, 140))
+		col.add_child(brow)
+		add_child(_audio_panel)
+	else:
+		_audio_panel.visible = not _audio_panel.visible
+	if _audio_panel.visible:
+		move_child(_audio_panel, -1)
+		_refresh_audio_panel()
+
+
+func _refresh_audio_panel() -> void:
+	if _audio_panel == null or not _audio_panel.visible:
+		return
+	for band in ["bass", "mid", "high"]:
+		var sh: BandShaper = AudioReact.shapers[band]
+		for k in ["attack", "decay", "sustain", "release", "gate", "smooth"]:
+			_audio_widgets[band + "." + k].set_value_no_signal(float(sh.get(k)))
+		_audio_widgets[band + ".meter"].value = float(AudioReact.get(band))
+	_audio_widgets["follow"].set_pressed_no_signal(AudioReact.follow_clock)
+	_audio_widgets["bpm"].text = ("tracked: %.1f bpm  (confidence %.2f)" % [AudioReact.bpm(), AudioReact.bpm_confidence()]) if AudioReact.bpm() > 0.0 else "tracked: — (needs a few beats)"
 
 
 # ---------------- clip format (the export's crop) ----------------
@@ -1769,6 +1860,7 @@ func _process(_delta: float) -> void:
 		_screen.texture = _acc[cur].get_texture()
 	if Engine.get_process_frames() % (4 if AudioReact.active() else 15) == 0:
 		_update_hud()
+		_refresh_audio_panel()
 
 
 # ---------------- spawning ----------------

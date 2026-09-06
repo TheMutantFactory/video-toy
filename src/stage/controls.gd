@@ -34,6 +34,10 @@ func midi_params() -> Array:
 		{"id": "fb_blur", "label": "Loop sharpen .. blur", "set": func(v): s.fb_blur = lerpf(-1.0, 1.0, v)},
 		{"id": "fb_hue", "label": "Loop hue drift", "set": func(v): s.fb_hue = lerpf(-0.1, 0.1, v)},
 		{"id": "fb_displace", "label": "Loop displacement", "set": func(v): s.fb_displace = v},
+		{"id": "audio_attack", "label": "Audio attack (all bands)", "set": func(v): AudioReact.set_shape_all("attack", lerpf(0.005, 0.5, v))},
+		{"id": "audio_release", "label": "Audio release (all bands)", "set": func(v): AudioReact.set_shape_all("release", lerpf(0.02, 2.0, v))},
+		{"id": "audio_sustain", "label": "Audio sustain (transients pop below 1)", "set": func(v): AudioReact.set_shape_all("sustain", v)},
+		{"id": "audio_smooth", "label": "Audio smoothing (all bands)", "set": func(v): AudioReact.set_shape_all("smooth", v * 0.95)},
 		{"id": "fb_twist", "label": "Feedback twist", "set": func(v): s.fb_rot = lerpf(-0.15, 0.15, v)},
 		{"id": "fb_fade", "label": "Feedback fade", "set": func(v): s.fb_fade = lerpf(0.5, 0.995, v)},
 		{"id": "pixelate", "label": "Pixelate size", "set": func(v):
@@ -191,6 +195,8 @@ func midi_actions() -> Array:
 	out.append({"id": "disp_source", "label": "Next displacement source", "do": func(): s.set_disp_source(s.fb_disp_src + 1)})
 	out.append({"id": "clip_format", "label": "Next clip format (16:9 / 9:16 / 1:1)", "do": func(): s.set_clip_format(ClipExport.next_format(s.clip_format()))})
 	out.append({"id": "render_loop", "label": "Render the loop (seamless)", "do": func(): s.get_parent().render_clip(20.0, true)})
+	out.append({"id": "clock_from_audio", "label": "Set the clock from the tracked tempo", "do": s.clock_from_audio})
+	out.append({"id": "audio_follow_toggle", "label": "Clock follows the audio on / off", "do": func(): AudioReact.set_follow_clock(not AudioReact.follow_clock)})
 	out.append({"id": "play_sound", "label": "Play the selected slot's sound", "do": func(): s.play_slot_sound()})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": s.toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": s.cycle_quality_lock})

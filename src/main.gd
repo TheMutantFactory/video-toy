@@ -723,6 +723,47 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# audio shaping and tempo: the test groove is 120 bpm; the tracker finds it, the clock takes it,
+	# a shaped band holds longer, the panel toggles and the settings carry the shape
+	var ok_au := true
+	var au_bad: Array = []
+	var au_chk := func(label: String, ok: bool):
+		if not ok:
+			au_bad.append(label)
+	var shape_keep = Settings.get_value("audio_shape")
+	var src_keep: String = AudioReact.source
+	AudioReact.reset_shape()
+	AudioReact.tracker.reset()
+	AudioReact.set_source("test")
+	await get_tree().create_timer(4.5).timeout
+	au_chk.call("1", AudioReact.bpm() > 0.0 and absf(AudioReact.bpm() - 120.0) < 4.0 and AudioReact.bpm_confidence() > 0.5)
+	st._update_hud()
+	au_chk.call("2", st._hud.text.contains("bpm"))
+	st.clock_from_audio()
+	au_chk.call("3", Clock.source == "internal" and Clock.running and absf(Clock.bpm - 120.0) < 4.0)
+	Clock.stop()
+	AudioReact.set_shape("bass", "release", 2.0)
+	var saved_shape = Settings.get_value("audio_shape")
+	au_chk.call("4", saved_shape is Dictionary and is_equal_approx(float(saved_shape["bass"]["release"]), 2.0) and is_equal_approx(AudioReact.shapers["bass"].release, 2.0))
+	await get_tree().create_timer(0.6).timeout
+	au_chk.call("5", AudioReact.bass > 0.25)
+	st.toggle_audio_panel()
+	au_chk.call("6", st._audio_panel.visible and absf(st._audio_widgets["bass.release"].value - 2.0) < 0.05 and st._audio_widgets["bpm"].text.begins_with("tracked: 1"))
+	st.toggle_audio_panel()
+	AudioReact.set_shape_all("attack", 0.2)
+	au_chk.call("7", is_equal_approx(AudioReact.shapers["high"].attack, 0.2))
+	AudioReact.reset_shape()
+	Settings.set_value("audio_shape", shape_keep if shape_keep is Dictionary else {})
+	AudioReact.load_shape(Settings.get_value("audio_shape"))
+	AudioReact.set_source(src_keep)
+	ok_au = au_bad.is_empty()
+	if not ok_au:
+		printerr("audio sub-checks failed: ", au_bad)
+	if ok_au:
+		print("PASS audio shaping + tempo: the test groove tracks at 120 bpm, the clock takes it, a long release holds, the panel and settings carry the shape")
+	else:
+		fails += 1
+		printerr("FAIL audio shaping (bpm %.1f conf %.2f bass %.2f)" % [AudioReact.bpm(), AudioReact.bpm_confidence(), AudioReact.bass])
 	# loop-maker export: the render plan uses the format, fps, pre-roll and the timeline's length;
 	# the guide follows the format and the HUD says so
 	var ok_ce := true
@@ -1358,7 +1399,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1864,6 +1905,19 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"shaping":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				if current.all_actors().size() < 6:
+					current.demo_spawn()
+				AudioReact.tracker.reset()
+				AudioReact.set_source("test")
+				await get_tree().create_timer(4.0).timeout
+				current.toggle_audio_panel()
+				await get_tree().create_timer(0.3).timeout
 			"routing":
 				menu.close()
 				if current_name != "stage":

@@ -204,6 +204,9 @@ func key(ev: InputEvent) -> void:
 	if ev.ctrl_pressed and k == KEY_E:
 		s.set_clip_format(ClipExport.next_format(s.clip_format()))
 		return
+	if ev.ctrl_pressed and k == KEY_A:
+		s.toggle_audio_panel()
+		return
 	if ev.ctrl_pressed and k == KEY_M:
 		s.set_mutate_amount(Locks.next_amount(s.mutate_amount))
 		return
