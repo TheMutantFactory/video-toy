@@ -5,7 +5,7 @@ extends ColorRect
 const PIXEL_STEPS := [0, 4, 8, 12, 20, 32]
 const KALEIDO_STEPS := [0, 3, 4, 6, 8, 12]
 const KEY_MODES := ["off", "chroma", "luma", "diff", "edge"]
-const SLIT_MODES := ["off", "rows", "cols", "radial"]
+const SLIT_MODES := ["off", "rows", "cols", "radial", "cutup"]
 const SLIT_COLS := 6
 const SLIT_ROWS := 6
 const SLIT_STRIDE := 2                      # capture every Nth frame -> ~1.2 s of history
@@ -27,6 +27,7 @@ var _hist_bg: Array = []
 var _prev: Array = []                       # two previous-frame viewports (ping-pong)
 var _flip := 0
 var _frame := 0
+var cutup_seed := 0                        # the cutup's deal; the stage bumps it on the beat
 var dither := false
 var backdrop: Texture2D
 var live_backdrop: Texture2D            # e.g. the webcam viewport; wins over the file
@@ -140,6 +141,8 @@ func _process(_delta: float) -> void:
 	if _hist.is_empty():
 		return
 	_frame += 1
+	if slit_mode == 4 and _frame % 30 == 0:
+		redeal()
 	# previous frame: alternate which copy renders; the shader reads the other
 	if key_mode == 3:
 		var cur := _frame % 2
@@ -262,7 +265,15 @@ func describe() -> String:
 	return "  ".join(parts)
 
 
+## A new patchwork (the beat, or every 30 frames on its own).
+func redeal() -> void:
+	cutup_seed += 1
+	if _mat:
+		_mat.set_shader_parameter("cutup_seed", cutup_seed)
+
+
 func _push() -> void:
+	_mat.set_shader_parameter("cutup_seed", cutup_seed)
 	_mat.set_shader_parameter("crt", float(crt_level))
 	_mat.set_shader_parameter("kaleido_segments", kaleido_segments())
 	_mat.set_shader_parameter("key_mode", key_mode)

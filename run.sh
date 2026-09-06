@@ -50,7 +50,7 @@ case "${1:-play}" in
                   echo "$out" | grep -q "SAFECHECK active=true midi_inputs=0 osc_listening=false mic=false webcam=off log=true" || { echo "FAIL safe mode" >&2; exit 1; }; } ;;
   capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ${2:+--only "$2"} ;;
   import)  exec "$G" --headless --path . --import ;;
-  templates) exec "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;
+  templates) exec perl -e 'alarm 120; exec @ARGV' "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;
   keycard) audio_override; exec perl -e 'alarm 120; exec @ARGV' "$G" --path . -- --keycard "$(pwd)/docs" ;;
   diff)    exec "$G" --headless --path . -s tests/diff.gd ;;
   export)  # macOS .app into out/, ad-hoc signed, with the privacy strings; then prove the bundle runs

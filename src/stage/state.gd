@@ -18,7 +18,8 @@ func snapshot() -> Dictionary:
 		"palette": s.palette_index,
 		"feedback": {"on": s.feedback, "zoom": s.fb_zoom, "rot": s.fb_rot, "fade": s.fb_fade,
 			"delay": s.fb_delay, "blur": s.fb_blur, "hue": s.fb_hue, "sat": s.fb_sat, "displace": s.fb_displace, "disp_src": s.fb_disp_src, "loop": s.loop_mask(),
-			"cleanup": s.fb_cleanup, "cleanup_rule": s.fb_cleanup_rule},
+			"cleanup": s.fb_cleanup, "cleanup_rule": s.fb_cleanup_rule,
+			"jag": s.fb_jag, "jag_sides": s.fb_jag_sides, "jag_mode": s.fb_jag_mode, "zones": s.fb_zones, "zone_spread": s.fb_zone_spread},
 		"fx": {"pixel": s._fx.pixel_step, "kaleido": s._fx.kaleido_step, "crt": s._fx.crt_level,
 			"key": s._fx.key_mode, "key_threshold": s._fx.key_threshold, "slit": s._fx.slit_mode,
 			"quantize": s._fx.quantize, "dither": s._fx.dither},
@@ -35,7 +36,7 @@ func snapshot() -> Dictionary:
 		"formation": s._formation_index,
 		"layers": s._layers.map(func(l): return {"blend": l["blend"], "opacity": l["opacity"]}),
 		"active_layer": s.active_layer,
-		"particles": {"on": s.particles_on, "flow": s.particles_flow, "attract": s.particles_attract},
+		"particles": {"on": s.particles_on, "flow": s.particles_flow, "attract": s.particles_attract, "flux": s.particles_flux, "flux_src": s.flux_src},
 		"rd": {"preset": s.rd_preset, "feed": s.rd_feed, "kill": s.rd_kill},
 		"physics": {"gravity": s.gravity},
 	}
@@ -100,6 +101,11 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 	s.fb_disp_src = posmod(int(fb.get("disp_src", s.fb_disp_src)), s.DISP_SOURCES.size())
 	s.fb_cleanup = clampf(float(fb.get("cleanup", s.fb_cleanup)), 0.0, 1.0)
 	s.fb_cleanup_rule = posmod(int(fb.get("cleanup_rule", s.fb_cleanup_rule)), s.CLEANUP_RULES.size())
+	s.fb_jag = clampf(float(fb.get("jag", s.fb_jag)), 0.0, 1.0)
+	s.fb_jag_sides = int(fb.get("jag_sides", s.fb_jag_sides)) if s.JAG_SIDES.has(int(fb.get("jag_sides", s.fb_jag_sides))) else s.fb_jag_sides
+	s.fb_jag_mode = posmod(int(fb.get("jag_mode", s.fb_jag_mode)), s.JAG_MODES.size())
+	s.fb_zones = clampf(float(fb.get("zones", s.fb_zones)), 0.0, 1.0)
+	s.fb_zone_spread = clampi(int(fb.get("zone_spread", s.fb_zone_spread)), 1, 7)
 	if fb.has("loop"):
 		var mask := int(fb["loop"])
 		for i in s._layers.size():
@@ -145,6 +151,8 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 	if not pt.is_empty():
 		s.particles_flow = float(pt.get("flow", s.particles_flow))
 		s.particles_attract = float(pt.get("attract", s.particles_attract))
+		s.particles_flux = clampf(float(pt.get("flux", s.particles_flux)), 0.0, 1.0)
+		s.flux_src = posmod(int(pt.get("flux_src", s.flux_src)), s.FLUX_SOURCES.size())
 		var pon := bool(pt.get("on", s.particles_on))
 		if pon != s.particles_on:
 			s.set_particles(pon)

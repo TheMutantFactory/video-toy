@@ -35,6 +35,11 @@ func midi_params() -> Array:
 		{"id": "fb_hue", "label": "Loop hue drift", "set": func(v): s.fb_hue = lerpf(-0.1, 0.1, v)},
 		{"id": "fb_displace", "label": "Loop displacement", "set": func(v): s.fb_displace = v},
 		{"id": "fb_cleanup", "label": "Loop cellular cleanup", "set": func(v): s.fb_cleanup = v},
+		{"id": "fb_jag", "label": "Jagged trails", "set": func(v): s.fb_jag = v},
+		{"id": "fb_zones", "label": "Time zones", "set": func(v): s.fb_zones = v},
+		{"id": "particles_flux", "label": "Fluxdots (reborn on the bright)", "set": func(v):
+			s.particles_flux = v
+			s._push_particles()},
 		{"id": "audio_attack", "label": "Audio attack (all bands)", "set": func(v): AudioReact.set_shape_all("attack", lerpf(0.005, 0.5, v))},
 		{"id": "audio_release", "label": "Audio release (all bands)", "set": func(v): AudioReact.set_shape_all("release", lerpf(0.02, 2.0, v))},
 		{"id": "audio_sustain", "label": "Audio sustain (transients pop below 1)", "set": func(v): AudioReact.set_shape_all("sustain", v)},
@@ -195,6 +200,10 @@ func midi_actions() -> Array:
 		out.append({"id": "loop_layer_%d" % (li + 1), "label": "Layer %d in / out of the loop" % (li + 1), "do": func(): s.set_loop(li, not bool(s._layers[li].get("loop", true)))})
 	out.append({"id": "disp_source", "label": "Next displacement source", "do": func(): s.set_disp_source(s.fb_disp_src + 1)})
 	out.append({"id": "cleanup_rule", "label": "Next cleanup rule (majority / life / erode)", "do": func(): s.set_cleanup_rule(s.fb_cleanup_rule + 1)})
+	out.append({"id": "jag_mode", "label": "Next trail shape (angular / branching / broken)", "do": func(): s.set_jag_mode(s.fb_jag_mode + 1)})
+	out.append({"id": "jag_sides", "label": "Next trail lattice (3 / 4 / 6 / 8 sides)", "do": s.cycle_jag_sides})
+	out.append({"id": "flux_source", "label": "Next fluxdot source", "do": func(): s.set_flux_source(s.flux_src + 1)})
+	out.append({"id": "cutup_redeal", "label": "Re-deal the cutup", "do": s._fx.redeal})
 	out.append({"id": "clip_format", "label": "Next clip format (16:9 / 9:16 / 1:1)", "do": func(): s.set_clip_format(ClipExport.next_format(s.clip_format()))})
 	out.append({"id": "render_loop", "label": "Render the loop (seamless)", "do": func(): s.get_parent().render_clip(20.0, true)})
 	out.append({"id": "clock_from_audio", "label": "Set the clock from the tracked tempo", "do": s.clock_from_audio})

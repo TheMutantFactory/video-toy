@@ -381,7 +381,7 @@ func _selftest() -> void:
 	ok_layers = ok_layers and snap3["layers"][1]["blend"] == 2 and is_equal_approx(snap3["layers"][1]["opacity"], 0.5)
 	st.clear_actors()
 	# keyers and slit-scan: modes cycle, history atlas exists, preset round-trip
-	var ok_fx: bool = st._fx.KEY_MODES.size() == 5 and st._fx.SLIT_MODES.size() == 4 and st._fx._hist.size() == 2
+	var ok_fx: bool = st._fx.KEY_MODES.size() == 5 and st._fx.SLIT_MODES.size() == 5 and st._fx._hist.size() == 2
 	st._fx.cycle_key()
 	st._fx.cycle_key()
 	st._fx.key_threshold = 0.6
@@ -830,16 +830,42 @@ func _selftest() -> void:
 	var mcur: ShaderMaterial = st._acc_mats[1 - st._flip]
 	ok_fr = ok_fr and is_equal_approx(float(mcur.get_shader_parameter("blur")), 0.4) and is_equal_approx(float(mcur.get_shader_parameter("hue")), 0.02) and bool(mcur.get_shader_parameter("disp_on"))
 	ok_fr = ok_fr and is_equal_approx(float(mcur.get_shader_parameter("cleanup")), 0.6) and int(mcur.get_shader_parameter("cleanup_rule")) == 1 and st.routing_describe().contains("cleanup 0.60 life")
+	# the rest of the twist-box: jagged trails, time zones from ring taps, cutup, fluxdots
+	st.fb_jag = 0.5
+	st.set_jag_mode(1)
+	st.cycle_jag_sides()
+	st.fb_zones = 0.4
+	st.fb_zone_spread = 3
+	for i in 3:
+		await get_tree().process_frame
+	mcur = st._acc_mats[1 - st._flip]
+	ok_fr = ok_fr and is_equal_approx(float(mcur.get_shader_parameter("jag")), 0.5) and int(mcur.get_shader_parameter("jag_mode")) == 1 and int(mcur.get_shader_parameter("jag_sides")) == 8
+	var rtex: Array = st._ring.map(func(rv): return rv.get_texture())
+	ok_fr = ok_fr and is_equal_approx(float(mcur.get_shader_parameter("zones")), 0.4) and rtex.has(mcur.get_shader_parameter("zone_tex1")) and rtex.has(mcur.get_shader_parameter("zone_tex3"))
+	ok_fr = ok_fr and st.routing_describe().contains("jag 0.50 branching×8") and st.routing_describe().contains("zones 0.40 every 3")
+	st._fx.set_state(0, false, false, 0, false, 0, 0, 4)
+	var seed0: int = st._fx.cutup_seed
+	st._on_beat_out()
+	ok_fr = ok_fr and st._fx.SLIT_MODES[st._fx.slit_mode] == "cutup" and st._fx.cutup_seed == seed0 + 1 and int(st._fx._mat.get_shader_parameter("slit_mode")) == 4 and st._fx.describe().contains("cutup")
+	st.set_particles(true)
+	st.particles_flux = 0.5
+	st.set_flux_source(1)
+	ok_fr = ok_fr and bool(st._pmat.get_shader_parameter("emit_from_tex")) and st._pmat.get_shader_parameter("emit_tex") == st._worldmix.get_texture() and is_equal_approx(float(st._pmat.get_shader_parameter("flux_rate")), 1.5)
+	ok_fr = ok_fr and st.routing_describe().contains("fluxdots 0.50 from self")
 	var prev_tex: Texture2D = st._acc_prev[1 - st._flip].texture
 	var ring_texs: Array = st._ring.map(func(rv): return rv.get_texture())
 	ok_fr = ok_fr and ring_texs.has(prev_tex) and st._ring[st._ring_head].render_target_update_mode == SubViewport.UPDATE_ONCE
 	ok_fr = ok_fr and st.routing_describe().contains("delay 6") and st.routing_describe().contains("blur 0.40") and st.routing_describe().contains("displace 0.50 by layer 2") and st.routing_describe().contains("loop: layers 1, 3")
 	var snap_fr: Dictionary = st.snapshot()
 	ok_fr = ok_fr and snap_fr["feedback"]["delay"] == 6 and snap_fr["feedback"]["loop"] == 5 and is_equal_approx(float(snap_fr["feedback"]["blur"]), 0.4) and snap_fr["feedback"]["cleanup_rule"] == 1
+	ok_fr = ok_fr and snap_fr["feedback"]["jag_sides"] == 8 and snap_fr["feedback"]["jag_mode"] == 1 and snap_fr["feedback"]["zone_spread"] == 3 and snap_fr["particles"]["flux_src"] == 1 and snap_fr["fx"]["slit"] == 4
 	st.panic()
-	ok_fr = ok_fr and st.fb_delay == 0 and st.fb_blur == 0.0 and st.loop_mask() == 7 and not st._overlay.visible and st.fb_cleanup == 0.0
+	ok_fr = ok_fr and st.fb_delay == 0 and st.fb_blur == 0.0 and st.loop_mask() == 7 and not st._overlay.visible and st.fb_cleanup == 0.0 and st.fb_jag == 0.0 and st.fb_zones == 0.0 and st.particles_flux == 0.0 and st.flux_src == 0
 	st.restore(snap_fr, 0.0)
 	ok_fr = ok_fr and st.fb_delay == 6 and st.loop_mask() == 5 and st.fb_disp_src == 2 and is_equal_approx(st.fb_hue, 0.02) and is_equal_approx(st.fb_cleanup, 0.6) and st.fb_cleanup_rule == 1
+	ok_fr = ok_fr and st.fb_jag_sides == 8 and st.fb_jag_mode == 1 and is_equal_approx(st.fb_zones, 0.4) and st.fb_zone_spread == 3 and st.flux_src == 1 and is_equal_approx(st.particles_flux, 0.5) and st._fx.slit_mode == 4
+	st.set_particles(false)
+	st._fx.set_state(0, false, false)
 	st.set_fb_delay(0)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -851,7 +877,7 @@ func _selftest() -> void:
 	st.toggle_routing_panel()
 	st.panic()
 	if ok_fr:
-		print("PASS feedback routing: loop mask + overlay pass, delay ring tap, in-loop blur / hue / displacement, snapshot, panic, panel")
+		print("PASS feedback routing + twist-box: loop mask + overlay, delay ring tap, in-loop blur / hue / displacement / cleanup, jagged trails, time zones, cutup, fluxdots, snapshot, panic, panel")
 	else:
 		fails += 1
 		printerr("FAIL feedback routing (%s)" % st.routing_describe())
@@ -1434,7 +1460,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1940,6 +1966,29 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"twistbox":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				current.clear_actors()
+				current.set_active_layer(0)
+				for i in 6:
+					Toolbox.select(i % Toolbox.slots.size())
+					current.spawn_at(Vector2(400 + i * 220, 300 + (i % 2) * 300))
+				Toolbox.select(0)
+				current.fb_jag = 0.6
+				current.set_jag_mode(2)
+				current.fb_zones = 0.5
+				current.fb_zone_spread = 5
+				current.fb_cleanup = 0.3
+				current.set_particles(true)
+				current.particles_flux = 0.7
+				current.set_flux_source(1)
+				current._fx.set_state(0, false, false, 0, false, 0, 0, 4)
+				current._set_feedback(true)
+				await get_tree().create_timer(3.0).timeout
 			"shaping":
 				menu.close()
 				if current_name != "stage":

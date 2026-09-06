@@ -22,7 +22,30 @@ uniform bool disp_on = false;
 uniform sampler2D disp_tex : filter_linear, repeat_disable;
 uniform float cleanup = 0.0;     // cellular cleanup per pass, 0 .. 1
 uniform int cleanup_rule = 0;    // 0 majority grow, 1 Life, 2 erode
+// jagged trails: the drift snaps to one of jag_sides directions per region
+uniform float jag = 0.0;         // 0 .. 1 (~0 .. 14 px per pass)
+uniform int jag_sides = 6;
+uniform float jag_scale = 1.0;   // region size (bigger = fewer, larger regions)
+uniform int jag_mode = 0;        // 0 angular, 1 branching (regions re-roll), 2 broken (dropouts too)
+uniform float jag_seed = 0.0;
+// time zones: parts of the picture read the loop from further back
+uniform float zones = 0.0;       // 0 .. 1 mix
+uniform float zone_scale = 1.0;
+uniform sampler2D zone_tex1 : filter_linear, repeat_disable;
+uniform sampler2D zone_tex2 : filter_linear, repeat_disable;
+uniform sampler2D zone_tex3 : filter_linear, repeat_disable;
 const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+float hash21(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+float vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 vec3 hue_rotate(vec3 c, float a) {
 	const vec3 k = vec3(0.57735);
 	float cs = cos(a);
@@ -36,7 +59,15 @@ void vertex() {
 	vec2 w = vec2(
 		sin(t * 0.333 + n.x * 3.1 - n.y * 1.7) + cos(t * 0.375 - n.x * 2.3 + n.y * 2.9),
 		cos(t * 0.291 + n.x * 1.9 + n.y * 2.7) + sin(t * 0.412 - n.x * 3.7 + n.y * 1.3));
-	VERTEX = p + d + w * warp * 30.0 + drift;
+	vec2 jd = vec2(0.0);
+	if (jag > 0.001) {
+		vec2 region = floor(p * 0.004 / max(jag_scale, 0.1));
+		float h = hash21(region + vec2(jag_seed * 0.37, jag_seed * 0.11));
+		float sector = 6.283185 / float(max(jag_sides, 2));
+		float ang = floor(h * float(jag_sides)) * sector;
+		jd = vec2(cos(ang), sin(ang)) * jag * 14.0;
+	}
+	VERTEX = p + d + w * warp * 30.0 + drift + jd;
 }
 void fragment() {
 	vec2 uv = UV;
@@ -45,6 +76,17 @@ void fragment() {
 		uv += (d.rg - 0.5) * d.a * displace * 0.08;
 	}
 	vec4 c = texture(TEXTURE, uv);
+	if (zones > 0.001) {
+		// a slow field picks which tap each patch of the picture reads from
+		float n = vnoise(uv * vec2(1.78, 1.0) * 3.0 * max(zone_scale, 0.1) + vec2(TIME * 0.05, -TIME * 0.03));
+		vec4 cz = n < 0.25 ? c : (n < 0.5 ? texture(zone_tex1, uv) : (n < 0.75 ? texture(zone_tex2, uv) : texture(zone_tex3, uv)));
+		c = mix(c, cz, zones);
+	}
+	if (jag_mode == 2 && jag > 0.001) {
+		// broken trails: whole regions drop out for a while
+		vec2 region = floor(uv * vec2(1920.0, 1080.0) * 0.004 / max(jag_scale, 0.1));
+		if (hash21(region + vec2(jag_seed * 0.53, 7.7)) < 0.18 * jag) c *= 0.3;
+	}
 	if (abs(blur) > 0.001) {
 		vec2 px = TEXTURE_PIXEL_SIZE * (1.0 + 2.0 * abs(blur));
 		vec4 avg = (texture(TEXTURE, uv + vec2(px.x, 0.0)) + texture(TEXTURE, uv - vec2(px.x, 0.0))

@@ -48,6 +48,11 @@ func _push_particles() -> void:
 	s._pmat.set_shader_parameter("flow", s.particles_flow)
 	var repel := s._clock < s._scatter_until
 	s._pmat.set_shader_parameter("attract", -1.0 if repel else s.particles_attract)
+	var ft: Texture2D = s._flux_texture() if s.particles_flux > 0.0 else null
+	s._pmat.set_shader_parameter("emit_from_tex", ft != null)
+	s._pmat.set_shader_parameter("flux_rate", s.particles_flux * 3.0)
+	if ft:
+		s._pmat.set_shader_parameter("emit_tex", ft)
 	Scenes.apply_palette(s._pmat, s.palette_index)
 	# attractors: the mouse, then the first icons
 	var list: Array[Color] = []
@@ -263,6 +268,11 @@ func panic() -> void:
 	s.fb_disp_src = 0
 	s.fb_cleanup = 0.0
 	s.fb_cleanup_rule = 0
+	s.fb_jag = 0.0
+	s.fb_jag_mode = 0
+	s.fb_zones = 0.0
+	s.particles_flux = 0.0
+	s.flux_src = 0
 	for i in s._layers.size():
 		s._layers[i]["loop"] = true
 	s._fx.set_state(0, false, false, 0, false, 0, 0, 0)

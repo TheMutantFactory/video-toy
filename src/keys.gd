@@ -48,7 +48,7 @@ static func groups() -> Array:
 			["K", "pixelate off / 4 / 8 / 12 / 20 / 32"],
 			["L  J", "palette quantise · dither"],
 			["G", "key off / chroma / luma / diff / edge · Shift+G threshold"],
-			["Shift+K", "slit-scan off / rows / columns / radial"],
+			["Shift+K", "slit-scan off / rows / columns / radial / cutup (a patchwork of moments, re-dealt on the beat)"],
 			["V", "CRT off / soft / heavy"],
 			["D", "glow off / soft / heavy"],
 			["'", "ASCII off / mono / colour"],

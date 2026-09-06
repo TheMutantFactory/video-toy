@@ -9,6 +9,9 @@ Params (float 0..1):
   /vt/param/fb_hue   Loop hue drift
   /vt/param/fb_displace   Loop displacement
   /vt/param/fb_cleanup   Loop cellular cleanup
+  /vt/param/fb_jag   Jagged trails
+  /vt/param/fb_zones   Time zones
+  /vt/param/particles_flux   Fluxdots (reborn on the bright)
   /vt/param/audio_attack   Audio attack (all bands)
   /vt/param/audio_release   Audio release (all bands)
   /vt/param/audio_sustain   Audio sustain (transients pop below 1)
@@ -102,6 +105,10 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/loop_layer_3   Layer 3 in / out of the loop
   /vt/action/disp_source   Next displacement source
   /vt/action/cleanup_rule   Next cleanup rule (majority / life / erode)
+  /vt/action/jag_mode   Next trail shape (angular / branching / broken)
+  /vt/action/jag_sides   Next trail lattice (3 / 4 / 6 / 8 sides)
+  /vt/action/flux_source   Next fluxdot source
+  /vt/action/cutup_redeal   Re-deal the cutup
   /vt/action/clip_format   Next clip format (16:9 / 9:16 / 1:1)
   /vt/action/render_loop   Render the loop (seamless)
   /vt/action/clock_from_audio   Set the clock from the tracked tempo

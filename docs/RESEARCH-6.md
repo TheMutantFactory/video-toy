@@ -26,14 +26,16 @@ are the twist-box's missing stages, the regulator, and two philtres.
    - **Cleanup** — built: a cellular-automaton step per pass (majority grow, Life, erode) that
      grows coherent regions out of the smear; amount and rule in the routing panel, a param and
      an action, snapshotted, crossfaded, cleared by panic.
-   - **Cutup**: the slit-scan history atlas already holds 36 time slices; rearrange them
-     spatially by motion and salience (a shader over the atlas, driven by the difference key).
-   - **Jagged trails**: quantise the feedback drift to an angular lattice per region so trails
-     turn angular instead of smooth; a "trail shape" control (smooth / angular / branching).
-   - **Time zones**: several delay taps at once, chosen per pixel by a slow noise field, so
-     parts of the picture run slow and fast (the ring already holds 24 frames).
-   - **Fluxdots**: particle emitters from an image or the webcam's bright regions
-     (salience-driven reconstruction), feeding the existing field.
+   - **Cutup** — built: a fifth slit-scan mode; an 8×5 grid of cells each reads a random
+     slot of the history atlas, re-dealt on the beat (and every 30 frames on its own).
+   - **Jagged trails** — built: the drift snaps to a 3 / 4 / 6 / 8-direction lattice per
+     region in the warp's vertex pass; angular, branching (regions re-roll) or broken
+     (dropouts in the fragment pass).
+   - **Time zones** — built: three extra ring taps, spaced by a spacing knob, chosen per
+     patch by a slow value-noise field in the warp's fragment pass; the ring runs whenever
+     zones are on.
+   - **Fluxdots** — built: the particle shader is born on, and reborn at a rate onto, the
+     bright pixels of the picture, layer 2, layer 3 or the webcam.
 2. **The Gnarl regulator**: read the composite back at 240×135 every few frames, measure edge
    density and frame-to-frame difference, and steer fade / warp / cleanup toward a complexity
    target (homeostasis speed, order / noise bias). The **beauty outlet** pairs with the quality

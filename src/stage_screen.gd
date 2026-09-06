@@ -198,6 +198,19 @@ var fb_hue := 0.0                          # hue drift per pass, radians
 var fb_sat := 1.0                          # saturation per pass
 var fb_displace := 0.0                     # displacement amount by fb_disp_src
 var fb_disp_src := 0                       # DISP_SOURCES index
+var fb_jag := 0.0                          # jagged trails: drift snaps to a lattice per region
+var fb_jag_sides := 6
+var fb_jag_mode := 0                       # JAG_MODES index
+var fb_jag_scale := 1.0
+var fb_zones := 0.0                        # time zones: patches read the loop from further back
+var fb_zone_spread := 5                    # frames between the zone taps
+var fb_zone_scale := 1.0
+var _jag_seed := 0.0
+const JAG_MODES := ["angular", "branching", "broken"]
+const JAG_SIDES := [3, 4, 6, 8]
+var particles_flux := 0.0                  # fluxdots: re-birth rate on the source's bright pixels
+var flux_src := 0                          # FLUX_SOURCES index
+const FLUX_SOURCES := ["off", "self", "layer 2", "layer 3", "webcam"]
 var fb_cleanup := 0.0                      # cellular cleanup per pass, 0 .. 1
 var fb_cleanup_rule := 0                   # CLEANUP_RULES index
 const CLEANUP_RULES := ["majority", "life", "erode"]
@@ -1593,6 +1606,35 @@ func loop_mask() -> int:
 	return m
 
 
+func set_jag_mode(i: int) -> void:
+	fb_jag_mode = posmod(i, JAG_MODES.size())
+	_refresh_routing_panel()
+	_update_hud()
+
+
+func cycle_jag_sides() -> void:
+	fb_jag_sides = JAG_SIDES[(JAG_SIDES.find(fb_jag_sides) + 1) % JAG_SIDES.size()]
+	_refresh_routing_panel()
+	_update_hud()
+
+
+func set_flux_source(i: int) -> void:
+	flux_src = posmod(i, FLUX_SOURCES.size())
+	_push_particles()
+	_refresh_routing_panel()
+	_update_hud()
+
+
+## What the fluxdots are born on, or null.
+func _flux_texture() -> Texture2D:
+	match flux_src:
+		1: return _worldmix.get_texture()
+		2: return _layers[1]["vp"].get_texture()
+		3: return _layers[2]["vp"].get_texture()
+		4: return _webcam._sprite.texture if _webcam and _webcam._sprite else null
+	return null
+
+
 func set_cleanup_rule(i: int) -> void:
 	fb_cleanup_rule = posmod(i, CLEANUP_RULES.size())
 	_refresh_routing_panel()
@@ -1627,6 +1669,12 @@ func routing_describe() -> String:
 		parts.append("sat %.2f" % fb_sat)
 	if fb_cleanup > 0.001:
 		parts.append("cleanup %.2f %s" % [fb_cleanup, CLEANUP_RULES[fb_cleanup_rule]])
+	if fb_jag > 0.001:
+		parts.append("jag %.2f %s×%d" % [fb_jag, JAG_MODES[fb_jag_mode], fb_jag_sides])
+	if fb_zones > 0.001:
+		parts.append("zones %.2f every %d" % [fb_zones, fb_zone_spread])
+	if particles_flux > 0.001 and flux_src > 0:
+		parts.append("fluxdots %.2f from %s" % [particles_flux, FLUX_SOURCES[flux_src]])
 	if fb_disp_src > 0 and fb_displace > 0.0:
 		parts.append("displace %.2f by %s" % [fb_displace, DISP_SOURCES[fb_disp_src]])
 	if loop_mask() != 7:
@@ -1679,6 +1727,19 @@ func toggle_routing_panel() -> void:
 					_update_hud()],
 				["cleanup", "cellular cleanup", 0.0, 1.0, 0.05, func(v: float):
 					fb_cleanup = v
+					_update_hud()],
+				["jag", "jagged trails", 0.0, 1.0, 0.05, func(v: float):
+					fb_jag = v
+					_update_hud()],
+				["zones", "time zones", 0.0, 1.0, 0.05, func(v: float):
+					fb_zones = v
+					_update_hud()],
+				["zone_spread", "  zone spacing (frames)", 1.0, 7.0, 1.0, func(v: float):
+					fb_zone_spread = int(v)
+					_update_hud()],
+				["flux", "fluxdots (particles reborn on the bright)", 0.0, 1.0, 0.05, func(v: float):
+					particles_flux = v
+					_push_particles()
 					_update_hud()]]:
 			grid.add_child(UI.label(spec[1], 17))
 			var sl := HSlider.new()
@@ -1693,6 +1754,26 @@ func toggle_routing_panel() -> void:
 			grid.add_child(vl)
 			_routing_widgets[spec[0]] = sl
 			_routing_widgets[spec[0] + "_lbl"] = vl
+		var jrow := HBoxContainer.new()
+		jrow.add_theme_constant_override("separation", 8)
+		jrow.add_child(UI.label("Trail shape:", 17))
+		var jb := OptionButton.new()
+		for n in JAG_MODES:
+			jb.add_item(n)
+		jb.item_selected.connect(set_jag_mode)
+		jrow.add_child(jb)
+		_routing_widgets["jag_mode"] = jb
+		jrow.add_child(UI.button("sides", cycle_jag_sides, 80))
+		_routing_widgets["jag_sides_btn"] = jrow.get_child(jrow.get_child_count() - 1)
+		jrow.add_child(UI.hspace(8))
+		jrow.add_child(UI.label("Fluxdots from:", 17))
+		var fbx := OptionButton.new()
+		for n in FLUX_SOURCES:
+			fbx.add_item(n)
+		fbx.item_selected.connect(set_flux_source)
+		jrow.add_child(fbx)
+		_routing_widgets["flux_src"] = fbx
+		col.add_child(jrow)
 		var srow := HBoxContainer.new()
 		srow.add_theme_constant_override("separation", 8)
 		srow.add_child(UI.label("Cleanup rule:", 17))
@@ -1718,6 +1799,11 @@ func toggle_routing_panel() -> void:
 			fb_sat = 1.0
 			fb_displace = 0.0
 			fb_cleanup = 0.0
+			fb_jag = 0.0
+			fb_zones = 0.0
+			particles_flux = 0.0
+			set_flux_source(0)
+			set_jag_mode(0)
 			set_cleanup_rule(0)
 			set_disp_source(0)
 			for i in LAYER_COUNT:
@@ -1740,12 +1826,16 @@ func _refresh_routing_panel() -> void:
 		return
 	for i in LAYER_COUNT:
 		_routing_widgets["loop%d" % i].set_pressed_no_signal(bool(_layers[i].get("loop", true)))
-	var vals := {"delay": float(fb_delay), "blur": fb_blur, "hue": fb_hue, "sat": fb_sat, "displace": fb_displace, "cleanup": fb_cleanup}
+	var vals := {"delay": float(fb_delay), "blur": fb_blur, "hue": fb_hue, "sat": fb_sat, "displace": fb_displace, "cleanup": fb_cleanup,
+		"jag": fb_jag, "zones": fb_zones, "zone_spread": float(fb_zone_spread), "flux": particles_flux}
 	for k in vals:
 		_routing_widgets[k].set_value_no_signal(vals[k])
-		_routing_widgets[k + "_lbl"].text = ("%d" % int(vals[k])) if k == "delay" else ("%.3f" % vals[k])
+		_routing_widgets[k + "_lbl"].text = ("%d" % int(vals[k])) if k in ["delay", "zone_spread"] else ("%.3f" % vals[k])
 	_routing_widgets["src"].selected = fb_disp_src
 	_routing_widgets["rule"].selected = fb_cleanup_rule
+	_routing_widgets["jag_mode"].selected = fb_jag_mode
+	_routing_widgets["jag_sides_btn"].text = "%d sides" % fb_jag_sides
+	_routing_widgets["flux_src"].selected = flux_src
 
 
 var _prof := {}
@@ -1869,17 +1959,31 @@ func _process(_delta: float) -> void:
 		m.set_shader_parameter("sat", fb_sat)
 		m.set_shader_parameter("cleanup", fb_cleanup)
 		m.set_shader_parameter("cleanup_rule", fb_cleanup_rule)
+		if fb_jag > 0.0:
+			var every := 20 if fb_jag_mode == 1 else (6 if fb_jag_mode == 2 else 100000)
+			if Engine.get_process_frames() % every == 0:
+				_jag_seed += 1.0
+		m.set_shader_parameter("jag", fb_jag)
+		m.set_shader_parameter("jag_sides", fb_jag_sides)
+		m.set_shader_parameter("jag_scale", fb_jag_scale)
+		m.set_shader_parameter("jag_mode", fb_jag_mode)
+		m.set_shader_parameter("jag_seed", _jag_seed)
+		m.set_shader_parameter("zones", fb_zones)
+		m.set_shader_parameter("zone_scale", fb_zone_scale)
 		var dt := _disp_texture() if fb_displace > 0.0 else null
 		m.set_shader_parameter("disp_on", dt != null)
 		m.set_shader_parameter("displace", fb_displace)
 		if dt:
 			m.set_shader_parameter("disp_tex", dt)
-		if fb_delay > 0:
+		if fb_delay > 0 or fb_zones > 0.0:
 			# the history ring: this frame's head copies last frame's output; the loop reads N back
 			_ring_head = (_ring_head + 1) % RING
 			_ring_rects[_ring_head].texture = _acc[1 - cur].get_texture()
 			_ring[_ring_head].render_target_update_mode = SubViewport.UPDATE_ONCE
-			prev.texture = _ring[posmod(_ring_head - fb_delay, RING)].get_texture()
+			prev.texture = _ring[posmod(_ring_head - fb_delay, RING)].get_texture() if fb_delay > 0 else _acc[1 - cur].get_texture()
+			if fb_zones > 0.0:
+				for zi in 3:
+					m.set_shader_parameter("zone_tex%d" % (zi + 1), _ring[posmod(_ring_head - fb_delay - fb_zone_spread * (zi + 1), RING)].get_texture())
 		else:
 			prev.texture = _acc[1 - cur].get_texture()
 		_acc[1 - cur].render_target_update_mode = SubViewport.UPDATE_DISABLED
@@ -1930,6 +2034,8 @@ func _physics_actor_at(world_pos: Vector2) -> Node2D:
 
 ## Every beat (audio, test groove or clock) is a kick on channel 10 for the bridge.
 func _on_beat_out() -> void:
+	if _fx.slit_mode == 4:
+		_fx.redeal()                                     # the cutup re-deals on the beat
 	if MidiOut.enabled:
 		MidiOut.note_on(MidiOut.CH_BEAT, 36, 100, 0.05)
 		MidiOut.event("beat", [Clock.beat_index if Clock.running else -1])

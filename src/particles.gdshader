@@ -9,6 +9,10 @@ uniform vec2 bounds = vec2(1920.0, 1080.0);
 uniform int palette_count = 0;
 uniform vec4 palette[16];
 uniform float dot_size = 3.0;
+uniform bool emit_from_tex = false;     // fluxdots: dots are born where emit_tex is bright
+uniform sampler2D emit_tex : filter_linear, repeat_disable;
+uniform float emit_threshold = 0.22;
+uniform float flux_rate = 0.0;          // re-births per second per dot (0 .. 3)
 
 float hash21(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -42,6 +46,16 @@ vec3 ring_color(float t) {
 	return mix(palette[i].rgb, palette[j].rgb, fract(f));
 }
 
+// try a few spots and take the first bright one; leaves p alone when none is
+vec2 bright_spot(float k, vec2 p) {
+	for (int i = 0; i < 6; i++) {
+		vec2 uv = vec2(hash21(vec2(k * 3.1 + float(i) * 0.77, 5.5)), hash21(vec2(k * 1.9 + float(i) * 0.31, 8.8)));
+		vec4 s = texture(emit_tex, uv);
+		if (dot(s.rgb, vec3(0.299, 0.587, 0.114)) * s.a > emit_threshold) return uv * bounds;
+	}
+	return p;
+}
+
 void start() {
 	// keep the hash input small: fract() of a five-digit index times 123.34
 	// quantises to a handful of values and stacks thousands of dots
@@ -49,6 +63,7 @@ void start() {
 	float r1 = hash21(vec2(k, 1.7));
 	float r2 = hash21(vec2(k * 1.37, 9.3));
 	TRANSFORM[3].xy = vec2(r1, r2) * bounds;
+	if (emit_from_tex) TRANSFORM[3].xy = bright_spot(k, TRANSFORM[3].xy);
 	VELOCITY = vec3(0.0);
 	CUSTOM.x = hash21(vec2(k * 0.71, 4.4));               // per-dot hue offset
 	float s = dot_size * mix(0.6, 1.4, hash21(vec2(k * 2.3, 2.2)));
@@ -70,6 +85,13 @@ void process() {
 	VELOCITY.xy = mix(VELOCITY.xy, force, min(1.0, DELTA * 3.0));
 	p += VELOCITY.xy * DELTA;
 	p = mod(p + bounds, bounds);                               // wrap
+	if (emit_from_tex && flux_rate > 0.0) {
+		float k = float(INDEX) * 0.00037 + 0.11;
+		if (hash21(vec2(k * 5.3, floor(TIME * 4.0) * 0.17)) < flux_rate * DELTA) {
+			p = bright_spot(k + floor(TIME * 4.0) * 0.013, p);          // reborn on something bright
+			VELOCITY = vec3(0.0);
+		}
+	}
 	TRANSFORM[3].xy = p;
 	float speed = length(VELOCITY.xy);
 	COLOR = vec4(ring_color(CUSTOM.x + speed * 0.0008), clamp(0.7 + speed * 0.002, 0.7, 1.0));

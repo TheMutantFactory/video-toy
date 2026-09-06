@@ -32,6 +32,14 @@ uniform int slit_mode = 0;
 uniform sampler2D slit_tex : filter_linear, repeat_disable;
 uniform int slit_cols = 6;
 uniform int slit_rows = 6;
+uniform int cutup_seed = 0;      // slit_mode 4: each cell of an 8x5 grid reads a random history slot
+uniform int cutup_cols = 8;
+uniform int cutup_rows = 5;
+float cut_hash(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
 uniform vec4 key_color : source_color = vec4(0.0, 1.0, 0.0, 1.0);
 uniform float key_tolerance = 0.18;
 uniform float key_softness = 0.10;
@@ -88,7 +96,12 @@ vec3 plasma(vec2 uv, float t) {
 vec3 sample_source(vec2 uv) {
 	if (slit_mode == 0) return texture(screen_tex, uv).rgb;
 	float t;
-	if (slit_mode == 1) t = uv.y;
+	if (slit_mode == 4) {
+		// temporal cutup: a patchwork of moments, re-dealt on the beat
+		vec2 g = floor(uv * vec2(float(cutup_cols), float(cutup_rows)));
+		t = cut_hash(g + vec2(float(cutup_seed) * 0.173, float(cutup_seed) * 0.071));
+	}
+	else if (slit_mode == 1) t = uv.y;
 	else if (slit_mode == 2) t = uv.x;
 	else t = clamp(length((uv - 0.5) * vec2(1.78, 1.0)) * 1.1, 0.0, 0.999);
 	int slots = slit_cols * slit_rows;

@@ -257,10 +257,17 @@ on top of the trails, or the drawing layer can stay clean while everything else 
 delayed loop also softens — a video-delay look), and every pass through the loop can **blur or
 sharpen**, **drift the hue**, **push the saturation**, and be **displaced** by a texture: the
 picture itself, layer 2, layer 3 or the webcam — draw into layer 3 and warp the loop with it.
-**Cellular cleanup** is the twist-box's other half (docs/RESEARCH-6.md): a cellular-automaton
-step on every pass — **majority** grows coherent regions out of the smear, **Life** runs
-Conway's rule on the bright cells so trails crystallise into gliders and blinkers, **erode**
-thins everything — with an amount slider and a rule switch, a param and an action.
+The rest of the panel is the **twist-box** (docs/RESEARCH-6.md, after Rudy Rucker):
+**cellular cleanup**, a cellular-automaton step on every pass (**majority** grows coherent
+regions out of the smear, **Life** runs Conway's rule on the bright cells so trails crystallise
+into gliders and blinkers, **erode** thins); **jagged trails**, the drift snapping to a lattice
+of 3, 4, 6 or 8 directions per region (angular, or **branching** as regions re-roll, or
+**broken** with dropouts); **time zones**, patches of the picture reading the loop from several
+frames further back, chosen by a slow field, so the scene runs slow and fast at once;
+**fluxdots**, the particle field's dots reborn on the bright pixels of the picture, a layer or
+the webcam, so particles gather on what matters; and **cutup**, a fifth slit-scan mode
+(**Shift+K**) that deals every cell of an 8×5 grid a different moment from the history atlas and
+re-deals on the beat. All params or actions, all snapshotted, all cleared by panic.
 All of it snapshots and crossfades, panic clears it, the HUD names what is on, and the delay,
 blur, hue and displacement are params with the layer switches and the source as actions.
 

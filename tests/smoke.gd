@@ -1114,6 +1114,14 @@ func _init() -> void:
 	bs_tr3.onset(0.02)
 	_check("a double hit within 100 ms is ignored", bs_tr3.onsets.size() == 1)
 
+	# the twist-box's cutup is a slit-scan mode; the shaders name every new control
+	var fxs := load("res://src/fx.gd")
+	_check("cutup is the fifth slit mode", fxs.SLIT_MODES.size() == 5 and fxs.SLIT_MODES[4] == "cutup")
+	var warp_src: String = FeedbackMesh.WARP_SHADER
+	_check("the warp pass carries the twist-box controls", warp_src.contains("uniform float jag") and warp_src.contains("uniform float zones") and warp_src.contains("zone_tex3") and warp_src.contains("uniform float cleanup") and warp_src.contains("jag_mode == 2"))
+	var pshader: String = FileAccess.get_file_as_string("res://src/particles.gdshader")
+	_check("the particle shader can be born on a texture's bright pixels", pshader.contains("emit_from_tex") and pshader.contains("bright_spot") and pshader.contains("flux_rate"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 
