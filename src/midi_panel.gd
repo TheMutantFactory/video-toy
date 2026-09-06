@@ -47,7 +47,10 @@ func _ready() -> void:
 	col.add_child(head)
 	_inputs = UI.label("", 16, UI.DIM)
 	col.add_child(_inputs)
-	col.add_child(UI.label("Click a row, then move a knob / stick / fader or hit a pad / button / send an OSC message. Right-click to unbind. ♪ cycles an audio band. ~ cycles a modulator (sine, tri, square, saw, random walk, sample & hold, beat envelope; right-click: rate) and the slider is its depth around the knob's last value. ; closes.", 16, UI.DIM))
+	var legend := UI.label("Click a row, then move a knob / stick / fader or hit a pad / button / send an OSC message. Right-click to unbind. ♪ cycles an audio band. ~ cycles a modulator (sine, tri, square, saw, random walk, sample & hold, beat envelope; right-click: rate) and the slider is its depth around the knob's last value. ; closes.", 16, UI.DIM)
+	legend.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	legend.custom_minimum_size.x = 1180
+	col.add_child(legend)
 	_osc_line = UI.label("", 16, UI.DIM)
 	col.add_child(_osc_line)
 
