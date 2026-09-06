@@ -1,0 +1,59 @@
+# Headless checks on every push and PR: the smoke tests and the self-test
+# (./run.sh test) on Linux, and the macOS .app export with its in-bundle
+# self-test. Captures and pixel diffs stay local: they need a GPU and a window.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: smoke + self-test (headless Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Colour emoji font (the smoke test renders a cake in colour)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-color-emoji
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+      - run: godot --version
+      - name: Smoke tests and self-test
+        run: ./run.sh test
+      - name: Keep the logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-logs
+          path: ~/.local/share/godot/app_userdata/Video Toy/logs
+          if-no-files-found: ignore
+
+  export:
+    name: macOS app export + in-bundle self-test
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: true
+      - run: godot --version
+      - name: Import (the Syphon GDExtension registers here)
+        run: godot --headless --path . --import || true
+      - name: Export out/Video Toy.app and self-test the bundle
+        run: ./run.sh export
+      - name: Zip the app (keeps the code signature and the framework symlinks)
+        run: cd out && ditto -c -k --keepParent "Video Toy.app" "Video-Toy-macOS.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Video-Toy-macOS
+          path: out/Video-Toy-macOS.zip
+          retention-days: 14

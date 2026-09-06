@@ -1,5 +1,7 @@
 # Video Toy
 
+[![test](https://github.com/TheMutantFactory/video-toy/actions/workflows/test.yml/badge.svg)](https://github.com/TheMutantFactory/video-toy/actions/workflows/test.yml)
+
 A Godot 4.7 toy for streams, VODs and Knobcon: search [The Noun Project](https://thenounproject.com)
 for icons, drop them into a Minecraft-style hotbar, give them **verbs** (wander, orbit, spin,
 bounce, pulse, sparkle, rainbow, swarm), pick a **palette**, turn on **video feedback**, and post-process with **kaleidoscope**, **chroma key**,
@@ -401,6 +403,14 @@ The Esc menu has **Export rig**, which zips the toolbox and every asset it point
 attribution ledger, presets and banks, controller bindings, palettes, the timeline loop, the
 current font and the chroma backdrop into `user://rigs/`, and **Import rig…** (or drop a rig
 `.zip` on Play), which unpacks one and reloads everything. "Send me your Knobcon rig."
+
+## CI
+
+[.github/workflows/test.yml](.github/workflows/test.yml) runs on every push and pull request:
+`./run.sh test` (smoke + self-test) on headless Linux with a colour emoji font installed, and on
+macOS the `./run.sh export` build with its in-bundle self-test, uploading `Video-Toy-macOS.zip`
+as an artifact for two weeks — the latest app is always one download away. Captures and the
+pixel-diff references stay local (`./run.sh check`); they need a GPU and a window.
 
 ## Reference captures
 
