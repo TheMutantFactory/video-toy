@@ -260,6 +260,7 @@ func release(fling: Vector2) -> void:
 	if body == null:
 		return
 	body.freeze = false
+	body.sleeping = false                     # a body that dozed off on the floor ignores velocity
 	body.linear_velocity = fling.limit_length(2500.0)
 
 
