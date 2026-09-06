@@ -246,6 +246,26 @@ func _templates(dir: String) -> void:
 	get_tree().quit()
 
 
+## The harnesses (self-test, capture) run on a scratch toolbox and ledger with
+## the demo shapes, so the user's real icons never shape a test or a shot.
+func _scratch_state() -> void:
+	Toolbox.path = "user://_harness_toolbox.json"
+	Ledger.path = "user://_harness_attribution.json"
+	Toolbox.slots = []
+	Ledger.entries = []
+	DemoPack.load_into(Toolbox, Ledger)
+
+
+func _restore_state() -> void:
+	for p in [Toolbox.path, Ledger.path]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+	Toolbox.path = Toolbox.PATH
+	Ledger.path = Ledger.PATH
+	Toolbox.load_from_disk()
+	Ledger.load_from_disk()
+
+
 ## Windowed: render docs/key-card.png and write docs/KEYS.md from Keys, then quit.
 func _keycard(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
@@ -265,8 +285,7 @@ func _keycard(dir: String) -> void:
 ## (non-zero exit) if any screen errors while building itself.
 func _selftest() -> void:
 	var fails := 0
-	if Toolbox.slots.is_empty():                        # a fresh machine (CI): the five demo shapes
-		DemoPack.load_into(Toolbox, Ledger)
+	_scratch_state()                                    # the demo shapes on a scratch toolbox, whatever is in the real one
 	for name in SCREENS.keys():
 		show_screen(name)
 		await get_tree().process_frame
@@ -804,20 +823,23 @@ func _selftest() -> void:
 	st.fb_hue = 0.02
 	st.fb_displace = 0.5
 	st.set_disp_source(2)
+	st.fb_cleanup = 0.6
+	st.set_cleanup_rule(1)
 	for i in 3:
 		await get_tree().process_frame
 	var mcur: ShaderMaterial = st._acc_mats[1 - st._flip]
 	ok_fr = ok_fr and is_equal_approx(float(mcur.get_shader_parameter("blur")), 0.4) and is_equal_approx(float(mcur.get_shader_parameter("hue")), 0.02) and bool(mcur.get_shader_parameter("disp_on"))
+	ok_fr = ok_fr and is_equal_approx(float(mcur.get_shader_parameter("cleanup")), 0.6) and int(mcur.get_shader_parameter("cleanup_rule")) == 1 and st.routing_describe().contains("cleanup 0.60 life")
 	var prev_tex: Texture2D = st._acc_prev[1 - st._flip].texture
 	var ring_texs: Array = st._ring.map(func(rv): return rv.get_texture())
 	ok_fr = ok_fr and ring_texs.has(prev_tex) and st._ring[st._ring_head].render_target_update_mode == SubViewport.UPDATE_ONCE
 	ok_fr = ok_fr and st.routing_describe().contains("delay 6") and st.routing_describe().contains("blur 0.40") and st.routing_describe().contains("displace 0.50 by layer 2") and st.routing_describe().contains("loop: layers 1, 3")
 	var snap_fr: Dictionary = st.snapshot()
-	ok_fr = ok_fr and snap_fr["feedback"]["delay"] == 6 and snap_fr["feedback"]["loop"] == 5 and is_equal_approx(float(snap_fr["feedback"]["blur"]), 0.4)
+	ok_fr = ok_fr and snap_fr["feedback"]["delay"] == 6 and snap_fr["feedback"]["loop"] == 5 and is_equal_approx(float(snap_fr["feedback"]["blur"]), 0.4) and snap_fr["feedback"]["cleanup_rule"] == 1
 	st.panic()
-	ok_fr = ok_fr and st.fb_delay == 0 and st.fb_blur == 0.0 and st.loop_mask() == 7 and not st._overlay.visible
+	ok_fr = ok_fr and st.fb_delay == 0 and st.fb_blur == 0.0 and st.loop_mask() == 7 and not st._overlay.visible and st.fb_cleanup == 0.0
 	st.restore(snap_fr, 0.0)
-	ok_fr = ok_fr and st.fb_delay == 6 and st.loop_mask() == 5 and st.fb_disp_src == 2 and is_equal_approx(st.fb_hue, 0.02)
+	ok_fr = ok_fr and st.fb_delay == 6 and st.loop_mask() == 5 and st.fb_disp_src == 2 and is_equal_approx(st.fb_hue, 0.02) and is_equal_approx(st.fb_cleanup, 0.6) and st.fb_cleanup_rule == 1
 	st.set_fb_delay(0)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -1360,6 +1382,7 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL solid shapes")
+	_restore_state()
 	Autosave.mark_clean_exit()
 	get_tree().quit(1 if fails > 0 else 0)
 
@@ -1393,8 +1416,7 @@ static func _cc(channel: int, number: int, value: int) -> InputEventMIDI:
 ## Screenshot every screen (and the menu + attribution overlay) into `dir`.
 func _capture_all(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
-	if Toolbox.slots.is_empty():
-		DemoPack.load_into(Toolbox, Ledger)
+	_scratch_state()
 	var only := ""
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
@@ -1937,6 +1959,8 @@ func _capture_all(dir: String) -> void:
 				current.set_fb_delay(6)
 				current.fb_hue = 0.03
 				current.fb_blur = 0.3
+				current.fb_cleanup = 0.5
+				current.set_cleanup_rule(0)
 				current._set_feedback(true)
 				current.toggle_routing_panel()
 				await get_tree().create_timer(3.0).timeout
@@ -2080,5 +2104,6 @@ func _capture_all(dir: String) -> void:
 		MidiMap.load_from_disk()
 	Settings.set_value("locks", [])                          # the locks shot pins two sections
 	Settings.set_value("mutate_amount", 1.0)
+	_restore_state()
 	Autosave.mark_clean_exit()
 	get_tree().quit()

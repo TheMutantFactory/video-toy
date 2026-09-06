@@ -17,7 +17,8 @@ func snapshot() -> Dictionary:
 	return {
 		"palette": s.palette_index,
 		"feedback": {"on": s.feedback, "zoom": s.fb_zoom, "rot": s.fb_rot, "fade": s.fb_fade,
-			"delay": s.fb_delay, "blur": s.fb_blur, "hue": s.fb_hue, "sat": s.fb_sat, "displace": s.fb_displace, "disp_src": s.fb_disp_src, "loop": s.loop_mask()},
+			"delay": s.fb_delay, "blur": s.fb_blur, "hue": s.fb_hue, "sat": s.fb_sat, "displace": s.fb_displace, "disp_src": s.fb_disp_src, "loop": s.loop_mask(),
+			"cleanup": s.fb_cleanup, "cleanup_rule": s.fb_cleanup_rule},
 		"fx": {"pixel": s._fx.pixel_step, "kaleido": s._fx.kaleido_step, "crt": s._fx.crt_level,
 			"key": s._fx.key_mode, "key_threshold": s._fx.key_threshold, "slit": s._fx.slit_mode,
 			"quantize": s._fx.quantize, "dither": s._fx.dither},
@@ -97,6 +98,8 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 	s.fb_sat = clampf(float(fb.get("sat", s.fb_sat)), 0.8, 1.2)
 	s.fb_displace = clampf(float(fb.get("displace", s.fb_displace)), 0.0, 1.0)
 	s.fb_disp_src = posmod(int(fb.get("disp_src", s.fb_disp_src)), s.DISP_SOURCES.size())
+	s.fb_cleanup = clampf(float(fb.get("cleanup", s.fb_cleanup)), 0.0, 1.0)
+	s.fb_cleanup_rule = posmod(int(fb.get("cleanup_rule", s.fb_cleanup_rule)), s.CLEANUP_RULES.size())
 	if fb.has("loop"):
 		var mask := int(fb["loop"])
 		for i in s._layers.size():

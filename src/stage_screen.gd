@@ -198,6 +198,9 @@ var fb_hue := 0.0                          # hue drift per pass, radians
 var fb_sat := 1.0                          # saturation per pass
 var fb_displace := 0.0                     # displacement amount by fb_disp_src
 var fb_disp_src := 0                       # DISP_SOURCES index
+var fb_cleanup := 0.0                      # cellular cleanup per pass, 0 .. 1
+var fb_cleanup_rule := 0                   # CLEANUP_RULES index
+const CLEANUP_RULES := ["majority", "life", "erode"]
 const DISP_SOURCES := ["off", "self", "layer 2", "layer 3", "webcam"]
 const RING := 24
 var _ring: Array = []                      # half-res SubViewports: the loop's history for the delay tap
@@ -1590,6 +1593,12 @@ func loop_mask() -> int:
 	return m
 
 
+func set_cleanup_rule(i: int) -> void:
+	fb_cleanup_rule = posmod(i, CLEANUP_RULES.size())
+	_refresh_routing_panel()
+	_update_hud()
+
+
 func set_disp_source(i: int) -> void:
 	fb_disp_src = posmod(i, DISP_SOURCES.size())
 	_refresh_routing_panel()
@@ -1616,6 +1625,8 @@ func routing_describe() -> String:
 		parts.append("hue %+.3f" % fb_hue)
 	if absf(fb_sat - 1.0) > 0.001:
 		parts.append("sat %.2f" % fb_sat)
+	if fb_cleanup > 0.001:
+		parts.append("cleanup %.2f %s" % [fb_cleanup, CLEANUP_RULES[fb_cleanup_rule]])
 	if fb_disp_src > 0 and fb_displace > 0.0:
 		parts.append("displace %.2f by %s" % [fb_displace, DISP_SOURCES[fb_disp_src]])
 	if loop_mask() != 7:
@@ -1665,6 +1676,9 @@ func toggle_routing_panel() -> void:
 					_update_hud()],
 				["displace", "displacement", 0.0, 1.0, 0.05, func(v: float):
 					fb_displace = v
+					_update_hud()],
+				["cleanup", "cellular cleanup", 0.0, 1.0, 0.05, func(v: float):
+					fb_cleanup = v
 					_update_hud()]]:
 			grid.add_child(UI.label(spec[1], 17))
 			var sl := HSlider.new()
@@ -1681,6 +1695,14 @@ func toggle_routing_panel() -> void:
 			_routing_widgets[spec[0] + "_lbl"] = vl
 		var srow := HBoxContainer.new()
 		srow.add_theme_constant_override("separation", 8)
+		srow.add_child(UI.label("Cleanup rule:", 17))
+		var rb := OptionButton.new()
+		for n in CLEANUP_RULES:
+			rb.add_item(n)
+		rb.item_selected.connect(set_cleanup_rule)
+		srow.add_child(rb)
+		_routing_widgets["rule"] = rb
+		srow.add_child(UI.hspace(8))
 		srow.add_child(UI.label("Displace by:", 17))
 		var ob := OptionButton.new()
 		for n in DISP_SOURCES:
@@ -1695,6 +1717,8 @@ func toggle_routing_panel() -> void:
 			fb_hue = 0.0
 			fb_sat = 1.0
 			fb_displace = 0.0
+			fb_cleanup = 0.0
+			set_cleanup_rule(0)
 			set_disp_source(0)
 			for i in LAYER_COUNT:
 				_layers[i]["loop"] = true
@@ -1716,11 +1740,12 @@ func _refresh_routing_panel() -> void:
 		return
 	for i in LAYER_COUNT:
 		_routing_widgets["loop%d" % i].set_pressed_no_signal(bool(_layers[i].get("loop", true)))
-	var vals := {"delay": float(fb_delay), "blur": fb_blur, "hue": fb_hue, "sat": fb_sat, "displace": fb_displace}
+	var vals := {"delay": float(fb_delay), "blur": fb_blur, "hue": fb_hue, "sat": fb_sat, "displace": fb_displace, "cleanup": fb_cleanup}
 	for k in vals:
 		_routing_widgets[k].set_value_no_signal(vals[k])
 		_routing_widgets[k + "_lbl"].text = ("%d" % int(vals[k])) if k == "delay" else ("%.3f" % vals[k])
 	_routing_widgets["src"].selected = fb_disp_src
+	_routing_widgets["rule"].selected = fb_cleanup_rule
 
 
 var _prof := {}
@@ -1842,6 +1867,8 @@ func _process(_delta: float) -> void:
 		m.set_shader_parameter("blur", fb_blur)
 		m.set_shader_parameter("hue", fb_hue)
 		m.set_shader_parameter("sat", fb_sat)
+		m.set_shader_parameter("cleanup", fb_cleanup)
+		m.set_shader_parameter("cleanup_rule", fb_cleanup_rule)
 		var dt := _disp_texture() if fb_displace > 0.0 else null
 		m.set_shader_parameter("disp_on", dt != null)
 		m.set_shader_parameter("displace", fb_displace)

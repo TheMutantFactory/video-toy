@@ -261,6 +261,8 @@ func panic() -> void:
 	s.fb_sat = 1.0
 	s.fb_displace = 0.0
 	s.fb_disp_src = 0
+	s.fb_cleanup = 0.0
+	s.fb_cleanup_rule = 0
 	for i in s._layers.size():
 		s._layers[i]["loop"] = true
 	s._fx.set_state(0, false, false, 0, false, 0, 0, 0)

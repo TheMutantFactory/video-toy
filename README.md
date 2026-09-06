@@ -257,6 +257,10 @@ on top of the trails, or the drawing layer can stay clean while everything else 
 delayed loop also softens — a video-delay look), and every pass through the loop can **blur or
 sharpen**, **drift the hue**, **push the saturation**, and be **displaced** by a texture: the
 picture itself, layer 2, layer 3 or the webcam — draw into layer 3 and warp the loop with it.
+**Cellular cleanup** is the twist-box's other half (docs/RESEARCH-6.md): a cellular-automaton
+step on every pass — **majority** grows coherent regions out of the smear, **Life** runs
+Conway's rule on the bright cells so trails crystallise into gliders and blinkers, **erode**
+thins everything — with an amount slider and a rule switch, a param and an action.
 All of it snapshots and crossfades, panic clears it, the HUD names what is on, and the delay,
 blur, hue and displacement are params with the layer switches and the source as actions.
 

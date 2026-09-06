@@ -20,6 +20,9 @@ uniform float sat = 1.0;         // saturation multiplier per pass
 uniform float displace = 0.0;    // 0 .. 1, by disp_tex's colour
 uniform bool disp_on = false;
 uniform sampler2D disp_tex : filter_linear, repeat_disable;
+uniform float cleanup = 0.0;     // cellular cleanup per pass, 0 .. 1
+uniform int cleanup_rule = 0;    // 0 majority grow, 1 Life, 2 erode
+const vec3 LUMA = vec3(0.299, 0.587, 0.114);
 vec3 hue_rotate(vec3 c, float a) {
 	const vec3 k = vec3(0.57735);
 	float cs = cos(a);
@@ -47,6 +50,34 @@ void fragment() {
 		vec4 avg = (texture(TEXTURE, uv + vec2(px.x, 0.0)) + texture(TEXTURE, uv - vec2(px.x, 0.0))
 			+ texture(TEXTURE, uv + vec2(0.0, px.y)) + texture(TEXTURE, uv - vec2(0.0, px.y))) * 0.25;
 		c = blur > 0.0 ? mix(c, avg, blur) : clamp(c + (c - avg) * (-blur) * 1.5, 0.0, 1.0);
+	}
+	if (cleanup > 0.001) {
+		// the twist-box's cellular cleanup: local rules on the previous pass grow
+		// coherent regions out of the smear (or thin it), one iteration per loop pass
+		vec2 px = TEXTURE_PIXEL_SIZE * 1.5;
+		int alive = 0;
+		vec4 sum = vec4(0.0);
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				if (dx == 0 && dy == 0) continue;
+				vec4 n = texture(TEXTURE, uv + vec2(float(dx), float(dy)) * px);
+				sum += n;
+				alive += (dot(n.rgb, LUMA) * n.a > 0.18) ? 1 : 0;
+			}
+		}
+		vec4 mean = sum / 8.0;
+		bool on = dot(c.rgb, LUMA) * c.a > 0.18;
+		vec4 target = c;
+		if (cleanup_rule == 0) {
+			if (alive >= 5) target = max(c, mean);
+			else if (alive <= 2) target = c * 0.6;
+		} else if (cleanup_rule == 1) {
+			bool next = on ? (alive == 2 || alive == 3) : (alive == 3);
+			target = next ? (on ? c : min(mean * 1.4, vec4(1.0))) : c * 0.5;
+		} else {
+			if (alive <= 4) target = c * 0.5;
+		}
+		c = mix(c, target, cleanup);
 	}
 	if (abs(hue) > 0.0001 || abs(sat - 1.0) > 0.0001) {
 		vec3 rgb = hue_rotate(c.rgb, hue);
