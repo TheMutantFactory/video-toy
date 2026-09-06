@@ -6,6 +6,7 @@
 # ./run.sh templates  write TouchOSC / Launchpad / APC mini templates into docs/controllers
 # ./run.sh check      capture the deterministic reference shots and pixel-diff them (exit 1 on regression)
 # ./run.sh reference  re-record the reference shots (after an intentional visual change)
+# ./run.sh clip [s]   render the autosaved stage state offline to out/clip-*.avi (Movie Maker, 60 fps)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -44,6 +45,10 @@ case "${1:-play}" in
   import)  exec "$G" --headless --path . --import ;;
   templates) exec "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;
   diff)    exec "$G" --headless --path . -s tests/diff.gd ;;
+  clip)    # render the autosaved state (the last thing on stage) to an AVI: ./run.sh clip [seconds]
+           audio_override; out="$(pwd)/out/clip-$(date +%Y%m%d-%H%M%S).avi"; mkdir -p out
+           "$G" --path . --write-movie "$out" --fixed-fps 60 -- --clip "${2:-20}" >/dev/null 2>&1
+           echo "$out" ;;
   check)   # capture the reference shots, then compare them with tests/reference
            audio_override; mkdir -p out
            "$G" --path . -- --capture "$(pwd)/out" --only start,settings,menu,attribution,ref_stage,ref_crt >/dev/null 2>&1

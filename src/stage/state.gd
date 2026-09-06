@@ -21,6 +21,7 @@ func snapshot() -> Dictionary:
 			"key": s._fx.key_mode, "key_threshold": s._fx.key_threshold, "slit": s._fx.slit_mode,
 			"quantize": s._fx.quantize, "dither": s._fx.dither},
 		"glow": s._glow.level,
+		"ascii": s._ascii.mode,
 		"monitor": {"on": s._monitor.visible, "size": s._monitor.size_step, "x": s._monitor.position.x, "y": s._monitor.position.y},
 		"webcam": s._webcam_mode,
 		"shape": s._shape_index,
@@ -105,6 +106,8 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 	s._fx.dither = bool(fx.get("dither", s._fx.dither))
 	s._fx._push()
 	s._glow.set_level(int(d.get("glow", s._glow.level)))
+	s._ascii.set_mode(int(d.get("ascii", s._ascii.mode)))
+	s._ascii.set_mode(int(d.get("ascii", s._ascii.mode)))
 	var mon: Dictionary = d.get("monitor", {})
 	var msize := clampi(int(mon.get("size", s._monitor.size_step)), 0, s._monitor.SIZES.size() - 1)
 	if msize != s._monitor.size_step:

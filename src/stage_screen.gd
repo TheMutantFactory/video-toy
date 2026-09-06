@@ -47,6 +47,7 @@ const SolidScript = preload("res://src/solid.gd")
 const MidiPanelScript = preload("res://src/midi_panel.gd")
 const WebcamScript = preload("res://src/webcam.gd")
 const GlowScript = preload("res://src/glow.gd")
+const AsciiScript = preload("res://src/ascii.gd")
 const SceneLayerScript = preload("res://src/scene_layer.gd")
 const FormationScript = preload("res://src/formation.gd")
 const RidePathScript = preload("res://src/ride_path.gd")
@@ -159,6 +160,8 @@ var _webcam_sprite: Sprite2D
 var _webcam_mode := 0
 var _steal_note := ""
 var _glow
+var _ascii
+var _autosave_t := 0.0
 var _fade_tween: Tween
 var _scene_layer: Node2D
 var _acc_mats: Array = []               # warp ShaderMaterials, one per accumulator
@@ -343,6 +346,9 @@ func _ready() -> void:
 	_fx = FxScript.new()
 	_composite.add_child(_fx)
 	_fx.set_source(_worldmix.get_texture(), Palettes.bg(palette_index))
+
+	_ascii = AsciiScript.new()                   # last pass: the picture as glyphs
+	_composite.add_child(_ascii)
 
 	_display = TextureRect.new()
 	_display.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1177,7 +1183,7 @@ func _update_hud() -> void:
 		Engine.get_frames_per_second(), roundi(DisplayServer.screen_get_refresh_rate()), quality.avg_ms, quality.describe(),
 		Toolbox.selected + 1, name, Palettes.get_palette(palette_index)["name"],
 		("zoom %.2f  twist %.2f  fade %.2f" % [fb_zoom, fb_rot, fb_fade]) if feedback else "off",
-		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
+		_fx.describe() + ("" if _glow.level == 0 else "  glow " + _glow.describe()) + ("" if _ascii.mode == 0 else "  ascii " + _ascii.describe()), ("%.0f%%" % (_monitor.scale_factor() * 100.0)) if _monitor.visible else "off",
 		all_actors().size()] + "   ·   layer %s%s   ·   solids: %d (next: %s)   ·   formations: %d (%s)" % [layer_describe(), ("   ·   DRAW" if draw_mode else "") + ("   ·   EVOLVE" if evolve else "") + ("   ·   ATTRACT" if attract else "") + ("   ·   BLACKOUT" if blackout else "") + ("   ·   TICKER" if ticker_on else "") + ("   ·   CREDITS" if _roll.visible else "") + (("   ·   REC %.1fs" % (_clock - timeline._rec_start)) if timeline.recording else "") + (("   ·   LOOP %.1f/%.1fs" % [timeline.position(_clock), timeline.length]) if timeline.playing else ""), _solids.get_child_count(), next_shape(), _formations.get_child_count(), formation_kind()] \
 		+ (("   ·   cam orbit %.2f dolly %.1f roll %.2f h %.1f" % [cam_orbit, cam_dolly, cam_roll, cam_height]) if (cam_orbit != 0.0 or cam_roll != 0.0 or cam_height != 0.0 or cam_dolly != 7.5) else "")
 	# second line: controllers
@@ -1217,6 +1223,7 @@ func _meter() -> String:
 func _apply_palette() -> void:
 	_bg.color = Palettes.bg(palette_index)
 	_fx.set_palette(palette_index)
+	_ascii.set_palette(palette_index)
 	Scenes.apply_palette(_layer_mix.material, palette_index)
 	if p2_active:
 		_refresh_p2()
@@ -1254,11 +1261,65 @@ func _set_feedback(on: bool) -> void:
 var _prof := {}
 
 
+# ---------------- autosave / live state ----------------
+## The snapshot plus what is on stage, for a crash restore.
+func live_state() -> Dictionary:
+	var st := snapshot()
+	var actors: Array = []
+	for i in _layers.size():
+		for a in _layers[i]["actors"].get_children():
+			if not a._dying:
+				actors.append({"slot": a.slot_id, "layer": i, "x": a.position.x, "y": a.position.y})
+	var solids: Array = []
+	for sol in _solids.get_children():
+		solids.append({"slot": sol.slot_id, "shape": sol.shape, "x": sol.position.x, "y": sol.position.y, "z": sol.position.z})
+	st["live"] = {"actors": actors, "solids": solids}
+	return st
+
+
+## Put a live state back: the snapshot, then the actors and solids.
+func restore_live(st: Dictionary) -> int:
+	if st.is_empty():
+		return 0
+	restore(st, 0.0)
+	clear_actors()
+	for sol in _solids.get_children():
+		sol.queue_free()
+	var live: Dictionary = st.get("live", {})
+	var n := 0
+	for a in live.get("actors", []):
+		var idx := Toolbox.index_of(str(a.get("slot", "")))
+		if idx >= 0:
+			spawn_slot_at(idx, int(a.get("layer", 0)), Vector2(float(a.get("x", 960)), float(a.get("y", 540))))
+			n += 1
+	for sd in live.get("solids", []):
+		var idx := Toolbox.index_of(str(sd.get("slot", "")))
+		if idx >= 0:
+			var keep := Toolbox.selected
+			Toolbox.select(idx)
+			var shape_i: int = SolidScript.SHAPES.find(str(sd.get("shape", "cube")))
+			_shape_index = maxi(shape_i, 0)
+			spawn_solid(_camera.unproject_position(Vector3(float(sd.get("x", 0)), float(sd.get("y", 0)), float(sd.get("z", 0)))))
+			Toolbox.select(keep)
+			n += 1
+	_steal_note = "restored %d things from the autosave" % n
+	_update_hud()
+	return n
+
+
+func _tick_autosave(delta: float) -> void:
+	_autosave_t += delta
+	if _autosave_t >= Autosave.INTERVAL:
+		_autosave_t = 0.0
+		Autosave.write(live_state())
+
+
 func _process(_delta: float) -> void:
 	var t0 := Time.get_ticks_usec()
 	_tick_crossfade(_delta)
 	_tick_credits(_delta)
 	_tick_clock()
+	_tick_autosave(_delta)
 	_tick_words(_delta)
 	_tick_modes(_delta)
 	var t1 := Time.get_ticks_usec()
@@ -1420,6 +1481,11 @@ func _unhandled_key_input(ev: InputEvent) -> void:
 			return
 		KEY_QUOTELEFT:
 			set_scene("")
+			return
+		KEY_APOSTROPHE:
+			_ascii.cycle()
+			_steal_note = "ASCII " + _ascii.describe()
+			_update_hud()
 			return
 		KEY_UP:
 			if ev.shift_pressed: cam_dolly = maxf(3.0, cam_dolly - 0.5)

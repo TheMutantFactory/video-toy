@@ -62,6 +62,7 @@ Shift+D      draw mode: drag a path and the selected icon rides it; right-click 
 Shift+S      mosaic: the selected slot's picture rebuilt from the toolbox icons (as actors)
 Shift+E      evolve: a mutation every 8 beats / 6 s; Enter keeps it, Shift+Enter discards it
 Shift+A      attract mode (automatic after 60 s idle; any input ends it)
+'            ASCII mode: off / mono / colour (the picture as glyphs; last pass)
                                       ;      MIDI + audio panel
                                       A      audio source: off / mic / test / file
                                       Z      webcam: off / layer behind everything / chroma backdrop
@@ -340,6 +341,8 @@ src/presets.gd              eight banks x twelve stage snapshots, user://presets
 src/state_lerp.gd           crossfade maths: continuous fields lerp, discrete flip at the midpoint
 src/quality.gd              the quality ladder + frame-time monitor
 src/rig.gd                  rig export / import (zip of user:// state and assets)
+src/autosave.gd             live-state autosave + running flag
+src/ascii.gd + ascii.gdshader   ASCII mode (glyph atlas from TextRaster)
 src/image_diff.gd + tests/diff.gd   capture comparison for ./run.sh check; references in tests/reference
 src/clock.gd     (autoload) MIDI clock in / internal clock: bpm, beats, bars
 addons/godot-syphon         vendored Syphon GDExtension (MIT), macOS Forward+
@@ -380,6 +383,19 @@ src/webcam.gd               CameraServer feed (RGB or YCbCr) as a sprite; render
 demo/                       built-in shapes
 docs/RESEARCH.md            video toys, feedback, shader art, 3D, raster — the roadmap
 ```
+
+## Autosave, ASCII, clips
+
+The live state — the snapshot plus every icon and solid on stage — is autosaved every 30 s.
+If the last run did not exit cleanly, the start screen offers **Restore last session**.
+
+**'** (apostrophe) cycles **ASCII mode**: the picture redrawn as a grid of glyphs picked by
+luminance, in the palette accent or in each cell's own colour; it runs after every other effect.
+
+**Render 20 s clip** (Esc menu, or `./run.sh clip 20`) uses Godot's Movie Maker: a second Godot
+launches with `--write-movie`, restores the autosave, hides the HUD, plays the timeline loop if
+there is one, and writes an AVI (MJPEG + WAV) at a fixed 60 fps to `user://clips/` — offline, so
+it never drops frames. Convert with `ffmpeg -i clip.avi -c:v libx264 -crf 18 clip.mp4`.
 
 ## Rig files
 

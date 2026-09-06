@@ -71,6 +71,16 @@ func _ready() -> void:
 	wrow.add_child(UI.label("words are icons · emoji keep colour · drop .svg .ttf .txt .ogv on Play", 18, UI.DIM))
 	col.add_child(wrow)
 
+	var main := get_parent()
+	if main and "restore_offer" in main and not main.restore_offer.is_empty():
+		var rrow := HBoxContainer.new()
+		rrow.alignment = BoxContainer.ALIGNMENT_CENTER
+		rrow.add_theme_constant_override("separation", 8)
+		rrow.add_child(UI.button("Restore last session", func(): main.restore_autosave(), 320))
+		rrow.add_child(UI.hspace())
+		rrow.add_child(UI.label("the last run did not exit cleanly — autosave from %s" % Autosave.describe_age(int(main.restore_offer["age"])), 18, UI.ACCENT))
+		col.add_child(rrow)
+
 	col.add_child(UI.vspace(30))
 	var status := "%d icon%s in the toolbox" % [Toolbox.slots.size(), "" if Toolbox.slots.size() == 1 else "s"]
 	if NounApi.has_creds():

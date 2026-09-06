@@ -21,15 +21,26 @@ var args := PackedStringArray()
 var _cleanup_birthday: Array = []
 
 
+var restore_offer := {}                      # {age, state} when the last run did not exit cleanly
+
+
 func _ready() -> void:
 	get_window().title = "Video Toy"
+	restore_offer = {}
+	if Autosave.crashed_last_time() and not Autosave.read().is_empty():
+		restore_offer = {"age": Autosave.age_seconds(), "state": Autosave.read()}
+	Autosave.mark_running()
+	get_tree().auto_accept_quit = false
 	menu = MenuOverlay.new()
 	menu.navigate.connect(show_screen)
 	add_child(menu)
 	args = OS.get_cmdline_user_args()
 	var cap := args.find("--capture")
 	var ti := args.find("--templates")
-	if ti >= 0 and ti + 1 < args.size():
+	var ci := args.find("--clip")
+	if ci >= 0 and ci + 1 < args.size():
+		_clip(float(args[ci + 1]))
+	elif ti >= 0 and ti + 1 < args.size():
 		_templates(args[ti + 1])
 	elif args.has("--selftest"):
 		_selftest()
@@ -39,9 +50,63 @@ func _ready() -> void:
 		show_screen("start")
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		quit_clean()
+
+
+func quit_clean() -> void:
+	if current_name == "stage" and current:
+		Autosave.write(current.live_state())
+	Autosave.mark_clean_exit()
+	get_tree().quit()
+
+
+## Restore the autosave onto a fresh stage (the start screen's offer).
+func restore_autosave() -> void:
+	var st: Dictionary = restore_offer.get("state", Autosave.read())
+	restore_offer = {}
+	show_screen("stage")
+	await get_tree().process_frame
+	current.restore_live(st)
+
+
+## Render the current state to a movie in a child Godot process: Movie Maker
+## needs --write-movie at launch, so the child restores this run's autosave.
+func render_clip(seconds := 20.0) -> String:
+	if current_name == "stage" and current:
+		Autosave.write(current.live_state())
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://clips"))
+	var t := Time.get_datetime_dict_from_system()
+	var out := ProjectSettings.globalize_path("user://clips/clip-%04d%02d%02d-%02d%02d%02d.avi" % [t.year, t.month, t.day, t.hour, t.minute, t.second])
+	var argv := PackedStringArray(["--path", ProjectSettings.globalize_path("res://"), "--write-movie", out, "--fixed-fps", "60", "--", "--clip", str(seconds)])
+	var pid := OS.create_process(OS.get_executable_path(), argv)
+	if current_name == "stage" and current:
+		current._steal_note = ("rendering %.0f s to %s (pid %d)" % [seconds, out.get_file(), pid]) if pid > 0 else "could not start the render"
+		current._update_hud()
+	return out if pid > 0 else ""
+
+
+## Movie Maker mode: restore the autosave, hide the HUD, run `seconds`, quit.
+func _clip(seconds: float) -> void:
+	show_screen("stage")
+	await get_tree().process_frame
+	var st := Autosave.read()
+	if not st.is_empty():
+		current.restore_live(st)
+	current._help.visible = false
+	current._verb_panel.get_parent().visible = false
+	current._hud.get_parent().visible = false
+	if current.timeline.load():
+		current.toggle_play()
+	await get_tree().create_timer(seconds).timeout
+	Autosave.mark_clean_exit()
+	get_tree().quit()
+
+
 func show_screen(name: String) -> void:
 	if name == "quit":
-		get_tree().quit()
+		quit_clean()
 		return
 	if name == "attribution":
 		menu.show_attribution()
@@ -574,6 +639,62 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL birthday extras: ", _bd_trace)
+	# autosave: live state round-trips actors and solids; the running flag marks unclean exits; ascii pass
+	var ok_as := true
+	var _as_trace: Array = []
+	st.clear_actors()
+	for sol in st._solids.get_children():
+		sol.queue_free()
+	Toolbox.select(0)
+	st.spawn_at(Vector2(400, 300))
+	st.set_active_layer(1)
+	Toolbox.select(1)
+	st.spawn_at(Vector2(800, 600))
+	st.set_active_layer(0)
+	Toolbox.select(2)
+	st._shape_index = 2
+	st.spawn_solid(Vector2(960, 540))
+	st._ascii.set_mode(2)
+	await get_tree().process_frame
+	var ls: Dictionary = st.live_state()
+	ok_as = ok_as and ls["live"]["actors"].size() == 2 and ls["live"]["solids"].size() == 1 and ls["live"]["solids"][0]["shape"] == "torus" and ls["ascii"] == 2
+	_as_trace.append("live:%s actors=%d solids=%s ascii=%s" % [ok_as, ls["live"]["actors"].size(), ls["live"]["solids"], ls.get("ascii")])
+	var apath := "user://_selftest_autosave.json"
+	ok_as = ok_as and Autosave.write(ls, apath) and Autosave.age_seconds(apath) <= 1 and Autosave.describe_age(5) == "5 s ago" and Autosave.describe_age(600) == "10 min ago"
+	st.clear_actors()
+	for sol in st._solids.get_children():
+		sol.queue_free()
+	st._ascii.set_mode(0)
+	await get_tree().process_frame
+	var back2: Dictionary = Autosave.read(apath)
+	var n_back: int = st.restore_live(back2)
+	await get_tree().process_frame
+	ok_as = ok_as and n_back == 3 and st._layers[1]["actors"].get_child_count() == 1 and st._solids.get_child_count() == 1 and st._ascii.mode == 2 and st._solids.get_child(0).shape == "torus"
+	_as_trace.append("restore:%s n=%d l1=%d solids=%d ascii=%d" % [ok_as, n_back, st._layers[1]["actors"].get_child_count(), st._solids.get_child_count(), st._ascii.mode])
+	var flag := "user://_selftest_running.flag"
+	Autosave.mark_running(flag)
+	ok_as = ok_as and Autosave.crashed_last_time(flag)
+	Autosave.mark_clean_exit(flag)
+	ok_as = ok_as and not Autosave.crashed_last_time(flag)
+	var atlas: Image = st._ascii.build_atlas(" .:-=+*#%@", Vector2(12, 20))
+	var dark := 0
+	var bright := 0
+	for yy in 20:
+		for xx in 12:
+			if atlas.get_pixel(12 + xx, yy).a > 0.5: dark += 1
+			if atlas.get_pixel(12 * 9 + xx, yy).a > 0.5: bright += 1
+	ok_as = ok_as and atlas.get_width() == 120 and dark > 0 and bright > dark * 3
+	_as_trace.append("atlas:%s w=%d dark=%d bright=%d" % [ok_as, atlas.get_width(), dark, bright])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(apath))
+	st.clear_actors()
+	for sol in st._solids.get_children():
+		sol.queue_free()
+	st._ascii.set_mode(0)
+	if ok_as:
+		print("PASS autosave live state round-trips, running flag, ASCII atlas ramps dark to bright")
+	else:
+		fails += 1
+		printerr("FAIL autosave / ascii: ", _as_trace)
 	if ok_layers:
 		print("PASS layers blend/opacity, spawn into layer, drawn path riders, preset")
 	else:
@@ -605,6 +726,7 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL solid shapes")
+	Autosave.mark_clean_exit()
 	get_tree().quit(1 if fails > 0 else 0)
 
 
@@ -643,7 +765,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ref_stage", "ref_crt"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "ref_stage", "ref_crt"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -1107,6 +1229,24 @@ func _capture_all(dir: String) -> void:
 				DirAccess.remove_absolute(ctxt)
 				DirAccess.remove_absolute(csvg)
 				_cleanup_birthday = [svg_i, clock_i, cake_i, w_i]
+			"ascii":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.clear_actors()
+				current.set_fx(0, false, false)
+				current._glow.set_level(0)
+				current.palette_index = 0
+				current._apply_palette()
+				for i in Toolbox.slots.size():
+					if not Toolbox.has_verb(i, "bounce"):
+						Toolbox.toggle_verb(i, "bounce")
+				for i in 8:
+					Toolbox.select(i % mini(5, Toolbox.slots.size()))
+					current.spawn_at(Vector2(randf_range(300, 1600), randf_range(200, 900)))
+				current._ascii.set_mode(2)
+				await get_tree().create_timer(0.8).timeout
 			"ref_stage", "ref_crt":
 				# Deterministic reference shots for tests/diff.gd: seeded RNG, fixed
 				# positions, no motion verbs, no feedback, HUD hidden.
@@ -1128,6 +1268,7 @@ func _capture_all(dir: String) -> void:
 					for v in Verbs.ids():
 						if Toolbox.has_verb(i, v):
 							Toolbox.toggle_verb(i, v)
+				current._ascii.set_mode(0)
 				current.palette_index = 3                 # Cream
 				current._apply_palette()
 				current._glow.set_level(0)
@@ -1194,4 +1335,5 @@ func _capture_all(dir: String) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(MidiMap.path))
 		MidiMap.path = MidiMap.PATH
 		MidiMap.load_from_disk()
+	Autosave.mark_clean_exit()
 	get_tree().quit()

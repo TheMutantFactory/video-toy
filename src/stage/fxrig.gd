@@ -257,6 +257,7 @@ func panic() -> void:
 	s.fb_stretch = Vector2.ONE
 	s._fx.set_state(0, false, false, 0, false, 0, 0, 0)
 	s._glow.set_level(1)
+	s._ascii.set_mode(0)
 	set_particles(false)
 	set_rd_preset(0)
 	s.set_scene("", 0.3)

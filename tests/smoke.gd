@@ -809,6 +809,21 @@ func _init() -> void:
 	_check("image diff: identical and near-identical pass, a missing picture fails",
 		same["pass"] and same["mean"] == 0.0 and digit["pass"] and not broken["pass"] and broken["mean"] > digit["mean"])
 
+	# autosave helpers (pure): write / read / age / flag / describe; ascii shader
+	var ap := "user://_smoke_autosave.json"
+	var okw := Autosave.write({"palette": 2, "live": {"actors": []}}, ap)
+	var rd := Autosave.read(ap)
+	_check("autosave writes and reads with a timestamp", okw and rd.get("palette") == 2 and rd.has("saved_at") and Autosave.age_seconds(ap) <= 1 and Autosave.age_seconds(ap, int(rd["saved_at"]) + 125) == 125)
+	_check("autosave age text", Autosave.describe_age(-1) == "no autosave" and Autosave.describe_age(40) == "40 s ago" and Autosave.describe_age(3000) == "50 min ago" and Autosave.describe_age(9000) == "2 h ago")
+	var fl := "user://_smoke_running.flag"
+	Autosave.mark_running(fl)
+	var was := Autosave.crashed_last_time(fl)
+	Autosave.mark_clean_exit(fl)
+	_check("running flag marks an unclean exit until a clean one", was and not Autosave.crashed_last_time(fl))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ap))
+	var ash = load("res://src/ascii.gdshader")
+	_check("ascii shader loads", ash is Shader and ash.get_code().contains("glyphs") and ash.get_code().contains("mode"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

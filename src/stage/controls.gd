@@ -69,6 +69,12 @@ func midi_params() -> Array:
 		{"id": "glow", "label": "Glow", "set": func(v):
 			s._glow.set_level(s._step(v, 3))
 			s._update_hud()},
+		{"id": "ascii", "label": "ASCII mode", "set": func(v):
+			s._ascii.set_mode(s._step(v, 3))
+			s._update_hud()},
+		{"id": "ascii", "label": "ASCII mode", "set": func(v):
+			s._ascii.set_mode(s._step(v, 3))
+			s._update_hud()},
 		{"id": "scene", "label": "Scene", "set": func(v):
 			var n := Scenes.ALL.size() + 1
 			var i := s._step(v, n)
@@ -156,6 +162,14 @@ func midi_actions() -> Array:
 			s.stop_credits_roll()
 		else:
 			s.start_credits_roll()})
+	out.append({"id": "ascii", "label": "ASCII mode off/mono/colour", "do": func():
+		s._ascii.cycle()
+		s._update_hud()})
+	out.append({"id": "render_clip", "label": "Render a 20 s clip (offline)", "do": func(): s.get_parent().render_clip(20.0)})
+	out.append({"id": "ascii", "label": "ASCII mode off/mono/colour", "do": func():
+		s._ascii.cycle()
+		s._update_hud()})
+	out.append({"id": "render_clip", "label": "Render a 20 s clip (offline)", "do": func(): s.get_parent().render_clip(20.0)})
 	out.append({"id": "panic", "label": "PANIC: known-good look", "do": s.panic})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": s.toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": s.cycle_quality_lock})

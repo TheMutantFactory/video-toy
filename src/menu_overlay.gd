@@ -56,7 +56,8 @@ func _ready() -> void:
 	_panel.add_child(_menu)
 	_menu.add_child(UI.title("Menu", 40))
 	for m in [["Resume", "resume"], ["Panic — known-good look", "panic"], ["Blackout", "blackout"],
-			["Attribution", "attribution"], ["Export rig (zip)", "rig_export"], ["Import rig…", "rig_import"], ["Find Icons", "search"],
+			["Attribution", "attribution"], ["Export rig (zip)", "rig_export"], ["Import rig…", "rig_import"],
+			["Render 20 s clip (offline)", "clip"], ["Find Icons", "search"],
 			["Play", "stage"], ["Scenes", "scenes"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
 		_menu.add_child(UI.button(m[0], func(): _pick(m[1])))
 
@@ -129,6 +130,9 @@ func _pick(what: String) -> void:
 	match what:
 		"resume": close()
 		"attribution": show_attribution()
+		"clip":
+			var out: String = get_parent().render_clip(20.0)
+			_note(("rendering 20 s at 60 fps in a second Godot; the movie lands at " + out) if out != "" else "could not start the render")
 		"rig_export":
 			var p := Rig.default_export_path()
 			DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://rigs"))
