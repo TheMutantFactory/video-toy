@@ -37,11 +37,14 @@ func _ready() -> void:
 	args = OS.get_cmdline_user_args()
 	var cap := args.find("--capture")
 	var ti := args.find("--templates")
+	var ki := args.find("--keycard")
 	var ci := args.find("--clip")
 	if ci >= 0 and ci + 1 < args.size():
 		_clip(float(args[ci + 1]))
 	elif ti >= 0 and ti + 1 < args.size():
 		_templates(args[ti + 1])
+	elif ki >= 0 and ki + 1 < args.size():
+		_keycard(args[ki + 1])
 	elif args.has("--selftest"):
 		_selftest()
 	elif cap >= 0 and cap + 1 < args.size():
@@ -141,6 +144,21 @@ func _templates(dir: String) -> void:
 	var files: Array = Templates.write_all(current.midi_params(), current.midi_actions(), dir)
 	print("TEMPLATES ", dir, ": ", ", ".join(files), "  (%d params, %d actions)" % [current.midi_params().size(), current.midi_actions().size()])
 	get_tree().quit()
+
+
+## Windowed: render docs/key-card.png and write docs/KEYS.md from Keys, then quit.
+func _keycard(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	var img: Image = await KeyCard.render(self)
+	img.save_png(dir.path_join("key-card.png"))
+	var f := FileAccess.open(dir.path_join("KEYS.md"), FileAccess.WRITE)
+	f.store_string(Keys.markdown())
+	f.close()
+	var rows := 0
+	for g in Keys.groups():
+		rows += g["rows"].size()
+	print("KEYCARD ", dir, ": key-card.png %dx%d, KEYS.md (%d groups, %d rows)" % [img.get_width(), img.get_height(), Keys.groups().size(), rows])
+	quit_clean()
 
 
 ## Headless-safe: instantiate every screen and the menu, then quit. Fails loudly

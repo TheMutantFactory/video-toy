@@ -12,6 +12,8 @@ that shows the scene, and watch it recurse. Press **B** for 3D solids wearing th
 ./run.sh capture    # screenshot every screen into out/ (./run.sh capture a,b to pick shots)
 ./run.sh check      # capture the deterministic reference shots and pixel-diff them against tests/reference
 ./run.sh reference  # re-record the reference shots after an intentional visual change
+./run.sh keycard    # regenerate docs/key-card.png + docs/KEYS.md from src/keys.gd
+./run.sh export     # build out/Video Toy.app (macOS) and self-test the bundle
 ```
 
 Needs Godot 4.7 (`GODOT=/path/to/godot` if it isn't on PATH or in /Applications).
@@ -45,50 +47,12 @@ editor). It takes effect on the next launch.
 
 ### Play keys
 
-```
-click        spawn selected icon      P      next palette
-right-click  remove nearest           F      feedback on/off
-Space        spawn somewhere          [ ]    feedback zoom
-1-9          select slot              , .    feedback twist
-Q W E R T Y U I   toggle verbs        - =    feedback fade
-X            recolor slot             O      kaleidoscope (off/3/4/6/8/12)
-                                      G      key: off / chroma / luma / diff / edge
-                                             (Shift+G threshold); keyed pixels show the
-                                             backdrop — dropped image, webcam, or plasma
-                                      Shift+K slit-scan: off / rows / columns / radial
-                                      K      pixelate size (off/4/8/12/20/32)
-                                      L      palette quantise
-                                      J      dither (with quantise)
-                                      V      CRT off / soft / heavy
-                                      D      glow off / soft / heavy
-F1-F12       recall preset            Shift+F1-F12  save preset (whole stage state, crossfaded)
-Shift+, .    previous / next bank (8)  Shift+- =     previous / next filled preset (foot switch)
-Shift+;      crossfade time 0 / 0.5 / 1 / 2 / 4 s
-Tab          next scene (Shift+Tab previous, ` off)
-arrows       feedback drift           PgUp/PgDn  feedback warp amount   Home  reset warp
-                                      M      monitor inside the scene (recursion)
-                                      N      monitor size; drag it to move
-                                      B      3D solid of the selected icon at the mouse
-                                      Shift+B next shape (cube/sphere/torus/cylinder/prism/cookie)
-Shift+Space  formation of 200 copies  Shift+X  next formation (helix/lattice/shell/ring)
-Shift+arrows camera orbit / dolly     Shift+PgUp/PgDn  camera roll   Shift+Home  reset camera
-\            next layer (1 base, 2, 3)   Shift+\  blend mode (mix/add/sub/mul)   Shift+[ ]  opacity
-Shift+D      draw mode: drag a path and the selected icon rides it; right-click a path removes it
-Shift+S      mosaic: the selected slot's picture rebuilt from the toolbox icons (as actors)
-Shift+E      evolve: a mutation every 8 beats / 6 s; Enter keeps it, Shift+Enter discards it
-Shift+A      attract mode (automatic after 60 s idle; any input ends it)
-'            ASCII mode: off / mono / colour (the picture as glyphs; last pass)
-                                      ;      MIDI + audio panel
-                                      A      audio source: off / mic / test / file
-                                      Z      webcam: off / layer behind everything / chroma backdrop
-                                      S      steal a palette from the selected raster or the webcam
-drop an image on the window   →  a raster toolbox slot (Shift+drop → chroma backdrop)
-drop .svg / .ttf .otf / .txt / .ogv  →  icon slot / font for words / word list / video slot
-click a Sparkle icon          →  pinata: it bursts into confetti of itself
-                                      C      clear stage
-Del          remove slot              H      hide HUD (clean capture)
-Esc / ☰      menu + attribution
-```
+[![key card](docs/key-card.png)](docs/key-card.png)
+
+The one-page card above and [docs/KEYS.md](docs/KEYS.md) are generated from `src/keys.gd` by
+`./run.sh keycard` (the smoke test fails when they drift). The same list is the in-app help
+panel on the right of the stage (**H** hides the HUD). [docs/SHOW.md](docs/SHOW.md) is the show
+manual: setup checklist, panic and blackout, restore after a crash, credits at the end.
 
 ## Scenes, oscillators, warp mesh
 

@@ -839,6 +839,20 @@ func _init() -> void:
 	_check("audio input override writes enable_input=false and is removed when re-enabled", st0 == 0 and AudioInputSetting.override_state(op) == -1 and not FileAccess.file_exists(op))
 	_check("override path is res:// in the editor and beside the executable in a build", AudioInputSetting.override_path().ends_with("override.cfg"))
 
+	# keys: one source of truth; every verb is on the card; docs are regenerated from it
+	var kg: Array = Keys.groups()
+	var card_keys: Array = []
+	for g in kg:
+		for r in g["rows"]:
+			card_keys.append(r[0])
+	var all_verbs := true
+	for v in Verbs.instances():
+		all_verbs = all_verbs and card_keys.has(v.key.replace("⇧", "Shift+"))
+	_check("key groups cover every verb, panic, blackout and the menu", kg.size() >= 8 and all_verbs and card_keys.has("Shift+Esc") and card_keys.has("Shift+H") and card_keys.has("Esc / ☰"))
+	_check("help text and markdown come from the same rows", Keys.help_text().contains("Shift+Esc") and Keys.markdown().begins_with("# Video Toy keys") and Keys.markdown().count("\n| `") == card_keys.size())
+	_check("docs/KEYS.md is up to date (./run.sh keycard)", FileAccess.get_file_as_string("res://docs/KEYS.md") == Keys.markdown())
+	_check("docs/key-card.png exists and docs/SHOW.md points at it", FileAccess.file_exists("res://docs/key-card.png") and FileAccess.get_file_as_string("res://docs/SHOW.md").contains("key-card.png"))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

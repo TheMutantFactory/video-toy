@@ -1074,38 +1074,10 @@ func _build_hud() -> void:
 	_verb_panel.add_child(UI.button("Remove slot (Del)", func(): Toolbox.remove(Toolbox.selected)))
 
 	_help = PanelContainer.new()
-	_help.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
-	_help.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_help.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_help.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_help.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_help.offset_right = -20
-	var hl := UI.label(
-		"click        spawn selected icon\nright-click  remove nearest\nSpace        spawn somewhere\n"
-		+ "1-9          select slot\nQ..I         toggle verbs\nX            recolor slot\n"
-		+ "P            next palette\nF            feedback on/off\n[ ]          feedback zoom\n"
-		+ ", .          feedback twist\n- =          feedback fade\nO            kaleidoscope\n"
-		+ "G            key: chroma/luma/diff/edge (Shift: threshold)\nK            pixelate size · Shift+K slit-scan\n"
-		+ "L            palette quantise\nJ            dither\nV            CRT off/soft/heavy\n"
-		+ "M            monitor in the scene\nN            monitor size (drag to move)\n"
-		+ "B            3D solid of selected icon at mouse\nShift+B      next shape\n"
-		+ ";            MIDI + audio panel\nA            audio: off/mic/test/file (drop mp3/ogg/wav)\n"
-		+ "drop image   raster slot (Shift+drop: chroma backdrop)\nZ            webcam: off/layer/backdrop\n"
-		+ "S            steal palette from raster / webcam · Shift+S mosaic\nD            glow off/soft/heavy\n"
-		+ "Shift+E      evolve (Enter keep · Shift+Enter discard)\nShift+A      attract mode (auto after 60 s idle)\n"
-		+ "Shift+R      record controller gestures · Shift+P loop them\nShift+W/T/Y/U  Lorenz / Rössler / Clifford / de Jong verbs\n"
-		+ "Shift+N      particle field (right-click scatters) · Shift+I Field verb\nShift+O      reaction-diffusion presets\n"
-		+ "keypad/pad   player 2: 8/2/4/6 or stick moves · 5/A spawns · 0/B removes\n             +/-/X slot · ./Y layer · */LB spin · //RB solid · Shift+2 hides\n"
-		+ "Shift+Esc    PANIC: known-good look · Shift+H blackout · Shift+F quality lock\n"
-		+ "Shift+V      screenshot + credits strip · Shift+L credits ticker · Shift+C credits roll\n"
-		+ "Shift+Z      Syphon output (picture, no HUD) · clock: ; panel or MIDI clock in\n"
-		+ "drop .svg/.ttf/.txt/.ogv   icon / font for words / word list / video slot\nclick Sparkle icon   pinata · drop a rig .zip to import it\n"
-		+ "F1-F12       recall preset · Shift+F saves · Shift+, . bank · Shift+- = prev/next preset · Shift+; fade\n"
-		+ "Tab          next scene (Shift: previous) · ` off\narrows       feedback drift · PgUp/PgDn warp · Home reset\n"
-		+ "Shift+arrows camera orbit / dolly · Shift+PgUp/Dn roll · Shift+Home reset\n"
-		+ "Shift+Space  formation of 200 (Shift+X: helix/lattice/shell/ring)\n"
-		+ "\\            next layer · Shift+\\ blend · Shift+[ ] opacity\nShift+D      draw mode: drag a path, icons ride it\n"
-		+ "C            clear stage\n"
-		+ "H            hide this\nEsc          menu / attribution", 16)
-	_help.add_child(hl)
+	_help.add_child(KeyCard.help(3, 14))
 	add_child(_help)
 
 	var top_right := HBoxContainer.new()

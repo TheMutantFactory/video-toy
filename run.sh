@@ -7,6 +7,7 @@
 # ./run.sh check      capture the deterministic reference shots and pixel-diff them (exit 1 on regression)
 # ./run.sh reference  re-record the reference shots (after an intentional visual change)
 # ./run.sh clip [s]   render the autosaved stage state offline to out/clip-*.avi (Movie Maker, 60 fps)
+# ./run.sh keycard    regenerate docs/key-card.png + docs/KEYS.md from src/keys.gd (windowed)
 # ./run.sh export     build out/Video Toy.app (macOS, ad-hoc signed, privacy strings) and self-test the bundle
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -45,6 +46,7 @@ case "${1:-play}" in
   capture) audio_override; mkdir -p out; exec "$G" --path . -- --capture "$(pwd)/out" ${2:+--only "$2"} ;;
   import)  exec "$G" --headless --path . --import ;;
   templates) exec "$G" --headless --path . -- --templates "$(pwd)/docs/controllers" ;;
+  keycard) audio_override; exec perl -e 'alarm 120; exec @ARGV' "$G" --path . -- --keycard "$(pwd)/docs" ;;
   diff)    exec "$G" --headless --path . -s tests/diff.gd ;;
   export)  # macOS .app into out/, ad-hoc signed, with the privacy strings; then prove the bundle runs
            printf '{"version":"1.0.0","hash":"%s","date":"%s"}\n' "$(git rev-parse --short=12 HEAD 2>/dev/null || echo nogit)" "$(date +%Y-%m-%d)" > build.json
