@@ -1138,6 +1138,20 @@ func _init() -> void:
 	var gn_dn := Gnarl.apply(0.9, 0.2, 0.5, -0.1, 1.0)
 	_check("gnarl: more wants longer trails and (by bias) warp or less cleanup; clamped", gn_up["fade"] > 0.9 and gn_up["warp"] > 0.2 and gn_up["cleanup"] == 0.5 and gn_dn["fade"] < 0.9 and gn_dn["warp"] == 0.2 and gn_dn["cleanup"] > 0.5 and Gnarl.apply(0.99, 1.0, 0.0, 5.0, 0.5)["fade"] == 0.995 and Gnarl.apply(0.5, 0.0, 0.0, -5.0, 0.0)["fade"] == 0.5)
 
+	# Poultry: the glyph atlas packs slot textures into cells; the shader is a pentagrid
+	var g1 := Image.create(300, 200, false, Image.FORMAT_RGBA8)
+	g1.fill(Color(1, 1, 1, 1))
+	var g2 := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	g2.fill(Color(1, 0, 0, 1))
+	var po_atlas := Poultry.build_atlas([ImageTexture.create_from_image(g1), null, ImageTexture.create_from_image(g2)])
+	var po_img: Image = po_atlas.get_image()
+	var c0 := po_img.get_pixel(64, 64)                     # cell 0's centre: the white glyph
+	var c1 := po_img.get_pixel(128 + 64, 64)               # cell 1: nothing
+	var c2 := po_img.get_pixel(256 + 64, 64)               # cell 2: the red glyph
+	var c0_edge := po_img.get_pixel(64, 4)                 # the wide glyph is letterboxed: transparent top
+	_check("poultry atlas: 384x384, glyphs centred in their cells, a null slot stays empty", po_atlas.get_width() == 384 and c0.a > 0.9 and c0.r > 0.9 and c1.a == 0.0 and c2.r > 0.9 and c2.g < 0.1 and c0_edge.a == 0.0)
+	_check("poultry shader: a pentagrid with pecking, an atlas and the palette", Poultry.SHADER.contains("floor(g)") and Poultry.SHADER.contains("peck") and Poultry.SHADER.contains("atlas") and Poultry.SHADER.contains("ring_color") and Poultry.ORDERS == [5, 7])
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

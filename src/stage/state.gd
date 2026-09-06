@@ -40,6 +40,7 @@ func snapshot() -> Dictionary:
 		"rd": {"preset": s.rd_preset, "feed": s.rd_feed, "kill": s.rd_kill},
 		"physics": {"gravity": s.gravity},
 		"gnarl": {"on": s.gnarl_on, "target": s.gnarl_target, "speed": s.gnarl_speed, "bias": s.gnarl_bias},
+		"poultry": {"on": s._poultry.on, "scale": s._poultry.cell_scale, "adherence": s._poultry.adherence, "order": s._poultry.order, "fat": s._poultry.fat},
 	}
 
 
@@ -157,6 +158,18 @@ func _apply_snapshot(d: Dictionary, persist: bool) -> void:
 		var pon := bool(pt.get("on", s.particles_on))
 		if pon != s.particles_on:
 			s.set_particles(pon)
+	var po: Dictionary = d.get("poultry", {})
+	if not po.is_empty():
+		s._poultry.cell_scale = clampf(float(po.get("scale", s._poultry.cell_scale)), 3.0, 30.0)
+		s._poultry.adherence = clampf(float(po.get("adherence", s._poultry.adherence)), 0.0, 1.0)
+		s._poultry.fat = clampf(float(po.get("fat", s._poultry.fat)), 0.0, 1.0)
+		var od := int(po.get("order", s._poultry.order))
+		s._poultry.order = od if Poultry.ORDERS.has(od) else s._poultry.order
+		var pon := bool(po.get("on", s._poultry.on))
+		if pon != s._poultry.on:
+			s.set_poultry(pon)
+		else:
+			s._poultry.push()
 	var gn: Dictionary = d.get("gnarl", {})
 	if not gn.is_empty():
 		s.gnarl_target = clampf(float(gn.get("target", s.gnarl_target)), 0.0, 1.0)

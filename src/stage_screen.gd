@@ -211,6 +211,7 @@ const JAG_SIDES := [3, 4, 6, 8]
 var particles_flux := 0.0                  # fluxdots: re-birth rate on the source's bright pixels
 var flux_src := 0                          # FLUX_SOURCES index
 const FLUX_SOURCES := ["off", "self", "layer 2", "layer 3", "webcam"]
+var _poultry: Poultry                      # the quasicrystal philtre (Ctrl+O)
 var gnarl_on := false                      # the regulator holds complexity near gnarl_target
 var gnarl_target := 0.5
 var gnarl_speed := 0.5
@@ -443,6 +444,8 @@ func _ready() -> void:
 
 	_glow = GlowScript.new()                     # bloom before fx, so CRT sees it
 	_composite.add_child(_glow)
+	_poultry = Poultry.new(Vector2(WORLD))       # the philtre after the glow (which redraws the picture), before fx
+	_composite.add_child(_poultry)
 
 	_fx = FxScript.new()
 	_composite.add_child(_fx)
@@ -533,6 +536,7 @@ func _ready() -> void:
 	IconBody.gravity = gravity
 	Toolbox.selection_changed.connect(func(_i): _refresh_verbs())
 	Toolbox.changed.connect(_refresh_verbs)
+	Toolbox.changed.connect(_on_toolbox_changed_poultry)
 	_refresh_verbs()
 	_apply_palette()
 	_refresh_fx()
@@ -560,6 +564,8 @@ func _exit_tree() -> void:
 	Sounds.detach()
 	if AudioReact.beat.is_connected(_on_beat_out):
 		AudioReact.beat.disconnect(_on_beat_out)
+	if Toolbox.changed.is_connected(_on_toolbox_changed_poultry):
+		Toolbox.changed.disconnect(_on_toolbox_changed_poultry)
 	_m_input.teardown()
 	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
 		get_window().files_dropped.disconnect(_on_files_dropped)
@@ -1415,6 +1421,8 @@ func _update_hud() -> void:
 	var rd_s := routing_describe()
 	if rd_s != "":
 		line2 += "   ·   loop " + rd_s
+	if _poultry.on:
+		line2 += "   ·   " + _poultry.describe()
 	if _guide.visible:
 		line2 += "   ·   clip %s" % clip_format()
 	var lk := Locks.describe(locks, mutate_amount)
@@ -1461,6 +1469,7 @@ func _apply_palette() -> void:
 	_fx.set_palette(palette_index)
 	_ascii.set_palette(palette_index)
 	Scenes.apply_palette(_layer_mix.material, palette_index)
+	Scenes.apply_palette(_poultry._mat, palette_index)
 	if p2_active:
 		_refresh_p2()
 	_fx.set_source(_worldmix.get_texture(), Palettes.bg(palette_index))
@@ -1623,6 +1632,28 @@ func loop_mask() -> int:
 		if bool(_layers[i].get("loop", true)):
 			m |= 1 << i
 	return m
+
+
+# ---------------- Poultry: the quasicrystal philtre ----------------
+func set_poultry(on: bool) -> void:
+	if on:
+		_refresh_poultry_atlas()
+		Scenes.apply_palette(_poultry._mat, palette_index)
+	_poultry.set_on(on)
+	_steal_note = ("Poultry: %s" % _poultry.describe()) if on else "Poultry off"
+	_update_hud()
+
+
+func _refresh_poultry_atlas() -> void:
+	var texs: Array = []
+	for sl in Toolbox.slots:
+		texs.append(IconMedia.texture_for(str(sl.get("svg_path", ""))))
+	_poultry.set_atlas(texs)
+
+
+func _on_toolbox_changed_poultry() -> void:
+	if _poultry and _poultry.on:
+		_refresh_poultry_atlas()
 
 
 # ---------------- the gnarl regulator ----------------
@@ -2125,6 +2156,8 @@ func _physics_actor_at(world_pos: Vector2) -> Node2D:
 func _on_beat_out() -> void:
 	if _fx.slit_mode == 4:
 		_fx.redeal()                                     # the cutup re-deals on the beat
+	if _poultry.on:
+		_poultry.peck()
 	if MidiOut.enabled:
 		MidiOut.note_on(MidiOut.CH_BEAT, 36, 100, 0.05)
 		MidiOut.event("beat", [Clock.beat_index if Clock.running else -1])

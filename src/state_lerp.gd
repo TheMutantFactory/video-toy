@@ -14,6 +14,7 @@ const CONTINUOUS := {
 	"fx": ["key_threshold"],
 	"physics": ["gravity"],
 	"gnarl": ["target", "speed", "bias"],
+	"poultry": ["scale", "adherence", "fat"],
 }
 
 

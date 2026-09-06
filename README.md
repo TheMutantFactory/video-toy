@@ -271,6 +271,17 @@ re-deals on the beat. All params or actions, all snapshotted, all cleared by pan
 All of it snapshots and crossfades, panic clears it, the HUD names what is on, and the delay,
 blur, hue and displacement are params with the layer switches and the source as actions.
 
+## Poultry: the quasicrystal philtre
+
+**Ctrl+O** turns the picture into Perplexing Poultry (docs/RESEARCH-6.md): a **pentagrid**
+— five families of parallel lines, de Bruijn's construction of the Penrose tiling, or seven
+with **Ctrl+Shift+O** — cuts the plane into cells that never repeat, and every cell shows one
+of the **toolbox icons** as its glyph, skinny or fat, turned by its own hash, coloured from the
+palette ring and from the picture underneath by the **adherence** knob. On every beat the
+cells **peck**: each leans toward a neighbour and springs back. The seams glow in the palette.
+Cell size, adherence and the fat share are params; on / off, the order and a peck are actions;
+it snapshots and crossfades, and panic switches it off. The atlas of glyphs follows the toolbox.
+
 ## The gnarl regulator and the beauty outlet
 
 **Ctrl+N** (the routing panel's gnarl row, an action) turns on a regulator that holds the

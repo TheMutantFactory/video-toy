@@ -53,6 +53,7 @@ static func groups() -> Array:
 			["V", "CRT off / soft / heavy"],
 			["D", "glow off / soft / heavy"],
 			["'", "ASCII off / mono / colour"],
+			["Ctrl+O", "Poultry philtre: the picture as a quasicrystal of icon cells that peck on the beat · Ctrl+Shift+O 5 / 7-fold"],
 		]},
 		{"title": "3D and layers", "tab": "3D", "rows": [
 			["B", "3D solid of the selected icon at the mouse"],

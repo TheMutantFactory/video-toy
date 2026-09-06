@@ -881,6 +881,42 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL feedback routing (%s)" % st.routing_describe())
+	# Poultry: the atlas holds every slot's glyph, the pass shows over the picture, pecks on
+	# the beat and decays, the order cycles, it snapshots, panic turns it off
+	var ok_po := true
+	var po_bad: Array = []
+	var po_chk := func(label: String, ok: bool):
+		if not ok:
+			po_bad.append(label)
+	st.panic()
+	st.set_poultry(true)
+	po_chk.call("1", st._poultry.on and st._poultry.visible and st._poultry.glyph_count() == Toolbox.slots.size())
+	var po_atlas: Texture2D = st._poultry._mat.get_shader_parameter("atlas")
+	po_chk.call("2", po_atlas != null and po_atlas.get_width() == Poultry.ATLAS_CELL * Poultry.ATLAS_COLS and int(st._poultry._mat.get_shader_parameter("palette_count")) > 0)
+	st._on_beat_out()
+	po_chk.call("3", st._poultry.peck_env == 1.0 and float(st._poultry._mat.get_shader_parameter("peck")) == 1.0)
+	await get_tree().create_timer(0.5).timeout
+	po_chk.call("4", st._poultry.peck_env < 0.9)
+	st._poultry.cycle_order()
+	st._update_hud()
+	po_chk.call("5", st._poultry.order == 7 and int(st._poultry._mat.get_shader_parameter("order")) == 7 and st._hud.text.contains("poultry 7-fold"))
+	st._poultry.cell_scale = 14.0
+	st._poultry.push()
+	var snap_po: Dictionary = st.snapshot()
+	po_chk.call("6", snap_po["poultry"]["on"] and snap_po["poultry"]["order"] == 7 and is_equal_approx(float(snap_po["poultry"]["scale"]), 14.0))
+	st.panic()
+	po_chk.call("7", not st._poultry.on and not st._poultry.visible)
+	st.restore(snap_po, 0.0)
+	po_chk.call("8", st._poultry.on and st._poultry.order == 7 and is_equal_approx(st._poultry.cell_scale, 14.0) and float(st._poultry._mat.get_shader_parameter("scale")) == 14.0)
+	st.panic()
+	ok_po = po_bad.is_empty()
+	if not ok_po:
+		printerr("poultry sub-checks failed: ", po_bad, " glyphs=", st._poultry.glyph_count(), " slots=", Toolbox.slots.size(), " env=", st._poultry.peck_env)
+	if ok_po:
+		print("PASS Poultry: atlas from the toolbox, pass on / off, peck on the beat decays, order cycles, snapshot and panic")
+	else:
+		fails += 1
+		printerr("FAIL poultry")
 	# the gnarl regulator: the probe runs while it is on, steps push fade the right way,
 	# it snapshots, panic turns it off; the beauty outlet adds glow and trails on a step down
 	var ok_gn := true
@@ -1498,7 +1534,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox", "gnarl"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox", "gnarl", "poultry"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -2004,6 +2040,19 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"poultry":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				if current.all_actors().size() < 6:
+					current.demo_spawn()
+				current._poultry.cell_scale = 11.0
+				current._poultry.adherence = 0.35
+				current.set_poultry(true)
+				current._on_beat_out()
+				await get_tree().create_timer(0.25).timeout
 			"gnarl":
 				menu.close()
 				if current_name != "stage":

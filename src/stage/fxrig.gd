@@ -295,6 +295,8 @@ func panic() -> void:
 	s.flux_src = 0
 	if s.gnarl_on:
 		s.set_gnarl(false)
+	if s._poultry.on:
+		s.set_poultry(false)
 	for i in s._layers.size():
 		s._layers[i]["loop"] = true
 	s._fx.set_state(0, false, false, 0, false, 0, 0, 0)
