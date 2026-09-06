@@ -946,6 +946,29 @@ func _init() -> void:
 	var vv = Verbs.instances().filter(func(v): return v.id == "voice")
 	_check("voice verb: Ctrl+V, post-only", vv.size() == 1 and vv[0].ctrl and not vv[0].has_motion2d() and Verbs.by_key(KEY_V, false, true) == "voice")
 
+	# MIDI out over OSC: the ladder, velocities, a loopback round trip, gated note-offs
+	_check("midi out: pentatonic ladder from A2 and velocity curves", MidiOut.note_for_slot(0) == 45 and MidiOut.note_for_slot(5) == 57 and MidiOut.note_for_slot(9) == 45 and MidiOut.velocity_for_speed(0.0) == 40 and MidiOut.velocity_for_speed(5000.0) == 127 and MidiOut.velocity_for_height(0.0, 1080.0) == 127 and MidiOut.velocity_for_height(1080.0, 1080.0) == 60)
+	MidiOut.configure("127.0.0.1", 9151, false)
+	_check("midi out: off means nothing is sent", not MidiOut.send("/vt/midi/cc", [1, 1, 1]) and MidiOut.sent == 0)
+	var rx := PacketPeerUDP.new()
+	var bound := rx.bind(9151, "127.0.0.1") == OK
+	MidiOut.configure("127.0.0.1", 9151, true)
+	MidiOut.note_on(1, 60, 100, 0.0)
+	MidiOut.cc(1, 7, 200)
+	MidiOut.tick(Time.get_ticks_msec() + 10)
+	var mo_got: Array = []
+	for i in 40:
+		while rx.get_available_packet_count() > 0:
+			mo_got.append_array(OscC.parse(rx.get_packet()))
+		if mo_got.size() >= 3:
+			break
+		OS.delay_msec(5)
+	rx.close()
+	var mo_addrs: Array = mo_got.map(func(m): return m["address"])
+	_check("midi out: note_on, cc (clamped) and the gated note_off arrive over loopback", bound and mo_addrs == ["/vt/midi/note_on", "/vt/midi/cc", "/vt/midi/note_off"] and mo_got[0]["args"] == [1, 60, 100] and mo_got[1]["args"] == [1, 7, 127] and mo_got[2]["args"] == [1, 60] and MidiOut.pending() == 0 and MidiOut.sent == 3)
+	MidiOut.configure("127.0.0.1", 9001, false)
+	MidiOut.sent = 0
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

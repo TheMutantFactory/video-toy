@@ -211,6 +211,18 @@ look from a known-good base: panic, a random palette, usually a scene, eight ico
 is empty, six evolve mutations, feedback more often than not. It is one undo step, so the guest
 who pressed it can take it back. Undo, redo and surprise are learnable actions.
 
+## MIDI out, over OSC
+
+Godot has no MIDI output, so the toy sends **notes and events as OSC** (Settings → **OSC out**,
+default `127.0.0.1:9001`, live; also an action). Spawns are notes on channel 1 — the same
+pentatonic ladder by slot the Voice verb sings, from A2, velocity by height — collisions on
+channel 2 with velocity by impact, pinatas on channel 3 an octave up, every beat a kick on
+channel 10; each note gets its note-off after a short gate. Alongside, `/vt/event/spawn`,
+`collision`, `pinata`, `remove` and `beat` carry the raw facts for any OSC host.
+[docs/controllers/osc-midi-bridge.py](docs/controllers/osc-midi-bridge.py) (`pip install mido
+python-rtmidi`) turns the `/vt/midi/*` family into a virtual MIDI port named "Video Toy" for
+a synth or DAW; the full list is in `docs/controllers/osc-addresses.txt`.
+
 ## Voice: the icon as an oscillator
 
 The **Voice** verb (**Ctrl+V**) makes the icon audible: its silhouette's radius around the

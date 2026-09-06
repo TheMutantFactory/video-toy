@@ -427,6 +427,8 @@ func _ready() -> void:
 	_tour = Tour.new()
 	add_child(_tour)
 	set_guest(bool(Settings.get_value("guest_mode")))
+	MidiOut.configure(str(Settings.get_value("osc_out_host")), int(Settings.get_value("osc_out_port")), bool(Settings.get_value("osc_out")))
+	AudioReact.beat.connect(_on_beat_out)
 	if not Tour.suppress and not Tour.seen():
 		call_deferred("start_tour")
 	Sounds.attach(self)
@@ -458,6 +460,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Sounds.detach()
+	if AudioReact.beat.is_connected(_on_beat_out):
+		AudioReact.beat.disconnect(_on_beat_out)
 	_m_input.teardown()
 	if get_window() and get_window().files_dropped.is_connected(_on_files_dropped):
 		get_window().files_dropped.disconnect(_on_files_dropped)
@@ -1223,6 +1227,8 @@ func _update_hud() -> void:
 		line2 += "   ·   warp %.2f drift %d,%d" % [fb_warp, fb_drift.x, fb_drift.y]
 	if gravity != 1.0:
 		line2 += "   ·   gravity %s" % ("off" if gravity == 0.0 else "%.1f" % gravity)
+	if MidiOut.enabled:
+		line2 += "   ·   osc out → " + MidiOut.describe()
 	if hud_mode == 1:
 		_hud.text = "fps %d · work %.1f ms · q %s · slot %d: %s · palette: %s · feedback: %s · fx: %s · actors: %d%s" % [
 			Engine.get_frames_per_second(), quality.avg_ms, quality.describe(), Toolbox.selected + 1, name,
@@ -1362,6 +1368,7 @@ func _tick_autosave(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	var t0 := Time.get_ticks_usec()
+	MidiOut.tick()
 	_tick_crossfade(_delta)
 	_tick_credits(_delta)
 	_tick_clock()
@@ -1429,6 +1436,9 @@ func spawn_slot_at(slot_index: int, layer_index: int, world_pos: Vector2) -> voi
 		return
 	var slot: Dictionary = Toolbox.slots[slot_index]
 	_history.push("spawn")
+	if MidiOut.enabled:
+		MidiOut.note_on(MidiOut.CH_SPAWN, MidiOut.note_for_slot(slot_index), MidiOut.velocity_for_height(world_pos.y, WORLD.y))
+		MidiOut.event("spawn", [slot_index + 1, world_pos.x / WORLD.x, world_pos.y / WORLD.y])
 	var a := Node2D.new()
 	a.set_script(ActorScript)
 	a.setup(slot, world_pos, palette_index, Rect2(Vector2.ZERO, Vector2(WORLD)))
@@ -1447,6 +1457,20 @@ func demo_spawn() -> void:
 
 func _physics_actor_at(world_pos: Vector2) -> Node2D:
 	return _m_input.physics_actor_at(world_pos)
+
+
+## Every beat (audio, test groove or clock) is a kick on channel 10 for the bridge.
+func _on_beat_out() -> void:
+	if MidiOut.enabled:
+		MidiOut.note_on(MidiOut.CH_BEAT, 36, 100, 0.05)
+		MidiOut.event("beat", [Clock.beat_index if Clock.running else -1])
+
+
+func set_osc_out(on: bool) -> void:
+	Settings.set_value("osc_out", on)
+	MidiOut.configure(str(Settings.get_value("osc_out_host")), int(Settings.get_value("osc_out_port")), on)
+	_steal_note = "OSC out %s" % (("→ %s:%d" % [MidiOut.host, MidiOut.port]) if on else "off")
+	_update_hud()
 
 
 func set_gravity(g: float) -> void:

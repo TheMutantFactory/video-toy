@@ -77,6 +77,7 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/redo   Redo
   /vt/action/surprise   Surprise me
   /vt/action/guest_toggle   Guest mode on / off
+  /vt/action/osc_out_toggle   OSC / MIDI out on / off
   /vt/action/play_sound   Play the selected slot's sound
   /vt/action/blackout   Blackout on/off
   /vt/action/quality   Quality lock: cycle
@@ -146,3 +147,9 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/verb_outline   Toggle verb: Outline
   /vt/action/verb_physics   Toggle verb: Physics
   /vt/action/verb_voice   Toggle verb: Voice
+
+Outgoing (Settings -> OSC out, default UDP 9001; osc-midi-bridge.py turns the /vt/midi family into a MIDI port):
+  /vt/midi/note_on  ch note vel     spawn (ch 1, pitch by slot, velocity by height), collision (ch 2, by speed), pinata (ch 3, +12), beat (ch 10 note 36)
+  /vt/midi/note_off ch note         after the gate (0.15 s spawn, 0.08 s hit, 0.3 s pinata, 0.05 s beat)
+  /vt/midi/cc       ch cc value
+  /vt/event/spawn     slot x y   /vt/event/collision slot speed   /vt/event/pinata slot   /vt/event/remove slot   /vt/event/beat index

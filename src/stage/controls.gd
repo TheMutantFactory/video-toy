@@ -177,6 +177,7 @@ func midi_actions() -> Array:
 	out.append({"id": "redo", "label": "Redo", "do": func(): s.redo()})
 	out.append({"id": "surprise", "label": "Surprise me", "do": func(): s.surprise()})
 	out.append({"id": "guest_toggle", "label": "Guest mode on / off", "do": func(): s.set_guest(not s.guest)})
+	out.append({"id": "osc_out_toggle", "label": "OSC / MIDI out on / off", "do": func(): s.set_osc_out(not MidiOut.enabled)})
 	out.append({"id": "play_sound", "label": "Play the selected slot's sound", "do": func(): s.play_slot_sound()})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": s.toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": s.cycle_quality_lock})

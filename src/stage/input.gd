@@ -73,6 +73,8 @@ func remove_nearest(p: Vector2) -> void:
 			best = sol
 	if best and best_d < 160.0:
 		s._history.push("remove")
+		if MidiOut.enabled and "slot_id" in best:
+			MidiOut.event("remove", [Toolbox.index_of(best.slot_id) + 1])
 		best.queue_free()
 	else:
 		for a in s.all_actors():                        # nothing near: scatter the flocks

@@ -641,6 +641,39 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# MIDI out over OSC: a spawn sends a note and an event, the beat a kick, both over loopback
+	var ok_mo := true
+	var mrx := PacketPeerUDP.new()
+	ok_mo = ok_mo and mrx.bind(9152, "127.0.0.1") == OK
+	st.timeline.stop_play()                                     # a loop from an earlier block would keep spawning
+	st.set_evolve(false)
+	MidiOut.configure("127.0.0.1", 9152, true)
+	st.clear_actors()
+	Toolbox.select(2)
+	st.spawn_at(Vector2(300, 108))
+	ok_mo = ok_mo and AudioReact.beat.is_connected(st._on_beat_out)
+	st._on_beat_out()                                           # the beat handler itself (a real pulse would also fire learned actions)
+	await get_tree().create_timer(0.3).timeout                 # gates pass; the stage ticks note-offs
+	var mgot: Array = []
+	while mrx.get_available_packet_count() > 0:
+		mgot.append_array(Osc.parse(mrx.get_packet()))
+	mrx.close()
+	var maddr: Array = mgot.map(func(m): return m["address"])
+	var spawn_msgs: Array = mgot.filter(func(m): return m["address"] == "/vt/event/spawn" and m["args"][0] == 3)
+	ok_mo = ok_mo and maddr.has("/vt/midi/note_on") and maddr.has("/vt/event/spawn") and maddr.has("/vt/event/beat") and maddr.count("/vt/midi/note_off") >= 2
+	ok_mo = ok_mo and spawn_msgs.size() == 1 and spawn_msgs[0]["args"][0] == 3 and absf(float(spawn_msgs[0]["args"][2]) - 0.1) < 0.01
+	var first_on: Array = mgot.filter(func(m): return m["address"] == "/vt/midi/note_on" and m["args"][1] == MidiOut.note_for_slot(2))
+	ok_mo = ok_mo and not first_on.is_empty() and first_on[0]["args"] == [1, MidiOut.note_for_slot(2), MidiOut.velocity_for_height(108.0, 1080.0)]
+	st._update_hud()
+	ok_mo = ok_mo and st._hud.text.contains("osc out →")
+	MidiOut.configure("127.0.0.1", 9001, false)
+	Toolbox.select(0)
+	st.clear_actors()
+	if ok_mo:
+		print("PASS MIDI out over OSC: spawn note + event, beat kick, gated note-offs, HUD")
+	else:
+		fails += 1
+		printerr("FAIL midi out (%s)" % [maddr])
 	# voice: the verb gives the actor an oscillator fed from its distance field; pitched by slot
 	var ok_v := true
 	st.clear_actors()

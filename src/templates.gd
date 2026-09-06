@@ -209,6 +209,12 @@ static func write_all(params: Array, actions: Array, dir: String) -> Array:
 		f2.store_string("\nActions (any message with a non-zero first argument, or no argument):\n")
 		for a in actions:
 			f2.store_string("  /vt/action/%s   %s\n" % [a["id"], a["label"]])
+		f2.store_string("\nOutgoing (Settings -> OSC out, default UDP 9001; osc-midi-bridge.py turns the /vt/midi family into a MIDI port):\n")
+		for line in ["/vt/midi/note_on  ch note vel     spawn (ch 1, pitch by slot, velocity by height), collision (ch 2, by speed), pinata (ch 3, +12), beat (ch 10 note 36)",
+				"/vt/midi/note_off ch note         after the gate (0.15 s spawn, 0.08 s hit, 0.3 s pinata, 0.05 s beat)",
+				"/vt/midi/cc       ch cc value",
+				"/vt/event/spawn     slot x y   /vt/event/collision slot speed   /vt/event/pinata slot   /vt/event/remove slot   /vt/event/beat index"]:
+			f2.store_string("  " + line + "\n")
 		f2.close()
 		out.append("osc-addresses.txt")
 	return out

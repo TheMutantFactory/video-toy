@@ -220,6 +220,10 @@ func pinata() -> void:
 	_burst.restart()
 	if _sound != "":
 		Sounds.play(_sound, 0.7)
+	if MidiOut.enabled:
+		var si := Toolbox.index_of(slot_id)
+		MidiOut.note_on(MidiOut.CH_PINATA, MidiOut.note_for_slot(maxi(si, 0)) + 12, 110, 0.3)
+		MidiOut.event("pinata", [si + 1])
 	IconBody.detach(self)
 	_sprite.visible = false
 	_particles.emitting = false
@@ -281,6 +285,10 @@ func _on_body_entered(other: Node) -> void:
 	if now - _last_hit_ms < 120:
 		return
 	_last_hit_ms = now
+	if MidiOut.enabled:
+		var si := Toolbox.index_of(slot_id)
+		MidiOut.note_on(MidiOut.CH_HIT, MidiOut.note_for_slot(maxi(si, 0)), MidiOut.velocity_for_speed(speed), 0.08)
+		MidiOut.event("collision", [si + 1, speed])
 	_burst.amount = 12
 	_burst.restart()
 	if _sound != "":

@@ -19,6 +19,9 @@ const DEFAULTS := {
 	"diff_block": 0.45,
 	"safe_mode": false,            # no MIDI / OSC / camera / mic at launch (also --safe)
 	"guest_mode": false,           # mouse-only: right-click wheel, long-press removes
+	"osc_out": false,              # notes + events as OSC to a bridge (MIDI out)
+	"osc_out_host": "127.0.0.1",
+	"osc_out_port": 9001,
 	"tour_seen": false,            # the first-run captions have been shown
 }
 
