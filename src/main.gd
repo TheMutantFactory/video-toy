@@ -1002,6 +1002,12 @@ func _selftest() -> void:
 		printerr("FAIL voice")
 	# undo / redo over spawns, removes and clears (contents only); surprise is a full step
 	var ok_u := true
+	var u_bad: Array = []
+	var u_chk := func(label: String, ok: bool):
+		if not ok:
+			u_bad.append(label)
+	st.timeline.stop_play()
+	st.set_evolve(false)
 	st.clear_actors()
 	await get_tree().process_frame
 	st._history.clear()
@@ -1009,42 +1015,45 @@ func _selftest() -> void:
 	st.spawn_at(Vector2(400, 400))
 	st.spawn_at(Vector2(500, 400))
 	await get_tree().process_frame
-	ok_u = ok_u and st.all_actors().size() == 2 and st._history.depth() == 2 and st._history.labels() == ["spawn", "spawn"]
+	u_chk.call("1", st.all_actors().size() == 2 and st._history.depth() == 2 and st._history.labels() == ["spawn", "spawn"])
 	st.undo()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	ok_u = ok_u and st.all_actors().size() == 1 and st._history.depth() == 1
+	u_chk.call("2", st.all_actors().size() == 1 and st._history.depth() == 1)
 	st.redo()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	ok_u = ok_u and st.all_actors().size() == 2 and st._history.depth() == 2
+	u_chk.call("3", st.all_actors().size() == 2 and st._history.depth() == 2)
 	st._remove_nearest(Vector2(500, 400))
 	await get_tree().process_frame
-	ok_u = ok_u and st.all_actors().size() == 1 and st._history.labels()[-1] == "remove"
+	u_chk.call("4", st.all_actors().size() == 1 and st._history.labels()[-1] == "remove")
 	st.undo()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	ok_u = ok_u and st.all_actors().size() == 2
+	u_chk.call("5", st.all_actors().size() == 2)
 	st.clear_actors()
 	await get_tree().process_frame
-	ok_u = ok_u and st.all_actors().is_empty()
+	u_chk.call("6", st.all_actors().is_empty())
 	st.undo()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	ok_u = ok_u and st.all_actors().size() == 2
+	u_chk.call("7", st.all_actors().size() == 2)
 	var pal0: int = st.palette_index
 	var pre_hash: int = st.snapshot().hash()
 	var note: String = st.surprise()
 	await get_tree().process_frame
-	ok_u = ok_u and note.begins_with("surprise:") and note.length() > 12 and not st.all_actors().is_empty() and st._history.labels()[-1] == "surprise"
+	u_chk.call("8", note.begins_with("surprise:") and note.length() > 12 and not st.all_actors().is_empty() and st._history.labels()[-1] == "surprise")
 	st.undo()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	ok_u = ok_u and st.palette_index == pal0 and st.snapshot().hash() == pre_hash and st.all_actors().size() == 2
+	u_chk.call("9", st.palette_index == pal0 and st.snapshot().hash() == pre_hash and st.all_actors().size() == 2)
 	st._history.clear()
-	ok_u = ok_u and not st.undo() and st._steal_note == "nothing to undo"
+	u_chk.call("10", not st.undo() and st._steal_note == "nothing to undo")
 	st.clear_actors()
 	st.panic()
+	ok_u = u_bad.is_empty()
+	if not ok_u:
+		printerr("undo / surprise sub-checks failed: ", u_bad, " actors=", st.all_actors().size(), " labels=", st._history.labels())
 	if ok_u:
 		print("PASS undo / redo over spawn, remove and clear; surprise changes the look and undo restores it exactly")
 	else:
