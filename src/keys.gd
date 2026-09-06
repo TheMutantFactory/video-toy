@@ -57,7 +57,7 @@ static func groups() -> Array:
 		]},
 		{"title": "3D and layers", "tab": "3D", "rows": [
 			["B", "3D solid of the selected icon at the mouse"],
-			["Shift+B", "next shape: cube / sphere / torus / cylinder / prism / cookie"],
+			["Shift+B", "next shape: cube / sphere / torus / cylinder / prism / cookie / knot (TonKnoT: Morph ties it into the next knot)"],
 			["Shift+Space", "formation of 200 copies · Shift+X next: helix / lattice / shell / ring"],
 			["Shift+arrows", "camera orbit / dolly · Shift+PgUp/PgDn roll · Shift+Home resets"],
 			["\\", "next layer (1 base, 2, 3) · Shift+\\ blend mix / add / sub / mul · Shift+[ ] opacity"],

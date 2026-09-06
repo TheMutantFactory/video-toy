@@ -1423,6 +1423,9 @@ func _update_hud() -> void:
 		line2 += "   ·   loop " + rd_s
 	if _poultry.on:
 		line2 += "   ·   " + _poultry.describe()
+	var kn := knots()
+	if not kn.is_empty():
+		line2 += "   ·   knots: " + ", ".join(kn.map(func(k): return k.knot_describe()))
 	if _guide.visible:
 		line2 += "   ·   clip %s" % clip_format()
 	var lk := Locks.describe(locks, mutate_amount)
@@ -2167,6 +2170,24 @@ func set_osc_out(on: bool) -> void:
 	Settings.set_value("osc_out", on)
 	MidiOut.configure(str(Settings.get_value("osc_out_host")), int(Settings.get_value("osc_out_port")), on)
 	_steal_note = "OSC out %s" % (("→ %s:%d" % [MidiOut.host, MidiOut.port]) if on else "off")
+	_update_hud()
+
+
+# ---------------- TonKnoT ----------------
+func knots() -> Array:
+	return _solids.get_children().filter(func(sol): return sol.shape == "knot")
+
+
+func set_knot_tube(r: float) -> void:
+	for sol in knots():
+		sol.set_knot_tube(r)
+	_update_hud()
+
+
+func knots_next() -> void:
+	for sol in knots():
+		sol.knot_jump(sol.knot_next + 1 if sol.knot_morph > 0.0 else sol.knot_next)
+	_steal_note = "%d knot%s tying into the next family" % [knots().size(), "" if knots().size() == 1 else "s"]
 	_update_hud()
 
 

@@ -44,8 +44,9 @@ are the twist-box's missing stages, the regulator, and two philtres.
 3. **Two philtres**: **Poultry** — built: a pentagrid (5- or 7-fold) composite pass whose
    cells show the toolbox icons from a packed atlas, skinny or fat, palette- and
    picture-tinted, pecking toward a neighbour on the beat (Ctrl+O, params, actions,
-   snapshot); **TonKnoT** — parametric torus knots as a new 3D solid, tube thickness and
-   (p, q) as params, Morph gliding between knots.
+   snapshot); **TonKnoT** — built: a "knot" solid (src/knot.gd: torus-knot curves, a
+   parallel-transport tube, point-for-point blends), seven families, the icon flowing along
+   the tube, Morph resting then tying into the next family, a tube param and a next action.
 4. **Small verbs and scenes**: Shimmer (thirty-colour flicker within a palette family), Echo
    (translucent delayed copies — multiplicity), Wake (sparks along the cursor's movement), a
    spectrum procession formation, a purple-static-rain scene.

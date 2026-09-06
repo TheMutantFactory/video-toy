@@ -881,6 +881,51 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL feedback routing (%s)" % st.routing_describe())
+	# TonKnoT: a knot solid, its tube skin, Morph tying it into the next family, the tube
+	# param, the next-family action, the HUD; a live state keeps it a knot
+	var ok_kn := true
+	st.panic()
+	for sol in st._solids.get_children():
+		sol.queue_free()
+	await get_tree().process_frame
+	st._shape_index = st.SolidScript.SHAPES.find("knot")
+	Toolbox.select(0)
+	for v in Toolbox.slots[0].get("verbs", []).duplicate():
+		Toolbox.toggle_verb(0, v)
+	st.spawn_solid()
+	await get_tree().process_frame
+	var kn: Node3D = st.knots()[0]
+	ok_kn = ok_kn and kn.shape == "knot" and kn._body.mesh is ArrayMesh and kn._body.mesh.surface_get_array_len(0) == Knot.vertex_count() and kn._skin_mat.uv1_scale == Vector3(8, 1, 1)
+	var fam0: int = kn.knot_family
+	Toolbox.toggle_verb(0, "morph")
+	for i in 6:
+		await get_tree().process_frame
+	ok_kn = ok_kn and kn.knot_morph > 0.0 and kn.knot_morph < 0.5 and st._hud.text.contains("knots: (")
+	kn._tick_knot(["morph"], 5.0)                           # the rest of the deformation at once
+	ok_kn = ok_kn and kn.knot_family == (fam0 + 1) % Knot.FAMILIES.size() and kn.knot_morph == 0.0 and kn._knot_hold > 0.0
+	Toolbox.toggle_verb(0, "morph")
+	st.set_knot_tube(0.3)
+	var far := 0.0
+	var pts_now: PackedVector3Array = kn._body.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var centre: PackedVector3Array = Knot.points(Knot.FAMILIES[kn.knot_family][0], Knot.FAMILIES[kn.knot_family][1], Knot.FAMILIES[kn.knot_next][0], Knot.FAMILIES[kn.knot_next][1], kn.knot_morph)
+	far = pts_now[3].distance_to(centre[0])
+	ok_kn = ok_kn and absf(far - 0.3) < 0.001
+	st.knots_next()
+	ok_kn = ok_kn and kn.knot_morph == 0.0 and kn._knot_hold == 0.0
+	var live_kn: Dictionary = st.live_state()
+	ok_kn = ok_kn and live_kn["live"]["solids"][0]["shape"] == "knot"
+	st.restore_live(live_kn)
+	await get_tree().process_frame
+	ok_kn = ok_kn and st.knots().size() == 1
+	for sol in st._solids.get_children():
+		sol.queue_free()
+	st._shape_index = 0
+	st.panic()
+	if ok_kn:
+		print("PASS TonKnoT: a knot solid with a tube skin, Morph ties it into the next family, tube param, next action, HUD, live state")
+	else:
+		fails += 1
+		printerr("FAIL knot (morph %.2f family %d hold %.2f far %.3f)" % [kn.knot_morph, kn.knot_family, kn._knot_hold, far])
 	# Poultry: the atlas holds every slot's glyph, the pass shows over the picture, pecks on
 	# the beat and decays, the order cycles, it snapshots, panic turns it off
 	var ok_po := true
@@ -1485,7 +1530,7 @@ func _selftest() -> void:
 		printerr("FAIL preset round-trip")
 	# 3D solids need the autoloads, so they are checked here, not in smoke.gd
 	var Solid = load("res://src/solid.gd")
-	var ok_shapes: bool = Solid != null and Solid.SHAPES.size() == 6
+	var ok_shapes: bool = Solid != null and Solid.SHAPES.size() == 7
 	if ok_shapes:
 		for k in Solid.SHAPES:
 			if Solid.make_mesh(k) == null or (k != "cookie" and Solid.uv_scale(k) == Vector3.ONE):
@@ -1534,7 +1579,7 @@ func _capture_all(dir: String) -> void:
 	var oi := args.find("--only")
 	if oi >= 0 and oi + 1 < args.size():
 		only = args[oi + 1]
-	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox", "gnarl", "poultry"]
+	var shots := SCREENS.keys() + ["menu", "attribution", "feedback", "pixelate", "quantise", "kaleido", "chroma", "crt", "monitor", "solids", "midi", "audio", "raster", "glow", "scene_stage", "solids3d", "text_flock", "layers", "draw", "keyers", "slitscan", "mosaic", "attractors", "particles", "rd", "two_player", "blackout", "credits", "morph", "birthday", "ascii", "physics", "ref_stage", "ref_crt", "help", "ref_panel", "ref_help", "wheel", "tour", "locks", "routing", "shaping", "twistbox", "gnarl", "poultry", "knot"]
 	var only_set: PackedStringArray = only.split(",") if only != "" else PackedStringArray()
 	for name in shots:
 		if only != "" and not only_set.has(name) and name != "stage":
@@ -2040,6 +2085,26 @@ func _capture_all(dir: String) -> void:
 				for i in Toolbox.slots.size():
 					Toolbox.toggle_verb(i, "physics")            # bodies go, the pile stays
 				Toolbox.select(0)
+			"knot":
+				menu.close()
+				if current_name != "stage":
+					show_screen("stage")
+					await get_tree().create_timer(0.3).timeout
+				current.panic()
+				current.clear_actors()
+				for sol in current._solids.get_children():
+					sol.queue_free()
+				current._shape_index = current.SolidScript.SHAPES.find("knot")
+				for i in 3:
+					Toolbox.select(i % Toolbox.slots.size())
+					if not Toolbox.has_verb(i % Toolbox.slots.size(), "morph"):
+						Toolbox.toggle_verb(i % Toolbox.slots.size(), "morph")
+					current.spawn_solid(Vector2(500 + i * 460, 540))
+				current.cam_orbit = 0.4
+				await get_tree().create_timer(2.5).timeout
+				for i in 3:
+					Toolbox.toggle_verb(i % Toolbox.slots.size(), "morph")
+				current._shape_index = 0
 			"poultry":
 				menu.close()
 				if current_name != "stage":

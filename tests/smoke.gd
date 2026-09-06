@@ -1152,6 +1152,30 @@ func _init() -> void:
 	_check("poultry atlas: 384x384, glyphs centred in their cells, a null slot stays empty", po_atlas.get_width() == 384 and c0.a > 0.9 and c0.r > 0.9 and c1.a == 0.0 and c2.r > 0.9 and c2.g < 0.1 and c0_edge.a == 0.0)
 	_check("poultry shader: a pentagrid with pecking, an atlas and the palette", Poultry.SHADER.contains("floor(g)") and Poultry.SHADER.contains("peck") and Poultry.SHADER.contains("atlas") and Poultry.SHADER.contains("ring_color") and Poultry.ORDERS == [5, 7])
 
+	# TonKnoT: the curve, the tube, the blend
+	var kn_k0 := Knot.curve(2, 3, 0.0)
+	var kn_k1 := Knot.curve(2, 3, 1.0)
+	var kn_on_torus := true
+	for i in 40:
+		var kn_pt := Knot.curve(3, 5, float(i) / 40.0)
+		var kn_ring := Vector2(kn_pt.x, kn_pt.z).length()
+		kn_on_torus = kn_on_torus and absf(Vector2(kn_ring - Knot.R_MAJOR, kn_pt.y).length() - Knot.R_MINOR) < 0.001
+	_check("a torus knot is closed and rides the torus", kn_k0.is_equal_approx(kn_k1) and kn_on_torus and Knot.FAMILIES.size() == 7 and Knot.family_name(1) == "(3,4)")
+	var kn_tm := Knot.mesh_for(2, 3, 2, 3, 0.0, 0.16, 40, 6)
+	var kn_arr: Array = kn_tm.surface_get_arrays(0)
+	var kn_tv: PackedVector3Array = kn_arr[Mesh.ARRAY_VERTEX]
+	var kn_tuv: PackedVector2Array = kn_arr[Mesh.ARRAY_TEX_UV]
+	var kn_rad_ok := true
+	var kn_centre_pts := Knot.points(2, 3, 2, 3, 0.0, 40)
+	for i in 40:
+		for j in 7:
+			kn_rad_ok = kn_rad_ok and absf(kn_tv[i * 7 + j].distance_to(kn_centre_pts[i]) - 0.16) < 0.001
+	_check("the tube has (segments+1)(sides+1) vertices at the radius, u along and v around", kn_tv.size() == Knot.vertex_count(40, 6) and kn_rad_ok and kn_tuv[0] == Vector2(0, 0) and kn_tuv[6] == Vector2(0, 1) and absf(kn_tuv[7].x - 1.0 / 40.0) < 0.001)
+	var kn_pa := Knot.points(2, 3, 3, 4, 0.0, 30)
+	var kn_pb := Knot.points(2, 3, 3, 4, 1.0, 30)
+	var kn_pm := Knot.points(2, 3, 3, 4, 0.5, 30)
+	_check("blending knots is point for point: the ends are the two knots, the middle between", kn_pa[7].is_equal_approx(Knot.curve(2, 3, 7.0 / 30.0)) and kn_pb[7].is_equal_approx(Knot.curve(3, 4, 7.0 / 30.0)) and kn_pm[7].is_equal_approx(kn_pa[7].lerp(kn_pb[7], 0.5)))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

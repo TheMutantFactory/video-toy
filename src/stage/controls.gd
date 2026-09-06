@@ -40,6 +40,7 @@ func midi_params() -> Array:
 			s.gnarl_target = v
 			s._refresh_routing_panel()},
 		{"id": "gnarl_speed", "label": "Gnarl speed (homeostasis)", "set": func(v): s.gnarl_speed = v},
+		{"id": "knot_tube", "label": "Knot tube thickness", "set": func(v): s.set_knot_tube(lerpf(0.05, 0.35, v))},
 		{"id": "poultry_scale", "label": "Poultry cell size", "set": func(v):
 			s._poultry.cell_scale = lerpf(3.0, 30.0, v)
 			s._poultry.push()},
@@ -219,6 +220,7 @@ func midi_actions() -> Array:
 	out.append({"id": "cutup_redeal", "label": "Re-deal the cutup", "do": s._fx.redeal})
 	out.append({"id": "gnarl_toggle", "label": "Gnarl regulator on / off", "do": func(): s.set_gnarl(not s.gnarl_on)})
 	out.append({"id": "poultry_toggle", "label": "Poultry philtre on / off", "do": func(): s.set_poultry(not s._poultry.on)})
+	out.append({"id": "knots_next", "label": "Knots tie into the next family", "do": s.knots_next})
 	out.append({"id": "poultry_order", "label": "Poultry 5-fold / 7-fold", "do": s._poultry.cycle_order})
 	out.append({"id": "poultry_peck", "label": "Poultry: peck", "do": s._poultry.peck})
 	out.append({"id": "clip_format", "label": "Next clip format (16:9 / 9:16 / 1:1)", "do": func(): s.set_clip_format(ClipExport.next_format(s.clip_format()))})

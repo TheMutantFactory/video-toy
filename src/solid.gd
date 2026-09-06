@@ -4,10 +4,18 @@ extends Node3D
 ## tinted with the palette colour, tiled once per face. Verbs are read live
 ## from the toolbox slot, like actor.gd, and mapped into 3D.
 
-const SHAPES := ["cube", "sphere", "torus", "cylinder", "prism", "cookie"]
+const SHAPES := ["cube", "sphere", "torus", "cylinder", "prism", "cookie", "knot"]
+const KNOT_HOLD := 1.2                      # seconds a knot rests before tying into the next
+const KNOT_DEFORM := 3.0                    # seconds the tying takes
 
 var slot_id := ""
 var shape := "cube"
+var knot_family := 0                        # Knot.FAMILIES index shown
+var knot_next := 1                          # the family it ties into (Morph)
+var knot_morph := 0.0                       # 0 = this family, 1 = the next
+var knot_tube := 0.16
+var _knot_hold := 0.0
+var _knot_frame := 0
 var bounds := Vector3(4.0, 2.2, 2.0)
 var home := Vector3.ZERO
 var velocity := Vector3.ZERO
@@ -44,6 +52,8 @@ static func make_mesh(kind: String, icon_img: Image = null) -> Mesh:
 				m.size = Vector3(1.4, 1.4, 0.35)
 				return m
 			return Extrude.build(icon_img)
+		"knot":
+			return Knot.mesh_for(2, 3, 2, 3, 0.0, 0.16)
 		"sphere":
 			var m := SphereMesh.new()
 			m.radius = 0.7
@@ -80,6 +90,7 @@ static func uv_scale(kind: String) -> Vector3:
 		"cylinder": return Vector3(3, 1, 1)
 		"prism": return Vector3(3, 2, 1)
 		"cookie": return Vector3(1, 1, 1)
+		"knot": return Vector3(8, 1, 1)
 	return Vector3.ONE
 
 
@@ -100,7 +111,12 @@ func setup(slot: Dictionary, kind: String, pos: Vector3, pal: int, icon: Texture
 	raster = str(slot.get("kind", "icon")) == "raster"
 	_base_color = Palettes.color(pal, int(slot.get("color_index", 0)))
 
+	if kind == "knot":
+		knot_family = randi() % Knot.FAMILIES.size()
+		knot_next = (knot_family + 1) % Knot.FAMILIES.size()
 	var mesh := make_mesh(kind, icon.get_image() if (kind == "cookie" and icon) else null)
+	if kind == "knot":
+		mesh = _knot_mesh()
 	_body = MeshInstance3D.new()
 	_body.mesh = mesh
 	_body_mat = StandardMaterial3D.new()
@@ -216,6 +232,64 @@ func _process(delta: float) -> void:
 	if AudioReact.active():
 		frame_scale *= 1.0 + 0.18 * AudioReact.beat_env
 	scale = Vector3.ONE * frame_scale
+	if shape == "knot":
+		_tick_knot(verbs, delta)
+
+
+# ---------------- TonKnoT ----------------
+func _knot_mesh() -> ArrayMesh:
+	var a: Array = Knot.FAMILIES[knot_family]
+	var b: Array = Knot.FAMILIES[knot_next]
+	return Knot.mesh_for(a[0], a[1], b[0], b[1], knot_morph, knot_tube)
+
+
+func _rebuild_knot() -> void:
+	var mesh := _knot_mesh()
+	_body.mesh = mesh
+	_skin.mesh = mesh
+
+
+## The arrow flows along the tube always; with Morph the knot rests, then ties
+## itself into the next family over KNOT_DEFORM seconds, and starts again.
+func _tick_knot(verbs: Array, delta: float) -> void:
+	_skin_mat.uv1_offset.x = fmod(_skin_mat.uv1_offset.x + delta * 0.12, 1.0)
+	if not verbs.has("morph"):
+		return
+	_knot_frame += 1
+	if _knot_hold > 0.0:
+		_knot_hold = maxf(0.0, _knot_hold - delta)
+		return
+	knot_morph = minf(1.0, knot_morph + delta / KNOT_DEFORM)
+	if _knot_frame % 3 == 0 or knot_morph >= 1.0:
+		_rebuild_knot()
+	if knot_morph >= 1.0:
+		knot_family = knot_next
+		knot_next = (knot_family + 1) % Knot.FAMILIES.size()
+		knot_morph = 0.0
+		_knot_hold = KNOT_HOLD
+		_rebuild_knot()
+
+
+## Tie into a given family now (the stage's "next knot" action).
+func knot_jump(family: int) -> void:
+	if shape != "knot":
+		return
+	knot_family = knot_next if knot_morph >= 0.5 else knot_family
+	knot_next = posmod(family, Knot.FAMILIES.size())
+	knot_morph = 0.0
+	_knot_hold = 0.0
+	_rebuild_knot()
+
+
+func set_knot_tube(r: float) -> void:
+	if shape != "knot":
+		return
+	knot_tube = clampf(r, 0.05, 0.35)
+	_rebuild_knot()
+
+
+func knot_describe() -> String:
+	return "%s→%s %.0f%%" % [Knot.family_name(knot_family), Knot.family_name(knot_next), knot_morph * 100.0] if shape == "knot" else ""
 
 
 func _random_point() -> Vector3:

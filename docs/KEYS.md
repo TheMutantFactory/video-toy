@@ -41,7 +41,7 @@ The printable version is [key-card.png](key-card.png).
 | `Shift+Y` | Clifford — fly between points of the Clifford map |
 | `Shift+U` | de Jong — fly between points of the de Jong map |
 | `Shift+I` | Field — ride the curl-noise flow field the particles ride |
-| `Shift+M` | Morph — become the next icon, shape to shape (on the beat with audio) |
+| `Shift+M` | Morph — become the next icon, shape to shape (on the beat with audio); a knot ties into the next knot |
 | `Shift+J` | Outline — hollow the icon to a ring that follows its silhouette |
 | `Ctrl+P` | Physics — a rigid body with the icon's outline: falls, piles up, drag to throw (Ctrl+G gravity) |
 | `Ctrl+V` | Voice — hear the outline as a waveform; Morph glides timbre, Pulse loudness, Spin pitch |
@@ -79,7 +79,7 @@ The printable version is [key-card.png](key-card.png).
 | Keys | What |
 | --- | --- |
 | `B` | 3D solid of the selected icon at the mouse |
-| `Shift+B` | next shape: cube / sphere / torus / cylinder / prism / cookie |
+| `Shift+B` | next shape: cube / sphere / torus / cylinder / prism / cookie / knot (TonKnoT: Morph ties it into the next knot) |
 | `Shift+Space` | formation of 200 copies · Shift+X next: helix / lattice / shell / ring |
 | `Shift+arrows` | camera orbit / dolly · Shift+PgUp/PgDn roll · Shift+Home resets |
 | `\` | next layer (1 base, 2, 3) · Shift+\ blend mix / add / sub / mul · Shift+[ ] opacity |

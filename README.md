@@ -271,6 +271,16 @@ re-deals on the beat. All params or actions, all snapshotted, all cleared by pan
 All of it snapshots and crossfades, panic clears it, the HUD names what is on, and the delay,
 blur, hue and displacement are params with the layer switches and the source as actions.
 
+## TonKnoT: knots that tie themselves
+
+**Shift+B** cycles the 3D shape to **knot**: a (p, q) torus knot swept into a tube with
+parallel-transport frames, the slot's icon tiling along its length like the arrow-marked stick
+and flowing along it. Seven families — (2,3), (3,4), (2,5), (3,5), (4,5), (3,7), (2,7) — and a
+knot with the **Morph** verb rests a moment, then ties itself into the next family over three
+seconds, point for point rather than cross-dissolved, and starts again; the HUD shows which
+knot is becoming which. **Tube thickness** is a param, **knots tie into the next family** an
+action, and a knot survives the autosave and a rig as a knot.
+
 ## Poultry: the quasicrystal philtre
 
 **Ctrl+O** turns the picture into Perplexing Poultry (docs/RESEARCH-6.md): a **pentagrid**
