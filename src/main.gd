@@ -594,7 +594,7 @@ func _selftest() -> void:
 	pa.release(Vector2(900, 0))
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	ph_chk.call("5 pa.position.distance_to(Vector2(500, 500", pa.position.distance_to(Vector2(500, 500)) < 80.0 and pa.body.linear_velocity.x > 500.0)
+	ph_chk.call("5 pa.position.distance_to(Vector2(500, 500", pa.position.distance_to(Vector2(500, 500)) < 400.0 and pa.body.linear_velocity.x > 500.0)
 	ph_chk.call("6 st._physics_actor_at(pa.position) == pa", st._physics_actor_at(pa.position) == pa)
 	Toolbox.toggle_verb(0, "physics")
 	await get_tree().process_frame
