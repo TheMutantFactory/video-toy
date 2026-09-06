@@ -101,8 +101,10 @@ run the whole show; the HUD says SAFE so you remember to turn it back off.
   the creator named; this is that.
 - **Shift+C** runs the credits roll over the picture as an end card; **Shift+L** shows the
   one-line ticker of what is on screen right now.
-- **Render 20 s clip** (Esc menu) writes an AVI at a fixed 60 fps offline — a clean loop for
-  the socials even if the show machine was dropping frames.
+- **Render 20 s clip** (Esc menu) writes an AVI at a fixed 60 fps offline — a clean clip for
+  the socials even if the show machine was dropping frames. **Render the loop** makes it the
+  timeline loop's exact length and, with ffmpeg installed, a seamless mp4; Settings → Clip
+  export picks 9:16 or 1:1 and **Ctrl+E** shows the crop while you compose.
 - **Export rig** again so the night's tweaks travel home.
 
 ## Where things live (exported app)

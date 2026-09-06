@@ -1027,6 +1027,38 @@ func _init() -> void:
 	_check("mutation count scales from one to six and the amount cycles", Locks.mutation_count(0.0) == 1 and Locks.mutation_count(0.25) == 2 and Locks.mutation_count(0.5) == 4 and Locks.mutation_count(1.0) == 6 and Locks.next_amount(1.0) == 0.25 and Locks.next_amount(0.25) == 0.5 and Locks.next_amount(0.37) == 1.0)
 	_check("describe names locks and a nearby amount, nothing when default", Locks.describe(["palette", "fx"], 1.0) == "locks: palette, fx" and Locks.describe([], 0.5) == "nearby 0.50" and Locks.describe([], 1.0) == "")
 
+	# clip export: crops, the child's arguments, ffmpeg plans (plain and seamless), the script, the guide's rects
+	_check("clip formats are centre crops of the picture", ClipExport.crop("9:16") == Vector2i(608, 1080) and ClipExport.crop("1:1") == Vector2i(1080, 1080) and ClipExport.crop("nope") == Vector2i(1920, 1080) and ClipExport.next_format("16:9") == "9:16" and ClipExport.next_format("1:1") == "16:9")
+	var ce_ca := ClipExport.child_args("/p", "/o.avi", 5.5, 30, "9:16", 2.0)
+	_check("the child gets the clip flags (the crop travels through override.cfg)", ce_ca.has("--write-movie") and not ce_ca.has("--resolution") and ce_ca[ce_ca.find("--fixed-fps") + 1] == "30" and ce_ca[ce_ca.find("--clip") + 1] == "5.5" and ce_ca[ce_ca.find("--format") + 1] == "9:16" and ce_ca[ce_ca.find("--preroll") + 1] == "2.0")
+	var ovp := "user://_smoke_override.cfg"
+	var ovc := ConfigFile.new()
+	ovc.set_value("audio", "driver/enable_input", false)
+	ovc.save(ovp)
+	ClipExport.set_window_override(Vector2i(608, 1080), ovp)
+	var ovr := ConfigFile.new()
+	ovr.load(ovp)
+	var merged: bool = int(ovr.get_value("display", "window/size/viewport_width", 0)) == 608 and int(ovr.get_value("display", "window/size/viewport_height", 0)) == 1080 and ovr.get_value("audio", "driver/enable_input", true) == false
+	ClipExport.clear_window_override(ovp)
+	var ovr2 := ConfigFile.new()
+	ovr2.load(ovp)
+	_check("the crop override merges with the audio override and clears back to it", merged and not ovr2.has_section("display") and ovr2.get_value("audio", "driver/enable_input", true) == false)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ovp))
+	ClipExport.set_window_override(Vector2i(1080, 1080), ovp)
+	var only_display := FileAccess.file_exists(ovp)
+	ClipExport.clear_window_override(ovp)
+	_check("an override with nothing but the crop is removed when cleared", only_display and not FileAccess.file_exists(ovp))
+	var ce_fa := ClipExport.ffmpeg_args("/in.avi", "/out.mp4", 2.0, 8.0, 1.0, false)
+	_check("a plain clip trims the pre-roll and encodes h264 / aac", ce_fa[ce_fa.find("-ss") + 1] == "2.000" and ce_fa[ce_fa.find("-t") + 1] == "8.000" and ce_fa.has("libx264") and ce_fa.has("yuv420p") and ce_fa[-1] == "/out.mp4" and not " ".join(ce_fa).contains("xfade"))
+	var ce_fl := ClipExport.ffmpeg_args("/in.avi", "/out.mp4", 2.0, 8.0, 1.0, true)
+	var ce_graph: String = ce_fl[ce_fl.find("-filter_complex") + 1]
+	_check("a seamless loop cross-dissolves the tail into the head and keeps the loop's audio", ce_graph.contains("trim=start=2.000:end=10.000") and ce_graph.contains("trim=start=10.000:end=11.000") and ce_graph.contains("xfade=transition=fade:duration=1.000:offset=0") and ce_graph.contains("concat=n=2") and ce_graph.contains("atrim=start=2.000:end=10.000") and ce_fl.has("[v]") and ce_fl.has("[a]"))
+	_check("a seam too long for the loop falls back to a plain trim", not " ".join(ClipExport.ffmpeg_args("/i", "/o", 0.0, 1.0, 0.6, true)).contains("xfade"))
+	var ce_sc := ClipExport.script(PackedStringArray(["-i", "it's.avi", "o.mp4"]))
+	_check("the script quotes for a shell", ce_sc.begins_with("#!/bin/sh") and ce_sc.contains("ffmpeg '-i' 'it'\\''s.avi' 'o.mp4'"))
+	var ce_gr: Array = FrameGuide.rects(Rect2(0, 0, 960, 540), Vector2i(1920, 1080), Vector2i(608, 1080))
+	_check("the guide's crop sits centred in the drawn picture at the display's scale", ce_gr[0] == Rect2(0, 0, 960, 540) and ce_gr[1].size.is_equal_approx(Vector2(304, 540)) and ce_gr[1].position.is_equal_approx(Vector2(328, 0)))
+
 	print("\n%d/%d checks passed" % [_n - _fails, _n])
 	quit(1 if _fails > 0 else 0)
 

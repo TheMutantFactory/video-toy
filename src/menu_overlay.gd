@@ -57,7 +57,7 @@ func _ready() -> void:
 	_menu.add_child(UI.title("Menu", 40))
 	for m in [["Resume", "resume"], ["Panic — known-good look", "panic"], ["Blackout", "blackout"],
 			["Attribution", "attribution"], ["Help — keys", "help"], ["Undo", "undo"], ["Surprise me", "surprise"], ["Guest mode on / off", "guest"], ["Take the tour", "tour"], ["Export rig (zip)", "rig_export"], ["Import rig…", "rig_import"],
-			["Render 20 s clip (offline)", "clip"], ["Find Icons", "search"],
+			["Render 20 s clip (offline)", "clip"], ["Render the loop (timeline length, seamless)", "clip_loop"], ["Find Icons", "search"],
 			["Play", "stage"], ["Scenes", "scenes"], ["Settings", "settings"], ["Start screen", "start"], ["Quit", "quit"]]:
 		_menu.add_child(UI.button(m[0], func(): _pick(m[1])))
 
@@ -135,7 +135,10 @@ func _pick(what: String) -> void:
 		"attribution": show_attribution()
 		"clip":
 			var out: String = get_parent().render_clip(20.0)
-			_note(("rendering 20 s at 60 fps in a second Godot; the movie lands at " + out) if out != "" else "could not start the render")
+			_note(("rendering 20 s in a second Godot; the movie lands at " + out) if out != "" else "could not start the render")
+		"clip_loop":
+			var outl: String = get_parent().render_clip(20.0, true)
+			_note(("rendering the loop in a second Godot; the movie lands at " + outl + (" (mp4 follows)" if ClipExport.has_ffmpeg() else " (no ffmpeg: a script for the mp4 follows)")) if outl != "" else "could not start the render")
 		"rig_export":
 			var p := Rig.default_export_path()
 			DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://rigs"))

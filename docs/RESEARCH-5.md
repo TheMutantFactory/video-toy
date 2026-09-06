@@ -41,9 +41,10 @@ description of this toy. The gaps are where to go next.
    frame-delay tap up to 23 frames through a half-res history ring, blur / sharpen, hue and
    saturation drift and displacement (self / layer 2 / layer 3 / webcam) inside the warp pass;
    Ctrl+F panel, params and actions, snapshot + crossfade, panic.
-4. **Loop-maker export**: canvas presets (16:9, 9:16, 1:1), an exact-length seamless render
-   from the timeline loop, mp4 when ffmpeg is on the machine, a "record the last 20 s" from
-   the autosave.
+4. **Loop-maker export** — built: 16:9 / 9:16 / 1:1 as a centre crop with an on-stage guide
+   (Ctrl+E), the child renders at the crop's window size, "Render the loop" is the timeline
+   loop's exact length after a pre-roll, and with ffmpeg the parent makes an mp4 — seamless
+   for loops (xfade of the head from the post-end frames) — or leaves a script otherwise.
 5. **Audio shaping**: attack / release / smoothing per band, BPM from audio.
 6. **Windows and Linux exports**: cheap in Godot; Syphon needs a Spout twin.
 7. Small: preset thumbnails, per-effect cost in the HUD, a soak test in CI, mp4 playback,

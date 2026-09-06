@@ -126,6 +126,22 @@ func _ready() -> void:
 	tour.button_pressed = not bool(Settings.get_value("tour_seen"))
 	tour.toggled.connect(func(on: bool): Settings.set_value("tour_seen", not on))
 	_row(g, "Tour", tour, "next time Play opens; Esc menu → Take the tour any time")
+	var cf := OptionButton.new()
+	for n in ClipExport.FORMATS.keys():
+		cf.add_item(n)
+	cf.selected = maxi(0, ClipExport.FORMATS.keys().find(str(Settings.get_value("clip_format"))))
+	cf.item_selected.connect(func(i: int): Settings.set_value("clip_format", ClipExport.FORMATS.keys()[i]))
+	var cfps := _spin(24, 120, 1, int(Settings.get_value("clip_fps")), " fps")
+	cfps.value_changed.connect(func(v: float): Settings.set_value("clip_fps", int(v)))
+	var cpre := _spin(0.0, 30.0, 0.5, float(Settings.get_value("clip_preroll")), " s")
+	cpre.value_changed.connect(func(v: float): Settings.set_value("clip_preroll", v))
+	var cseam := _spin(0.0, 10.0, 0.25, float(Settings.get_value("clip_seam")), " s")
+	cseam.value_changed.connect(func(v: float): Settings.set_value("clip_seam", v))
+	var crow := HBoxContainer.new()
+	crow.add_theme_constant_override("separation", 8)
+	for w in [cf, cfps, cpre, cseam]:
+		crow.add_child(w)
+	_row(g, "Clip export", crow, "format (a centre crop; Ctrl+E shows the guide on stage) · fps · pre-roll before the clip · seam cross-dissolved for a seamless loop. " + ("ffmpeg found: mp4s are made" if ClipExport.has_ffmpeg() else "no ffmpeg found: the AVI and a script for the mp4 are left instead (brew install ffmpeg)"))
 	_row(g, "Safe mode", safe, ("ON NOW — " if Safe.active() else "") + "for a machine that misbehaves; also `--safe` on the command line (./run.sh safe). Next launch.")
 
 	# ---------------- clock

@@ -7,7 +7,7 @@
 # ./run.sh templates  write TouchOSC / Launchpad / APC mini templates into docs/controllers
 # ./run.sh check      capture the deterministic reference shots and pixel-diff them (exit 1 on regression)
 # ./run.sh reference  re-record the reference shots (after an intentional visual change)
-# ./run.sh clip [s]   render the autosaved stage state offline to out/clip-*.avi (Movie Maker, 60 fps)
+# ./run.sh clip [s] [fmt] [demo]   render the autosaved stage state offline to out/clip-*.avi (Movie Maker, 60 fps; fmt 9:16 / 1:1; demo spawns icons)
 # ./run.sh keycard    regenerate docs/key-card.png + docs/KEYS.md from src/keys.gd (windowed)
 # ./run.sh export     build out/Video Toy.app (macOS, ad-hoc signed, privacy strings) and self-test the bundle
 set -euo pipefail
@@ -78,9 +78,13 @@ case "${1:-play}" in
            echo "  PASS blocks: $(grep -c '^PASS' <<<"$st" || true)   errors: $(grep -cE 'ERROR|FAIL' <<<"$st" || true)"
            grep -E "^FAIL|ERROR" <<<"$st" | head -3 || true
            echo "$app" ;;
-  clip)    # render the autosaved state (the last thing on stage) to an AVI: ./run.sh clip [seconds]
+  clip)    # render the autosaved state (the last thing on stage) to an AVI: ./run.sh clip [seconds] [16:9|9:16|1:1]
            audio_override; out="$(pwd)/out/clip-$(date +%Y%m%d-%H%M%S).avi"; mkdir -p out
-           "$G" --path . --write-movie "$out" --fixed-fps 60 -- --clip "${2:-20}" >/dev/null 2>&1
+           fmt="${3:-16:9}"; case "$fmt" in 9:16) w=608; h=1080 ;; 1:1) w=1080; h=1080 ;; *) w=0; h=0 ;; esac
+           # Movie Maker sizes the movie from the project's viewport setting: override it for the crop (the child clears it)
+           [[ $w -gt 0 ]] && printf '[display]\nwindow/size/viewport_width=%d\nwindow/size/viewport_height=%d\n' "$w" "$h" >> override.cfg
+           "$G" --path . --write-movie "$out" --fixed-fps 60 -- --clip "${2:-20}" --format "$fmt" --preroll 0 ${4:+--demo} >/dev/null 2>&1
+           audio_override
            echo "$out" ;;
   check)   # capture the reference shots, then compare them with tests/reference
            audio_override; mkdir -p out

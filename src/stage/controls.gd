@@ -189,6 +189,8 @@ func midi_actions() -> Array:
 	for li in s.LAYER_COUNT:
 		out.append({"id": "loop_layer_%d" % (li + 1), "label": "Layer %d in / out of the loop" % (li + 1), "do": func(): s.set_loop(li, not bool(s._layers[li].get("loop", true)))})
 	out.append({"id": "disp_source", "label": "Next displacement source", "do": func(): s.set_disp_source(s.fb_disp_src + 1)})
+	out.append({"id": "clip_format", "label": "Next clip format (16:9 / 9:16 / 1:1)", "do": func(): s.set_clip_format(ClipExport.next_format(s.clip_format()))})
+	out.append({"id": "render_loop", "label": "Render the loop (seamless)", "do": func(): s.get_parent().render_clip(20.0, true)})
 	out.append({"id": "play_sound", "label": "Play the selected slot's sound", "do": func(): s.play_slot_sound()})
 	out.append({"id": "blackout", "label": "Blackout on/off", "do": s.toggle_blackout})
 	out.append({"id": "quality", "label": "Quality lock: cycle", "do": s.cycle_quality_lock})

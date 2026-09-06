@@ -96,6 +96,8 @@ Actions (any message with a non-zero first argument, or no argument):
   /vt/action/loop_layer_2   Layer 2 in / out of the loop
   /vt/action/loop_layer_3   Layer 3 in / out of the loop
   /vt/action/disp_source   Next displacement source
+  /vt/action/clip_format   Next clip format (16:9 / 9:16 / 1:1)
+  /vt/action/render_loop   Render the loop (seamless)
   /vt/action/play_sound   Play the selected slot's sound
   /vt/action/blackout   Blackout on/off
   /vt/action/quality   Quality lock: cycle

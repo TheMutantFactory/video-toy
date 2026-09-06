@@ -23,6 +23,10 @@ const DEFAULTS := {
 	"osc_out_host": "127.0.0.1",
 	"osc_out_port": 9001,
 	"tour_seen": false,            # the first-run captions have been shown
+	"clip_format": "16:9",         # 16:9 | 9:16 | 1:1 (a centre crop of the picture)
+	"clip_fps": 60,
+	"clip_preroll": 2.0,           # seconds rendered before the clip starts (feedback warms up)
+	"clip_seam": 1.0,              # seconds cross-dissolved to make a loop seamless (ffmpeg)
 	"locks": [],                   # sections Surprise / evolve leave alone
 	"mutate_amount": 1.0,          # 0.25 nearby .. 1.0 everything
 }

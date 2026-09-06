@@ -85,29 +85,111 @@ func restore_autosave() -> void:
 
 ## Render the current state to a movie in a child Godot process: Movie Maker
 ## needs --write-movie at launch, so the child restores this run's autosave.
-func render_clip(seconds := 20.0) -> String:
-	if current_name == "stage" and current:
+var _render := {}                            # the clip child and its ffmpeg follow-up
+
+
+## `loop` renders exactly the timeline loop's length (or `seconds` without one)
+## and, with ffmpeg, cross-dissolves the seam. `dry` returns the plan only.
+func render_clip(seconds := 20.0, loop := false, dry := false) -> Variant:
+	var fmt := str(Settings.get_value("clip_format"))
+	var fps := clampi(int(Settings.get_value("clip_fps")), 24, 120)
+	var preroll := clampf(float(Settings.get_value("clip_preroll")), 0.0, 30.0)
+	var seam := clampf(float(Settings.get_value("clip_seam")), 0.0, 10.0)
+	var length := seconds
+	if loop and current_name == "stage" and current and current.timeline.has_loop():
+		length = current.timeline.length
+	if not loop:
+		seam = 0.0
+	var total := preroll + length + seam
+	if current_name == "stage" and current and not dry:
 		Autosave.write(current.live_state())
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://clips"))
 	var t := Time.get_datetime_dict_from_system()
-	var out := ProjectSettings.globalize_path("user://clips/clip-%04d%02d%02d-%02d%02d%02d.avi" % [t.year, t.month, t.day, t.hour, t.minute, t.second])
-	var argv := PackedStringArray(["--path", ProjectSettings.globalize_path("res://"), "--write-movie", out, "--fixed-fps", "60", "--", "--clip", str(seconds)])
+	var stem := "user://clips/%s-%04d%02d%02d-%02d%02d%02d" % ["loop" if loop else "clip", t.year, t.month, t.day, t.hour, t.minute, t.second]
+	var out := ProjectSettings.globalize_path(stem + ".avi")
+	var argv := ClipExport.child_args(ProjectSettings.globalize_path("res://"), out, total, fps, fmt, preroll)
+	var plan := {"avi": out, "mp4": ProjectSettings.globalize_path(stem + ".mp4"), "argv": argv, "preroll": preroll, "length": length, "seam": seam, "loop": loop, "format": fmt, "fps": fps}
+	if dry:
+		return plan
+	ClipExport.set_window_override(ClipExport.crop(fmt), AudioInputSetting.override_path())   # the child reads it at start and clears it
 	var pid := OS.create_process(OS.get_executable_path(), argv)
+	if pid <= 0:
+		ClipExport.clear_window_override(AudioInputSetting.override_path())
+	if pid > 0:
+		plan["pid"] = pid
+		plan["stage"] = "render"
+		_render = plan
 	if current_name == "stage" and current:
-		current._steal_note = ("rendering %.0f s to %s (pid %d)" % [seconds, out.get_file(), pid]) if pid > 0 else "could not start the render"
+		current._steal_note = ("rendering %s %.1f s %s at %d fps (pid %d)%s" % ["a seamless loop of" if loop else "", length, fmt, fps, pid, "" if ClipExport.has_ffmpeg() else " — no ffmpeg: AVI + a script"]) if pid > 0 else "could not start the render"
 		current._update_hud()
 	return out if pid > 0 else ""
 
 
+## Poll the clip child; when it exits, make the mp4 (ffmpeg) or leave a script.
+func _process(_delta: float) -> void:
+	if _render.is_empty():
+		return
+	if OS.is_process_running(int(_render.get("pid", -1))):
+		return
+	var note := ""
+	if _render["stage"] == "render":
+		if not FileAccess.file_exists(_render["avi"]):
+			note = "the render produced no file"
+			_render = {}
+		else:
+			var args := ClipExport.ffmpeg_args(_render["avi"], _render["mp4"], _render["preroll"], _render["length"], _render["seam"], _render["loop"])
+			if ClipExport.has_ffmpeg():
+				var pid := OS.create_process(ClipExport.ffmpeg_path(), args)
+				if pid > 0:
+					_render["pid"] = pid
+					_render["stage"] = "ffmpeg"
+					note = "encoding %s with ffmpeg…" % _render["mp4"].get_file()
+				else:
+					note = "ffmpeg would not start; the AVI is at " + _render["avi"]
+					_render = {}
+			else:
+				var sh := str(_render["avi"]).get_basename() + ".sh"
+				var f := FileAccess.open(sh, FileAccess.WRITE)
+				if f:
+					f.store_string(ClipExport.script(args))
+					f.close()
+				note = "AVI at %s; no ffmpeg here — %s makes the %smp4 on a machine that has it" % [_render["avi"].get_file(), sh.get_file(), "seamless " if _render["loop"] else ""]
+				_render = {}
+	else:
+		note = ("%s ready: %s" % ["seamless loop" if _render["loop"] else "clip", _render["mp4"]]) if FileAccess.file_exists(_render["mp4"]) else "ffmpeg finished without an mp4; the AVI is at " + _render["avi"]
+		_render = {}
+	if current_name == "stage" and current and note != "":
+		current._steal_note = note
+		current._update_hud()
+
+
+func rendering() -> bool:
+	return not _render.is_empty()
+
+
 ## Movie Maker mode: restore the autosave, hide the HUD, run `seconds`, quit.
+## With --format the window is the crop and the picture is centred in it.
 func _clip(seconds: float) -> void:
+	var fi := args.find("--format")
+	var fmt: String = args[fi + 1] if fi >= 0 and fi + 1 < args.size() else "16:9"
+	var crop := ClipExport.crop(fmt)
+	ClipExport.clear_window_override(AudioInputSetting.override_path())      # settings are read; the next launch is normal again
 	show_screen("stage")
 	await get_tree().process_frame
+	if crop != current.WORLD:
+		current._display.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		current._display.size = Vector2(current.WORLD)
+		current._display.position = -Vector2(current.WORLD - crop) * 0.5
+		current._display.stretch_mode = TextureRect.STRETCH_SCALE
 	var st := Autosave.read()
 	if not st.is_empty():
 		current.restore_live(st)
 	current._help.close()
 	current.set_hud_mode(2)
+	menu.visible = false                                       # no burger in the movie
+	if args.has("--demo"):                                     # ./run.sh clip … demo: something to look at
+		current.demo_spawn()
+		current._set_feedback(true)
 	if current.timeline.load():
 		current.toggle_play()
 	await get_tree().create_timer(seconds).timeout
@@ -641,6 +723,31 @@ func _selftest() -> void:
 	else:
 		fails += 1
 		printerr("FAIL physics / sounds")
+	# loop-maker export: the render plan uses the format, fps, pre-roll and the timeline's length;
+	# the guide follows the format and the HUD says so
+	var ok_ce := true
+	var fmt_keep: String = str(Settings.get_value("clip_format"))
+	st.set_clip_format("9:16")
+	ok_ce = ok_ce and st._guide.visible and st._guide.crop == Vector2i(608, 1080) and st._hud.text.contains("clip 9:16") and Settings.get_value("clip_format") == "9:16"
+	var plan: Dictionary = render_clip(20.0, false, true)
+	ok_ce = ok_ce and plan["format"] == "9:16" and plan["seam"] == 0.0 and is_equal_approx(float(plan["length"]), 20.0) and plan["avi"].ends_with(".avi") and plan["mp4"].ends_with(".mp4") and Array(plan["argv"]).has("9:16") and not Array(plan["argv"]).has("--resolution")
+	st.timeline = Timeline.new()
+	st.timeline.start_record(0.0)
+	st.timeline.record("param", "fb_zoom", 0.5, 0.5)
+	st.timeline.stop_record(3.25)
+	var plan_l: Dictionary = render_clip(20.0, true, true)
+	ok_ce = ok_ce and plan_l["loop"] and is_equal_approx(float(plan_l["length"]), 3.25) and plan_l["seam"] > 0.0 and str(plan_l["avi"]).get_file().begins_with("loop-") and Array(plan_l["argv"])[Array(plan_l["argv"]).find("--clip") + 1] == str(float(plan_l["preroll"]) + 3.25 + float(plan_l["seam"]))
+	st.timeline = Timeline.new()
+	st.set_clip_format(ClipExport.next_format("9:16"))
+	ok_ce = ok_ce and st.clip_format() == "1:1" and st._guide.crop == Vector2i(1080, 1080)
+	st.set_clip_format("16:9")
+	ok_ce = ok_ce and not st._guide.visible
+	st.set_clip_format(fmt_keep)
+	if ok_ce:
+		print("PASS loop-maker export: format guide, render plan with crop / fps / pre-roll, loop length from the timeline, seam")
+	else:
+		fails += 1
+		printerr("FAIL clip export")
 	# feedback routing: layers out of the loop draw over it, the delay tap reads the ring,
 	# in-loop params reach the warp shader, it all snapshots, and panic clears it
 	var ok_fr := true
@@ -1010,9 +1117,9 @@ func _selftest() -> void:
 	st._unhandled_key_input(esc)
 	ok_help = ok_help and not st._help.visible and not menu.is_open()
 	st.set_hud_mode(1)
-	ok_help = ok_help and st._hud.get_parent().visible and not st._verb_panel.get_parent().visible and not st._hud.text.contains("\n")
+	ok_help = ok_help and st._hud.get_parent().visible and not st._verb_panel.get_parent().visible and not st._hud.text.contains("\n") and st._hotbar.visible
 	st.set_hud_mode(2)
-	ok_help = ok_help and not st._hud.get_parent().visible
+	ok_help = ok_help and not st._hud.get_parent().visible and not st._hotbar.visible and not st._top_right.visible
 	st.set_hud_mode(0)
 	ok_help = ok_help and st._hud.text.contains("\n") and st._verb_panel.get_parent().visible
 	var old_port: int = Osc.port

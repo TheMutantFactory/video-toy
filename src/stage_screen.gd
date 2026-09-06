@@ -206,6 +206,8 @@ var _ring_head := 0
 var _overvp: SubViewport                   # the layers kept OUT of the loop, drawn over the feedback
 var _over_mix: ColorRect
 var _overlay: TextureRect
+var _guide: FrameGuide                     # the clip's crop over the picture
+var _top_right: HBoxContainer              # ? Keys · Find Icons · Back
 var _routing_panel: PanelContainer
 var _routing_widgets: Dictionary = {}
 var fb_warp_speed := 1.0
@@ -431,6 +433,12 @@ func _ready() -> void:
 	_display.texture = _composite.get_texture()
 	_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_display)
+	_guide = FrameGuide.new()
+	_guide.display = _display
+	_guide.world = WORLD
+	add_child(_guide)
+	_display.resized.connect(_guide.queue_redraw)
+	set_clip_format(str(Settings.get_value("clip_format")), false)
 
 	_blackout = ColorRect.new()
 	_blackout.color = Color.BLACK
@@ -1258,6 +1266,7 @@ func _build_hud() -> void:
 	add_child(_help)
 
 	var top_right := HBoxContainer.new()
+	_top_right = top_right
 	top_right.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	top_right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	top_right.offset_right = -20
@@ -1367,6 +1376,8 @@ func _update_hud() -> void:
 	var rd_s := routing_describe()
 	if rd_s != "":
 		line2 += "   ·   loop " + rd_s
+	if _guide.visible:
+		line2 += "   ·   clip %s" % clip_format()
 	var lk := Locks.describe(locks, mutate_amount)
 	if lk != "":
 		line2 += "   ·   " + lk
@@ -1379,11 +1390,16 @@ func _update_hud() -> void:
 		_hud.text = line1 + "\n" + line2
 
 
-## 0 full (two lines + verb panel), 1 compact (one short line), 2 hidden.
+## 0 full (two lines + verb panel), 1 compact (one short line), 2 hidden:
+## nothing but the picture (the hotbar and the buttons go too — a clean capture).
 func set_hud_mode(m: int) -> void:
 	hud_mode = clampi(m, 0, 2)
 	_verb_panel.get_parent().visible = hud_mode == 0
 	_hud.get_parent().visible = hud_mode < 2
+	if _hotbar:
+		_hotbar.visible = hud_mode < 2
+	if _top_right:
+		_top_right.visible = hud_mode < 2
 	_update_hud()
 
 
@@ -1439,6 +1455,24 @@ func _set_feedback(on: bool) -> void:
 		for rv in _ring:
 			rv.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_update_hud()
+
+
+# ---------------- clip format (the export's crop) ----------------
+func set_clip_format(fmt: String, persist := true) -> void:
+	if not ClipExport.FORMATS.has(fmt):
+		fmt = "16:9"
+	if persist:
+		Settings.set_value("clip_format", fmt)
+	_guide.crop = ClipExport.crop(fmt)
+	_guide.visible = _guide.crop != WORLD
+	_guide.queue_redraw()
+	if persist:
+		_steal_note = "clip format %s%s" % [fmt, "" if _guide.visible else " (the whole picture)"]
+		_update_hud()
+
+
+func clip_format() -> String:
+	return str(Settings.get_value("clip_format"))
 
 
 # ---------------- feedback routing ----------------

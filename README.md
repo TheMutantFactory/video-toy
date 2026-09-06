@@ -489,6 +489,18 @@ run did not exit cleanly, the start screen's restore row gains **Crash log** (th
 error lines and tail, inline), **Open log** and **Copy log**; Settings has **Open logs**.
 `./run.sh test` ends with a `--safe --safecheck` launch that proves all four inputs stay off.
 
+## Loop-maker export
+
+Settings → **Clip export** picks a **format** — 16:9, 9:16 or 1:1, a centre crop of the
+picture — and **Ctrl+E** on stage shows that crop as a guide so the shot can be composed for it.
+Esc → **Render the loop** renders exactly the timeline loop's length (**Shift+R** to record a
+loop of gestures; 20 s without one) after a **pre-roll** that warms the feedback, in a second
+Godot at a fixed frame rate, at the crop's size. If **ffmpeg** is on the machine the parent
+then makes an **mp4** (h264 / aac): the pre-roll trimmed, and for a loop the first **seam**
+second cross-dissolved from the frames that follow the loop's end, so the end meets the start.
+Without ffmpeg the AVI stays and a `.sh` with the exact command is written beside it. The HUD
+reports each stage. `./run.sh clip [s] [9:16]` does the render from the shell.
+
 ## Rig files
 
 The Esc menu has **Export rig**, which zips the toolbox and every asset it points at, the

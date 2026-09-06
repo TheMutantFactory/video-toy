@@ -55,6 +55,7 @@ The printable version is [key-card.png](key-card.png).
 | `arrows` | feedback drift · PgUp/PgDn warp · Home resets |
 | `Tab / Shift+Tab` | next / previous scene · ` scene off |
 | `Ctrl+F` | feedback routing: layers in the loop, frame delay, blur / sharpen, hue drift, displacement |
+| `Ctrl+E` | clip format 16:9 / 9:16 / 1:1: the export's crop as a guide over the picture |
 | `M` | monitor inside the scene (recursion) |
 | `N` | monitor size · drag it to move |
 
