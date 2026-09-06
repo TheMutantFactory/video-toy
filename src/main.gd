@@ -1008,6 +1008,8 @@ func _selftest() -> void:
 			u_bad.append(label)
 	st.timeline.stop_play()
 	st.set_evolve(false)
+	for v in Toolbox.slots[0].get("verbs", []).duplicate():   # earlier blocks (surprise) leave random motion verbs behind
+		Toolbox.toggle_verb(0, v)
 	st.clear_actors()
 	await get_tree().process_frame
 	st._history.clear()
@@ -1066,6 +1068,8 @@ func _selftest() -> void:
 	var g_chk := func(label: String, ok: bool):
 		if not ok:
 			g_bad.append(label)
+	for v in Toolbox.slots[0].get("verbs", []).duplicate():   # a still icon for the tap / hold checks
+		Toolbox.toggle_verb(0, v)
 	st.clear_actors()
 	await get_tree().process_frame                       # the frees land before we count
 	st.set_guest(true)
